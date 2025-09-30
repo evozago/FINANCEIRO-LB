@@ -17,11 +17,12 @@ interface Marca {
   descricao?: string;
   pj_vinculada_id?: number;
   created_at: string;
+  updated_at: string;
   pessoas_juridicas?: {
     nome_fantasia?: string;
-    razao_social: string;
+    razao_social?: string;
     cnpj?: string;
-  };
+  } | null;
 }
 
 interface PessoaJuridica {
@@ -62,7 +63,16 @@ export function Marcas() {
         .order('nome');
 
       if (error) throw error;
-      setMarcas(data || []);
+      
+      // Transform the data to match our interface
+      const transformedData = (data || []).map(marca => ({
+        ...marca,
+        pessoas_juridicas: Array.isArray(marca.pessoas_juridicas) 
+          ? marca.pessoas_juridicas[0] || null 
+          : marca.pessoas_juridicas
+      }));
+      
+      setMarcas(transformedData);
     } catch (error) {
       console.error('Erro ao buscar marcas:', error);
       toast({
