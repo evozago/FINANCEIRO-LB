@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -501,16 +502,22 @@ export function PessoasJuridicas() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="">Sem categoria</SelectItem>
-                          {categorias.map((categoria) => (
-                            <SelectItem key={categoria.id} value={categoria.id.toString()}>
-                              <div>
-                                <div className="font-medium">{categoria.nome}</div>
-                                {categoria.descricao && (
-                                  <div className="text-sm text-muted-foreground">{categoria.descricao}</div>
-                                )}
-                              </div>
+                          {categorias && categorias.length > 0 ? (
+                            categorias.map((categoria) => (
+                              <SelectItem key={categoria.id} value={categoria.id.toString()}>
+                                <div>
+                                  <div className="font-medium">{categoria.nome}</div>
+                                  {categoria.descricao && (
+                                    <div className="text-sm text-muted-foreground">{categoria.descricao}</div>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="loading" disabled>
+                              Carregando categorias...
                             </SelectItem>
-                          ))}
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
