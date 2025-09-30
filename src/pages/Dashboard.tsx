@@ -89,24 +89,34 @@ export function Dashboard() {
 
   const fetchContasMetrics = async () => {
     try {
-      // Total de contas em aberto
+      // Total de contas em aberto - usando query manual por problemas com view
       const { data: contasAbertas, error: contasError } = await supabase
-        .from('contas_pagar_abertas')
-        .select('conta_id, valor_em_aberto, proximo_vencimento');
+        .from('contas_pagar_parcelas')
+        .select(`
+          id,
+          valor_parcela_centavos,
+          vencimento,
+          pago,
+          contas_pagar!inner(
+            descricao,
+            pessoas_juridicas!inner(razao_social, nome_fantasia)
+          )
+        `)
+        .eq('pago', false);
 
       if (contasError) throw contasError;
 
       const hoje = new Date().toISOString().split('T')[0];
       const contasVencendoHoje = contasAbertas?.filter(conta => 
-        conta.proximo_vencimento === hoje
+        conta.vencimento === hoje
       ).length || 0;
 
       const contasVencidas = contasAbertas?.filter(conta => 
-        conta.proximo_vencimento < hoje
+        conta.vencimento < hoje
       ).length || 0;
 
       const valorTotalEmAberto = contasAbertas?.reduce((sum, conta) => 
-        sum + (conta.valor_em_aberto || 0), 0
+        sum + (conta.valor_parcela_centavos || 0), 0
       ) || 0;
 
       setMetrics(prev => ({
@@ -178,15 +188,35 @@ export function Dashboard() {
       proximosDias.setDate(hoje.getDate() + 7);
 
       const { data, error } = await supabase
-        .from('contas_pagar_abertas')
-        .select('conta_id, descricao, fornecedor, valor_em_aberto, proximo_vencimento')
-        .gte('proximo_vencimento', hoje.toISOString().split('T')[0])
-        .lte('proximo_vencimento', proximosDias.toISOString().split('T')[0])
-        .order('proximo_vencimento')
+        .from('contas_pagar_parcelas')
+        .select(`
+          id,
+          valor_parcela_centavos,
+          vencimento,
+          contas_pagar!inner(
+            id,
+            descricao,
+            pessoas_juridicas(razao_social, nome_fantasia)
+          )
+        `)
+        .eq('pago', false)
+        .gte('vencimento', hoje.toISOString().split('T')[0])
+        .lte('vencimento', proximosDias.toISOString().split('T')[0])
+        .order('vencimento')
         .limit(5);
 
       if (error) throw error;
-      setContasVencendo(data || []);
+      
+      const formattedData = data?.map(item => ({
+        conta_id: item.contas_pagar?.id || 0,
+        descricao: item.contas_pagar?.descricao || '',
+        fornecedor: item.contas_pagar?.pessoas_juridicas?.razao_social || 
+                   item.contas_pagar?.pessoas_juridicas?.nome_fantasia || 'Não informado',
+        valor_em_aberto: item.valor_parcela_centavos,
+        proximo_vencimento: item.vencimento
+      })) || [];
+      
+      setContasVencendo(formattedData);
     } catch (error) {
       console.error('Erro ao buscar contas vencendo:', error);
     }
@@ -198,16 +228,44 @@ export function Dashboard() {
       const ano = hoje.getFullYear();
       const mes = hoje.getMonth() + 1;
 
-      const { data, error } = await supabase
-        .from('vendedoras_mensal_com_meta')
-        .select('vendedora_nome, valor_liquido_total, percentual_meta, meta_ajustada')
-        .eq('ano', ano)
-        .eq('mes', mes)
-        .order('percentual_meta', { ascending: false })
-        .limit(5);
+      // Buscar vendas do mês atual das vendedoras
+      const { data: vendas, error } = await supabase
+        .from('vendas_diarias')
+        .select(`
+          vendedora_pf_id,
+          valor_liquido_centavos,
+          pessoas_fisicas(nome_completo)
+        `)
+        .gte('data', `${ano}-${mes.toString().padStart(2, '0')}-01`)
+        .lte('data', `${ano}-${mes.toString().padStart(2, '0')}-31`);
 
       if (error) throw error;
-      setVendedorasPerformance(data || []);
+      
+      // Agrupar por vendedora
+      const vendedorasMap = new Map();
+      vendas?.forEach(venda => {
+        const vendedoraId = venda.vendedora_pf_id;
+        const nome = venda.pessoas_fisicas?.nome_completo || 'Não informado';
+        
+        if (!vendedorasMap.has(vendedoraId)) {
+          vendedorasMap.set(vendedoraId, {
+            vendedora_nome: nome,
+            valor_liquido_total: 0,
+            percentual_meta: 0,
+            meta_ajustada: 100000 // Meta padrão de R$ 1000
+          });
+        }
+        
+        const vendedora = vendedorasMap.get(vendedoraId);
+        vendedora.valor_liquido_total += venda.valor_liquido_centavos;
+        vendedora.percentual_meta = (vendedora.valor_liquido_total / vendedora.meta_ajustada) * 100;
+      });
+      
+      const performance = Array.from(vendedorasMap.values())
+        .sort((a, b) => b.percentual_meta - a.percentual_meta)
+        .slice(0, 5);
+      
+      setVendedorasPerformance(performance);
     } catch (error) {
       console.error('Erro ao buscar performance das vendedoras:', error);
     }
