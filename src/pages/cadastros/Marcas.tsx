@@ -93,12 +93,6 @@ export function Marcas() {
     }
   };
 
-  const fetchPessoasJuridicas = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('pessoas_juridicas')
-        .select('id, nome_fantasia, razao_social, cnpj')
-        .order('razao_social');
 
       if (error) throw error;
       setPessoasJuridicas(data || []);
