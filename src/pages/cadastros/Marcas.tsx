@@ -17,10 +17,19 @@ interface Marca {
   descricao?: string;
   pj_vinculada_id?: number;
   created_at: string;
-  updated_at: string;
-  } | null;
+  pessoas_juridicas?: {
+    nome_fantasia?: string;
+    razao_social: string;
+    cnpj?: string;
+  };
+}
 
-
+interface PessoaJuridica {
+  id: number;
+  nome_fantasia?: string;
+  razao_social: string;
+  cnpj?: string;
+}
 
 export function Marcas() {
   const [marcas, setMarcas] = useState<Marca[]>([]);
@@ -48,28 +57,12 @@ export function Marcas() {
         .from('marcas')
         .select(`
           *,
+          pessoas_juridicas!pj_vinculada_id(nome_fantasia, razao_social, cnpj)
         `)
         .order('nome');
 
       if (error) throw error;
-      
-      // Transform the data to match our interface
-      const transformedData: Marca[] = (data || []).map(marca => {
-        const marcaData = marca as any;
-        return {
-          id: marcaData.id,
-          nome: marcaData.nome,
-          descricao: marcaData.descricao || undefined,
-          pj_vinculada_id: marcaData.pj_vinculada_id || undefined,
-          created_at: marcaData.created_at,
-          updated_at: marcaData.updated_at,
-          pessoas_juridicas: Array.isArray(marcaData.pessoas_juridicas) 
-            ? marcaData.pessoas_juridicas[0] || null 
-            : marcaData.pessoas_juridicas || null
-        };
-      });
-      
-      setMarcas(transformedData);
+      setMarcas(data || []);
     } catch (error) {
       console.error('Erro ao buscar marcas:', error);
       toast({
@@ -82,6 +75,12 @@ export function Marcas() {
     }
   };
 
+  const fetchPessoasJuridicas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pessoas_juridicas')
+        .select('id, nome_fantasia, razao_social, cnpj')
+        .order('razao_social');
 
       if (error) throw error;
       setPessoasJuridicas(data || []);
@@ -338,7 +337,9 @@ export function Marcas() {
                         <div className="font-medium">
                           {marca.pessoas_juridicas.nome_fantasia || marca.pessoas_juridicas.razao_social}
                         </div>
-
+                        {marca.pessoas_juridicas.cnpj && (
+                          <div className="text-sm text-muted-foreground">
+                            {marca.pessoas_juridicas.cnpj}
                           </div>
                         )}
                       </div>
