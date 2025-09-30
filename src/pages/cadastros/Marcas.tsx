@@ -18,19 +18,9 @@ interface Marca {
   pj_vinculada_id?: number;
   created_at: string;
   updated_at: string;
-  pessoas_juridicas?: {
-    nome_fantasia?: string;
-    razao_social?: string;
-    cnpj?: string;
   } | null;
-}
 
-interface PessoaJuridica {
-  id: number;
-  nome_fantasia?: string;
-  razao_social: string;
-  cnpj?: string;
-}
+
 
 export function Marcas() {
   const [marcas, setMarcas] = useState<Marca[]>([]);
@@ -58,7 +48,6 @@ export function Marcas() {
         .from('marcas')
         .select(`
           *,
-          pessoas_juridicas!pj_vinculada_id(nome_fantasia, razao_social, cnpj)
         `)
         .order('nome');
 
@@ -349,9 +338,7 @@ export function Marcas() {
                         <div className="font-medium">
                           {marca.pessoas_juridicas.nome_fantasia || marca.pessoas_juridicas.razao_social}
                         </div>
-                        {marca.pessoas_juridicas.cnpj && (
-                          <div className="text-sm text-muted-foreground">
-                            {marca.pessoas_juridicas.cnpj}
+
                           </div>
                         )}
                       </div>
