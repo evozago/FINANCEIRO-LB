@@ -245,11 +245,17 @@ export function Marcas() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">Nenhuma empresa</SelectItem>
-                    {pessoasJuridicas.map((pj) => (
-                      <SelectItem key={pj.id} value={pj.id.toString()}>
-                        {pj.nome_fantasia || pj.razao_social}
+                    {pessoasJuridicas && pessoasJuridicas.length > 0 ? (
+                      pessoasJuridicas.map((pj) => (
+                        <SelectItem key={pj.id} value={pj.id.toString()}>
+                          {pj.nome_fantasia || pj.razao_social}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="loading" disabled>
+                        Carregando empresas...
                       </SelectItem>
-                    ))}
+                    )}
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground mt-1">
