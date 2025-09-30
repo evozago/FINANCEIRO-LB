@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { ImportarXML } from '@/components/ImportarXML';
+
 
 interface ContaPagar {
   id: number;
@@ -336,7 +336,7 @@ export function ContasPagar() {
           </p>
         </div>
         <div className="flex space-x-2">
-          <ImportarXML />
+
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => { resetForm(); setEditingConta(null); }}>
