@@ -16,14 +16,14 @@ import { useToast } from '@/hooks/use-toast';
 interface ContaBancaria {
   id: number;
   banco: string;
-  agencia: string;
-  conta: string;
-  tipo_conta: string;
+  agencia?: string;
+  numero_conta?: string;
+  nome_conta: string;
   saldo_atual_centavos: number;
-  limite_credito_centavos?: number;
   ativa: boolean;
-  observacoes?: string;
+  pj_id: number;
   created_at: string;
+  updated_at: string;
 }
 
 const tiposConta = [
@@ -83,14 +83,13 @@ export function ContasBancarias() {
     
     try {
       const dataToSubmit = {
+        nome_conta: formData.banco + ' - ' + formData.agencia + ' - ' + formData.conta,
         banco: formData.banco,
         agencia: formData.agencia,
-        conta: formData.conta,
-        tipo_conta: formData.tipo_conta,
+        numero_conta: formData.conta,
         saldo_atual_centavos: formData.saldo_atual_centavos ? Math.round(parseFloat(formData.saldo_atual_centavos) * 100) : 0,
-        limite_credito_centavos: formData.limite_credito_centavos ? Math.round(parseFloat(formData.limite_credito_centavos) * 100) : null,
         ativa: formData.ativa,
-        observacoes: formData.observacoes || null,
+        pj_id: 1, // Using default PJ ID for now
       };
 
       if (editingConta) {

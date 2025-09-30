@@ -65,12 +65,20 @@ export function Marcas() {
       if (error) throw error;
       
       // Transform the data to match our interface
-      const transformedData = (data || []).map(marca => ({
-        ...marca,
-        pessoas_juridicas: Array.isArray(marca.pessoas_juridicas) 
-          ? marca.pessoas_juridicas[0] || null 
-          : marca.pessoas_juridicas
-      }));
+      const transformedData: Marca[] = (data || []).map(marca => {
+        const marcaData = marca as any;
+        return {
+          id: marcaData.id,
+          nome: marcaData.nome,
+          descricao: marcaData.descricao || undefined,
+          pj_vinculada_id: marcaData.pj_vinculada_id || undefined,
+          created_at: marcaData.created_at,
+          updated_at: marcaData.updated_at,
+          pessoas_juridicas: Array.isArray(marcaData.pessoas_juridicas) 
+            ? marcaData.pessoas_juridicas[0] || null 
+            : marcaData.pessoas_juridicas || null
+        };
+      });
       
       setMarcas(transformedData);
     } catch (error) {

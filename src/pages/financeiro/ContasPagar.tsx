@@ -93,12 +93,25 @@ export function ContasPagar() {
   const fetchContas = async () => {
     try {
       const { data, error } = await supabase
-        .from('contas_pagar_abertas')
-        .select('*')
-        .order('proximo_vencimento');
+        .from('contas_pagar_parcelas')
+        .select(`
+          *,
+          contas_pagar(*, pessoas_juridicas(nome_fantasia, razao_social))
+        `)
+        .eq('pago', false)
+        .order('vencimento');
 
       if (error) throw error;
-      setContas(data || []);
+      const transformedData = (data || []).map(parcela => ({
+        id: parcela.id,
+        descricao: (parcela as any).contas_pagar?.descricao || 'N/A',
+        valor_total_centavos: parcela.valor_parcela_centavos,
+        num_parcelas: 1,
+        pessoas_juridicas: (parcela as any).contas_pagar?.pessoas_juridicas || null,
+        created_at: parcela.created_at,
+        updated_at: parcela.updated_at,
+      }));
+      setContas(transformedData as any);
     } catch (error) {
       console.error('Erro ao buscar contas a pagar:', error);
       toast({

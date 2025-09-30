@@ -85,13 +85,13 @@ export function ContasRecorrentes() {
   const fetchContas = async () => {
     try {
       const { data, error } = await supabase
-        .from('contas_recorrentes')
+        .from('recorrencias')
         .select(`
           *,
           pessoas_juridicas(nome_fantasia, razao_social),
           categorias_financeiras(nome)
         `)
-        .order('descricao');
+        .order('nome');
 
       if (error) throw error;
       setContas(data || []);
