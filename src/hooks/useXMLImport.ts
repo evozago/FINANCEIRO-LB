@@ -180,6 +180,9 @@ export function useXMLImport() {
           valor_total_centavos: xmlData.valorTotal,
           data_emissao: xmlData.dataEmissao || null,
           qtd_parcelas: xmlData.parcelas?.length || 1,
+          // Campos opcionais removidos para evitar erro
+          categoria_id: null,
+          filial_id: null,
         })
         .select('id')
         .single();

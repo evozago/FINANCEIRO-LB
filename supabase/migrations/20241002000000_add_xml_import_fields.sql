@@ -9,7 +9,8 @@ ADD COLUMN IF NOT EXISTS "qtd_parcelas" int DEFAULT 1;
 -- Tornar campos obrigatórios opcionais para flexibilidade na importação
 ALTER TABLE "contas_pagar" 
 ALTER COLUMN "categoria_id" DROP NOT NULL,
-ALTER COLUMN "filial_id" DROP NOT NULL;
+ALTER COLUMN "filial_id" DROP NOT NULL,
+ALTER COLUMN "num_parcelas" DROP NOT NULL;
 
 -- Adicionar campo para número da parcela na tabela de parcelas
 ALTER TABLE "contas_pagar_parcelas"
