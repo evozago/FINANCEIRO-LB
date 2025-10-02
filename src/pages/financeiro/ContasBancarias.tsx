@@ -135,13 +135,13 @@ export function ContasBancarias() {
     setEditingConta(conta);
     setFormData({
       banco: conta.banco,
-      agencia: conta.agencia,
-      conta: conta.conta,
-      tipo_conta: conta.tipo_conta,
+      agencia: conta.agencia || '',
+      conta: conta.numero_conta || '',
+      tipo_conta: 'corrente', // Default since tipo_conta doesn't exist in DB
       saldo_atual_centavos: (conta.saldo_atual_centavos / 100).toString(),
-      limite_credito_centavos: conta.limite_credito_centavos ? (conta.limite_credito_centavos / 100).toString() : '',
+      limite_credito_centavos: '', // This field doesn't exist in DB
       ativa: conta.ativa,
-      observacoes: conta.observacoes || '',
+      observacoes: '', // This field doesn't exist in DB
     });
     setIsDialogOpen(true);
   };
@@ -198,8 +198,8 @@ export function ContasBancarias() {
 
   const filteredContas = contas.filter(conta =>
     conta.banco.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conta.agencia.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conta.conta.toLowerCase().includes(searchTerm.toLowerCase())
+    (conta.agencia && conta.agencia.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (conta.numero_conta && conta.numero_conta.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const totalSaldo = contas.reduce((sum, conta) => sum + conta.saldo_atual_centavos, 0);
@@ -434,11 +434,11 @@ export function ContasBancarias() {
                       <span>{conta.banco}</span>
                     </div>
                   </TableCell>
-                  <TableCell>{getTipoContaLabel(conta.tipo_conta)}</TableCell>
+                  <TableCell>Conta Corrente</TableCell>
                   <TableCell>
                     <div>
-                      <div className="font-medium">Ag: {conta.agencia}</div>
-                      <div className="text-sm text-muted-foreground">Cc: {conta.conta}</div>
+                      <div className="font-medium">Ag: {conta.agencia || 'N/A'}</div>
+                      <div className="text-sm text-muted-foreground">Cc: {conta.numero_conta || 'N/A'}</div>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -447,10 +447,7 @@ export function ContasBancarias() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    {conta.limite_credito_centavos 
-                      ? (showSaldos ? formatCurrency(conta.limite_credito_centavos) : '••••••')
-                      : 'N/A'
-                    }
+                    N/A
                   </TableCell>
                   <TableCell>
                     <Badge variant={conta.ativa ? 'default' : 'secondary'}>

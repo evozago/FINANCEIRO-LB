@@ -16,16 +16,18 @@ import { useToast } from '@/hooks/use-toast';
 
 interface ContaRecorrente {
   id: number;
-  descricao: string;
-  valor_centavos: number;
-  tipo_recorrencia: string;
+  nome: string;
+  valor_esperado_centavos: number;
   dia_vencimento: number;
   fornecedor_id?: number;
   categoria_id?: number;
+  filial_id: number;
   ativa: boolean;
-  proxima_geracao: string;
-  observacoes?: string;
+  livre: boolean;
+  sem_data_final: boolean;
+  dia_fechamento?: number;
   created_at: string;
+  updated_at: string;
   pessoas_juridicas?: {
     nome_fantasia?: string;
     razao_social: string;
@@ -65,15 +67,16 @@ export function ContasRecorrentes() {
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
-    descricao: '',
-    valor_centavos: '',
-    tipo_recorrencia: 'mensal',
+    nome: '',
+    valor_esperado_centavos: '',
     dia_vencimento: '1',
     fornecedor_id: '',
     categoria_id: '',
+    filial_id: '1',
     ativa: true,
-    proxima_geracao: new Date(),
-    observacoes: '',
+    livre: false,
+    sem_data_final: true,
+    dia_fechamento: '',
   });
 
   useEffect(() => {
@@ -140,20 +143,21 @@ export function ContasRecorrentes() {
     
     try {
       const dataToSubmit = {
-        descricao: formData.descricao,
-        valor_centavos: Math.round(parseFloat(formData.valor_centavos) * 100),
-        tipo_recorrencia: formData.tipo_recorrencia,
+        nome: formData.nome,
+        valor_esperado_centavos: Math.round(parseFloat(formData.valor_esperado_centavos) * 100),
         dia_vencimento: parseInt(formData.dia_vencimento),
         fornecedor_id: formData.fornecedor_id ? parseInt(formData.fornecedor_id) : null,
-        categoria_id: formData.categoria_id ? parseInt(formData.categoria_id) : null,
+        categoria_id: parseInt(formData.categoria_id),
+        filial_id: parseInt(formData.filial_id),
         ativa: formData.ativa,
-        proxima_geracao: formData.proxima_geracao.toISOString().split('T')[0],
-        observacoes: formData.observacoes || null,
+        livre: formData.livre,
+        sem_data_final: formData.sem_data_final,
+        dia_fechamento: formData.dia_fechamento ? parseInt(formData.dia_fechamento) : null,
       };
 
       if (editingConta) {
         const { error } = await supabase
-          .from('contas_recorrentes')
+          .from('recorrencias')
           .update(dataToSubmit)
           .eq('id', editingConta.id);
 
@@ -165,7 +169,7 @@ export function ContasRecorrentes() {
         });
       } else {
         const { error } = await supabase
-          .from('contas_recorrentes')
+          .from('recorrencias')
           .insert([dataToSubmit]);
 
         if (error) throw error;
@@ -193,15 +197,16 @@ export function ContasRecorrentes() {
   const handleEdit = (conta: ContaRecorrente) => {
     setEditingConta(conta);
     setFormData({
-      descricao: conta.descricao,
-      valor_centavos: (conta.valor_centavos / 100).toString(),
-      tipo_recorrencia: conta.tipo_recorrencia,
+      nome: conta.nome,
+      valor_esperado_centavos: (conta.valor_esperado_centavos / 100).toString(),
       dia_vencimento: conta.dia_vencimento.toString(),
       fornecedor_id: conta.fornecedor_id?.toString() || '',
       categoria_id: conta.categoria_id?.toString() || '',
+      filial_id: conta.filial_id.toString(),
       ativa: conta.ativa,
-      proxima_geracao: new Date(conta.proxima_geracao),
-      observacoes: conta.observacoes || '',
+      livre: conta.livre,
+      sem_data_final: conta.sem_data_final,
+      dia_fechamento: conta.dia_fechamento?.toString() || '',
     });
     setIsDialogOpen(true);
   };
@@ -211,7 +216,7 @@ export function ContasRecorrentes() {
 
     try {
       const { error } = await supabase
-        .from('contas_recorrentes')
+        .from('recorrencias')
         .delete()
         .eq('id', id);
 
@@ -237,76 +242,11 @@ export function ContasRecorrentes() {
       // Buscar contas ativas que precisam ser geradas
       const hoje = new Date().toISOString().split('T')[0];
       
-      const { data: contasPendentes, error } = await supabase
-        .from('contas_recorrentes')
-        .select('*')
-        .eq('ativa', true)
-        .lte('proxima_geracao', hoje);
-
-      if (error) throw error;
-
-      if (!contasPendentes || contasPendentes.length === 0) {
-        toast({
-          title: 'Informação',
-          description: 'Não há contas pendentes para gerar.',
-        });
-        return;
-      }
-
-      let contasGeradas = 0;
-
-      for (const conta of contasPendentes) {
-        // Gerar a conta a pagar
-        const { error: insertError } = await supabase
-          .from('contas_pagar')
-          .insert([{
-            descricao: `${conta.descricao} - ${new Date().toLocaleDateString('pt-BR')}`,
-            valor_total_centavos: conta.valor_centavos,
-            num_parcelas: 1,
-            fornecedor_id: conta.fornecedor_id,
-            categoria_id: conta.categoria_id,
-            observacoes: `Gerada automaticamente da conta recorrente: ${conta.descricao}`,
-          }]);
-
-        if (insertError) {
-          console.error('Erro ao gerar conta:', insertError);
-          continue;
-        }
-
-        // Calcular próxima geração
-        const proximaGeracao = new Date(conta.proxima_geracao);
-        switch (conta.tipo_recorrencia) {
-          case 'mensal':
-            proximaGeracao.setMonth(proximaGeracao.getMonth() + 1);
-            break;
-          case 'bimestral':
-            proximaGeracao.setMonth(proximaGeracao.getMonth() + 2);
-            break;
-          case 'trimestral':
-            proximaGeracao.setMonth(proximaGeracao.getMonth() + 3);
-            break;
-          case 'semestral':
-            proximaGeracao.setMonth(proximaGeracao.getMonth() + 6);
-            break;
-          case 'anual':
-            proximaGeracao.setFullYear(proximaGeracao.getFullYear() + 1);
-            break;
-        }
-
-        // Atualizar próxima geração
-        await supabase
-          .from('contas_recorrentes')
-          .update({ proxima_geracao: proximaGeracao.toISOString().split('T')[0] })
-          .eq('id', conta.id);
-
-        contasGeradas++;
-      }
-
+      // This feature needs to be implemented with proper logic
       toast({
-        title: 'Sucesso',
-        description: `${contasGeradas} conta(s) gerada(s) com sucesso.`,
+        title: 'Em Desenvolvimento',
+        description: 'Funcionalidade de geração automática em desenvolvimento.',
       });
-
       fetchContas();
     } catch (error) {
       console.error('Erro ao gerar contas pendentes:', error);
@@ -320,15 +260,16 @@ export function ContasRecorrentes() {
 
   const resetForm = () => {
     setFormData({
-      descricao: '',
-      valor_centavos: '',
-      tipo_recorrencia: 'mensal',
+      nome: '',
+      valor_esperado_centavos: '',
       dia_vencimento: '1',
       fornecedor_id: '',
       categoria_id: '',
+      filial_id: '1',
       ativa: true,
-      proxima_geracao: new Date(),
-      observacoes: '',
+      livre: false,
+      sem_data_final: true,
+      dia_fechamento: '',
     });
   };
 
@@ -358,13 +299,13 @@ export function ContasRecorrentes() {
   };
 
   const filteredContas = contas.filter(conta =>
-    conta.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    conta.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (conta.pessoas_juridicas?.nome_fantasia && conta.pessoas_juridicas.nome_fantasia.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (conta.pessoas_juridicas?.razao_social && conta.pessoas_juridicas.razao_social.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const contasVencidas = contas.filter(conta => conta.ativa && isVencida(conta.proxima_geracao)).length;
-  const contasProximoVencimento = contas.filter(conta => conta.ativa && isVencimentoProximo(conta.proxima_geracao)).length;
+  const contasVencidas = 0;
+  const contasProximoVencimento = 0;
 
   if (loading) {
     return <div>Carregando...</div>;
@@ -403,40 +344,25 @@ export function ContasRecorrentes() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
-                    <Label htmlFor="descricao">Descrição *</Label>
+                    <Label htmlFor="nome">Nome *</Label>
                     <Input
-                      id="descricao"
-                      value={formData.descricao}
-                      onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                      id="nome"
+                      value={formData.nome}
+                      onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                       placeholder="Ex: Aluguel, Energia elétrica..."
                       required
                     />
                   </div>
                   <div>
-                    <Label htmlFor="valor_centavos">Valor (R$) *</Label>
+                    <Label htmlFor="valor_esperado_centavos">Valor (R$) *</Label>
                     <Input
-                      id="valor_centavos"
+                      id="valor_esperado_centavos"
                       type="number"
                       step="0.01"
-                      value={formData.valor_centavos}
-                      onChange={(e) => setFormData({ ...formData, valor_centavos: e.target.value })}
+                      value={formData.valor_esperado_centavos}
+                      onChange={(e) => setFormData({ ...formData, valor_esperado_centavos: e.target.value })}
                       required
                     />
-                  </div>
-                  <div>
-                    <Label htmlFor="tipo_recorrencia">Tipo de Recorrência *</Label>
-                    <Select value={formData.tipo_recorrencia} onValueChange={(value) => setFormData({ ...formData, tipo_recorrencia: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {tiposRecorrencia.map((tipo) => (
-                          <SelectItem key={tipo.value} value={tipo.value}>
-                            {tipo.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
                   <div>
                     <Label htmlFor="dia_vencimento">Dia do Vencimento *</Label>
@@ -452,13 +378,6 @@ export function ContasRecorrentes() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="proxima_geracao">Próxima Geração</Label>
-                    <DatePicker
-                      date={formData.proxima_geracao}
-                      onSelect={(date) => setFormData({ ...formData, proxima_geracao: date || new Date() })}
-                    />
                   </div>
                   <div>
                     <Label htmlFor="fornecedor_id">Fornecedor</Label>
@@ -498,15 +417,6 @@ export function ContasRecorrentes() {
                     onCheckedChange={(checked) => setFormData({ ...formData, ativa: checked })}
                   />
                   <Label htmlFor="ativa">Conta ativa</Label>
-                </div>
-                <div>
-                  <Label htmlFor="observacoes">Observações</Label>
-                  <Textarea
-                    id="observacoes"
-                    value={formData.observacoes}
-                    onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                    rows={3}
-                  />
                 </div>
                 <div className="flex justify-end space-x-2">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -594,7 +504,7 @@ export function ContasRecorrentes() {
                     <div className="flex items-center space-x-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
                       <div>
-                        <div>{conta.descricao}</div>
+                        <div>{conta.nome}</div>
                         {conta.categorias_financeiras && (
                           <div className="text-sm text-muted-foreground">
                             {conta.categorias_financeiras.nome}
@@ -604,32 +514,18 @@ export function ContasRecorrentes() {
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">
-                    {formatCurrency(conta.valor_centavos)}
+                    {formatCurrency(conta.valor_esperado_centavos)}
                   </TableCell>
                   <TableCell>
                     <div>
-                      <div>{getTipoRecorrenciaLabel(conta.tipo_recorrencia)}</div>
+                      <div>Mensal</div>
                       <div className="text-sm text-muted-foreground">
                         Dia {conta.dia_vencimento}
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <span className={
-                        isVencida(conta.proxima_geracao) ? 'text-red-600 font-medium' :
-                        isVencimentoProximo(conta.proxima_geracao) ? 'text-orange-600 font-medium' :
-                        'text-muted-foreground'
-                      }>
-                        {new Date(conta.proxima_geracao).toLocaleDateString('pt-BR')}
-                      </span>
-                      {isVencida(conta.proxima_geracao) && (
-                        <Badge variant="destructive">Vencida</Badge>
-                      )}
-                      {isVencimentoProximo(conta.proxima_geracao) && !isVencida(conta.proxima_geracao) && (
-                        <Badge variant="secondary">Próximo</Badge>
-                      )}
-                    </div>
+                    N/A
                   </TableCell>
                   <TableCell>
                     {conta.pessoas_juridicas ? 

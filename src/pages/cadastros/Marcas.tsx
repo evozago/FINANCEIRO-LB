@@ -62,7 +62,16 @@ export function Marcas() {
         .order('nome');
 
       if (error) throw error;
-      setMarcas(data || []);
+      
+      // Transform the data to ensure pessoas_juridicas is a single object
+      const transformedData = (data || []).map(marca => ({
+        ...marca,
+        pessoas_juridicas: Array.isArray((marca as any).pessoas_juridicas) 
+          ? (marca as any).pessoas_juridicas[0] || null
+          : (marca as any).pessoas_juridicas || null
+      }));
+      
+      setMarcas(transformedData as Marca[]);
     } catch (error) {
       console.error('Erro ao buscar marcas:', error);
       toast({
@@ -243,9 +252,8 @@ export function Marcas() {
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione uma empresa (opcional)" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Nenhuma empresa</SelectItem>
-                    {pessoasJuridicas && pessoasJuridicas.length > 0 ? (
+                    <SelectContent>
+                      {pessoasJuridicas && pessoasJuridicas.length > 0 ? (
                       pessoasJuridicas.map((pj) => (
                         <SelectItem key={pj.id} value={pj.id.toString()}>
                           {pj.nome_fantasia || pj.razao_social}

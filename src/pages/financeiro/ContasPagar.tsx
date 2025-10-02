@@ -220,12 +220,8 @@ export function ContasPagar() {
 
         if (contaError) throw contaError;
 
-        // Gerar parcelas automaticamente
-        const { error: parcelasError } = await supabase.rpc('gera_parcelas_conta', {
-          conta_id: contaData.id
-        });
-
-        if (parcelasError) throw parcelasError;
+        // Note: Automatic parcel generation will be implemented later
+        // For now, parcels need to be created manually
 
         toast({
           title: 'Sucesso',

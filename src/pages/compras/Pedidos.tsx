@@ -177,7 +177,7 @@ export function Pedidos() {
         numero: formData.numero,
         data_pedido: formData.data_pedido.toISOString().split('T')[0],
         previsao_entrega: formData.previsao_entrega?.toISOString().split('T')[0] || null,
-        status: formData.status,
+        status: formData.status as 'aberto' | 'cancelado' | 'parcial' | 'recebido',
         qtd_pecas_total: formData.qtd_pecas_total ? parseInt(formData.qtd_pecas_total) : null,
         qtd_referencias: formData.qtd_referencias ? parseInt(formData.qtd_referencias) : null,
         valor_bruto_centavos: formData.valor_bruto_centavos ? Math.round(parseFloat(formData.valor_bruto_centavos) * 100) : null,
