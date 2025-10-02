@@ -21,8 +21,18 @@ ALTER TABLE "contas_pagar_parcelas"
 DROP CONSTRAINT IF EXISTS "contas_pagar_parcelas_conta_id_parcela_num_key";
 
 -- Adicionar nova constraint única
-ALTER TABLE "contas_pagar_parcelas"
-ADD CONSTRAINT "contas_pagar_parcelas_conta_id_numero_parcela_key" UNIQUE ("conta_id", "numero_parcela");
+-- Criar a constraint única apenas se ela não existir para evitar erro 42P07
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'contas_pagar_parcelas_conta_id_numero_parcela_key'
+  ) THEN
+    ALTER TABLE "contas_pagar_parcelas"
+    ADD CONSTRAINT "contas_pagar_parcelas_conta_id_numero_parcela_key" UNIQUE ("conta_id", "numero_parcela");
+  END IF;
+END $$;
 
 -- Comentários para documentação
 COMMENT ON COLUMN "contas_pagar"."numero_nf" IS 'Número da nota fiscal extraído do XML';
