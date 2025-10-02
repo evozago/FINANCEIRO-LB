@@ -304,7 +304,7 @@ export function useXMLImport() {
         const { data: existingByKey } = await supabase
           .from('contas_pagar')
           .select('id, numero_nf, descricao')
-          .textSearch('descricao', xmlData.chaveAcesso)
+          .ilike('descricao', `%${xmlData.chaveAcesso}%`)
           .limit(1);
         
         if (existingByKey && existingByKey.length > 0) {
