@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 
 interface XMLData {
   numeroNota: string;
+  chaveAcesso: string;
   cnpjEmissor: string;
   razaoSocialEmissor: string;
   nomeFantasiaEmissor?: string;
@@ -32,60 +33,106 @@ export function useXMLImport() {
 
   const parseXMLFile = async (file: File): Promise<XMLData | null> => {
     try {
-      const text = await file.text();
+      const xmlContent = await file.text();
       const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(text, 'text/xml');
+      const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
       
       // Verificar se há erros de parsing
-      const parseError = xmlDoc.querySelector('parsererror');
-      if (parseError) {
-        throw new Error('Erro ao fazer parse do XML');
+      const parserError = xmlDoc.querySelector('parsererror');
+      if (parserError) {
+        throw new Error('XML inválido');
       }
 
-      // Tentar diferentes estruturas de XML (NFe, NFCe, etc.)
-      let infNFe = xmlDoc.querySelector('infNFe');
-      let emit = xmlDoc.querySelector('emit');
-      let total = xmlDoc.querySelector('total ICMSTot');
-      let ide = xmlDoc.querySelector('ide');
-      let cobr = xmlDoc.querySelector('cobr');
-
-      // Se não encontrou, tentar estrutura alternativa
-      if (!infNFe) {
-        infNFe = xmlDoc.querySelector('infNFCe');
+      // Extrair dados da nota fiscal
+      const nfeElement = xmlDoc.querySelector('infNFe') || xmlDoc.querySelector('NFe');
+      if (!nfeElement) {
+        throw new Error('Estrutura de NFe não encontrada');
       }
 
-      if (!emit || !total || !ide) {
-        throw new Error('XML não contém estrutura de NFe/NFCe válida');
+      // Extrair número da NFe usando múltiplos seletores
+      let nfeNumber = '';
+      const possibleSelectors = [
+        'ide nNF',
+        'nNF', 
+        'infNFe ide nNF',
+        'NFe infNFe ide nNF'
+      ];
+      
+      for (const selector of possibleSelectors) {
+        const element = xmlDoc.querySelector(selector);
+        if (element && element.textContent?.trim()) {
+          nfeNumber = element.textContent.trim();
+          console.log(`Número NFe encontrado usando seletor "${selector}": ${nfeNumber}`);
+          break;
+        }
+      }
+      
+      // Extrair chave de acesso
+      let chaveAcesso = '';
+      const chaveSelectors = [
+        'infNFe[Id]',
+        'chNFe'
+      ];
+      
+      for (const selector of chaveSelectors) {
+        if (selector === 'infNFe[Id]') {
+          const element = xmlDoc.querySelector(selector);
+          if (element) {
+            const id = element.getAttribute('Id');
+            if (id && id.startsWith('NFe')) {
+              chaveAcesso = id.replace('NFe', '');
+              console.log(`Chave de acesso encontrada no atributo Id: ${chaveAcesso}`);
+              break;
+            }
+          }
+        } else {
+          const element = xmlDoc.querySelector(selector);
+          if (element && element.textContent?.trim()) {
+            chaveAcesso = element.textContent.trim();
+            console.log(`Chave de acesso encontrada usando seletor "${selector}": ${chaveAcesso}`);
+            break;
+          }
+        }
+      }
+      
+      // Se não encontrou número da NFe, tentar extrair dos últimos 9 dígitos da chave
+      if (!nfeNumber && chaveAcesso && chaveAcesso.length >= 44) {
+        // A chave de acesso tem 44 dígitos, o número da NFe são os dígitos 26-34 (9 dígitos)
+        nfeNumber = chaveAcesso.substring(25, 34);
+        console.log(`Número NFe extraído da chave de acesso: ${nfeNumber}`);
       }
 
-      // Dados do emissor
-      const cnpjEmissor = emit.querySelector('CNPJ')?.textContent || 
-                         emit.querySelector('CPF')?.textContent || '';
-      const razaoSocialEmissor = emit.querySelector('xNome')?.textContent || '';
+      // Extrair dados do fornecedor
+      const emit = xmlDoc.querySelector('emit');
+      if (!emit) {
+        throw new Error('Dados do fornecedor não encontrados');
+      }
+
+      const cnpjEmissor = emit.querySelector('CNPJ')?.textContent || '';
+      const razaoSocialEmissor = emit.querySelector('xNome')?.textContent || 'Fornecedor não identificado';
       const nomeFantasiaEmissor = emit.querySelector('xFant')?.textContent || '';
 
-      // Dados da nota
-      const numeroNota = ide.querySelector('nNF')?.textContent || 
-                        ide.querySelector('nNFCe')?.textContent || '';
+      // Extrair valor total e duplicatas
+      const totalElement = xmlDoc.querySelector('vNF');
+      const valorTotal = Math.round(parseFloat(totalElement?.textContent || '0') * 100); // Converter para centavos
       
-      let dataEmissao = ide.querySelector('dhEmi')?.textContent?.split('T')[0] || '';
-      if (!dataEmissao) {
-        dataEmissao = ide.querySelector('dEmi')?.textContent || '';
-      }
-      
-      // Valor total
-      const valorTotalStr = total.querySelector('vNF')?.textContent || 
-                           total.querySelector('vProd')?.textContent || '0';
-      const valorTotal = Math.round(parseFloat(valorTotalStr) * 100); // Converter para centavos
+      // Extrair data de emissão da NFe
+      const dataEmissao = xmlDoc.querySelector('dhEmi')?.textContent?.split('T')[0] || 
+                         new Date().toISOString().split('T')[0];
 
       // Extrair parcelas se existirem
       const parcelas: XMLData['parcelas'] = [];
-      const duplicatas = cobr?.querySelectorAll('dup');
+      const duplicatas = xmlDoc.querySelectorAll('dup');
       
       if (duplicatas && duplicatas.length > 0) {
         duplicatas.forEach((dup, index) => {
           const valorDup = Math.round(parseFloat(dup.querySelector('vDup')?.textContent || '0') * 100);
-          const vencimentoDup = dup.querySelector('dVenc')?.textContent || '';
+          let vencimentoDup = dup.querySelector('dVenc')?.textContent;
+          
+          // Se não tem data de vencimento, usar data de emissão
+          if (!vencimentoDup) {
+            vencimentoDup = dataEmissao;
+          }
           
           parcelas.push({
             numero: index + 1,
@@ -94,19 +141,17 @@ export function useXMLImport() {
           });
         });
       } else {
-        // Se não há parcelas definidas, criar uma única parcela com vencimento em 30 dias
-        const dataVencimento = new Date();
-        dataVencimento.setDate(dataVencimento.getDate() + 30);
-        
+        // Criar parcela única usando data de emissão
         parcelas.push({
           numero: 1,
           valor: valorTotal,
-          vencimento: dataVencimento.toISOString().split('T')[0]
+          vencimento: dataEmissao
         });
       }
 
       return {
-        numeroNota,
+        numeroNota: nfeNumber,
+        chaveAcesso,
         cnpjEmissor,
         razaoSocialEmissor,
         nomeFantasiaEmissor,
@@ -171,11 +216,13 @@ export function useXMLImport() {
   const createContaPagar = async (xmlData: XMLData, fornecedorId: number): Promise<number> => {
     try {
       // Criar conta a pagar principal
+      const descricaoCompleta = `NF ${xmlData.numeroNota || 'sem número'} - ${xmlData.razaoSocialEmissor}${xmlData.chaveAcesso ? '. Chave: ' + xmlData.chaveAcesso : ''}`;
+      
       const { data: conta, error: contaError } = await supabase
         .from('contas_pagar')
         .insert({
-          descricao: `NF ${xmlData.numeroNota} - ${xmlData.razaoSocialEmissor}`,
-          numero_nf: xmlData.numeroNota,
+          descricao: descricaoCompleta,
+          numero_nf: xmlData.numeroNota || (xmlData.chaveAcesso?.slice(-8) || 'sem_numero'),
           fornecedor_id: fornecedorId,
           valor_total_centavos: xmlData.valorTotal,
           data_emissao: xmlData.dataEmissao || null,
@@ -225,21 +272,54 @@ export function useXMLImport() {
         };
       }
 
-      // Verificar se a nota já foi importada
-      if (xmlData.numeroNota) {
-        const { data: existingConta } = await supabase
-          .from('contas_pagar')
-          .select('id')
-          .eq('numero_nf', xmlData.numeroNota)
-          .maybeSingle();
+      // Validar se conseguiu extrair dados mínimos necessários
+      if (!xmlData.numeroNota && !xmlData.chaveAcesso) {
+        return {
+          success: false,
+          message: `${file.name}: Não foi possível extrair número da NFe nem chave de acesso`,
+          fileName: file.name,
+        };
+      }
 
-        if (existingConta) {
-          return {
-            success: false,
-            message: `NF ${xmlData.numeroNota} já foi importada anteriormente`,
-            fileName: file.name,
-          };
+      // Sistema robusto de verificação de duplicação
+      let isDuplicate = false;
+      let duplicateReason = '';
+      
+      // Critério 1: Verificar por número da NFe (mais confiável)
+      if (xmlData.numeroNota) {
+        const { data: existingByNumber } = await supabase
+          .from('contas_pagar')
+          .select('id, numero_nf, descricao')
+          .eq('numero_nf', xmlData.numeroNota)
+          .limit(1);
+        
+        if (existingByNumber && existingByNumber.length > 0) {
+          isDuplicate = true;
+          duplicateReason = `número da NFe ${xmlData.numeroNota}`;
         }
+      }
+      
+      // Critério 2: Verificar por chave de acesso completa (se não encontrou duplicata por número)
+      if (!isDuplicate && xmlData.chaveAcesso) {
+        const { data: existingByKey } = await supabase
+          .from('contas_pagar')
+          .select('id, numero_nf, descricao')
+          .textSearch('descricao', xmlData.chaveAcesso)
+          .limit(1);
+        
+        if (existingByKey && existingByKey.length > 0) {
+          isDuplicate = true;
+          duplicateReason = `chave de acesso ${xmlData.chaveAcesso.substring(0, 10)}...`;
+        }
+      }
+      
+      // Se encontrou duplicata, informar e pular
+      if (isDuplicate) {
+        return {
+          success: false,
+          message: `⚠️ NFe ${xmlData.numeroNota || 'sem número'} já foi importada anteriormente (${duplicateReason})`,
+          fileName: file.name,
+        };
       }
 
       const fornecedor = await findOrCreateFornecedor(xmlData);

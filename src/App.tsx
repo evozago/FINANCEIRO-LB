@@ -18,7 +18,7 @@ import { VendasDiarias } from "@/pages/vendas/VendasDiarias";
 import { Metas } from "@/pages/vendas/Metas";
 import { RelatoriosVendas } from "@/pages/vendas/RelatoriosVendas";
 import { Pedidos } from "@/pages/compras/Pedidos";
-import { ImportarXML } from "@/pages/compras/ImportarXML";
+import ImportarXML from "@/pages/compras/ImportarXMLNew";
 import { Relatorios } from "@/pages/Relatorios";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
