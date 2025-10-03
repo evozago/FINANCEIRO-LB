@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, RefreshCw, Calendar, AlertCircle, Play, Pause } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, RefreshCw, Calendar, AlertCircle, Play, Pause, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,16 +26,6 @@ interface ContaRecorrente {
   dia_fechamento?: number;
   created_at: string;
   updated_at: string;
-  pessoas_juridicas?: {
-    nome_fantasia?: string;
-    razao_social: string;
-  };
-  categorias_financeiras?: {
-    nome: string;
-  };
-  filiais?: {
-    nome: string;
-  };
 }
 
 interface Fornecedor {
@@ -63,6 +53,7 @@ export function ContasRecorrentes() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingConta, setEditingConta] = useState<ContaRecorrente | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -79,25 +70,37 @@ export function ContasRecorrentes() {
   });
 
   useEffect(() => {
-    fetchContas();
-    fetchFornecedores();
-    fetchCategorias();
-    fetchFiliais();
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchContas(),
+        fetchFornecedores(),
+        fetchCategorias(),
+        fetchFiliais()
+      ]);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchContas = async () => {
     try {
       const { data, error } = await supabase
         .from('recorrencias')
-        .select(`
-          *,
-          pessoas_juridicas(nome_fantasia, razao_social),
-          categorias_financeiras(nome),
-          filiais(nome)
-        `)
+        .select('*')
         .order('nome');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro na query recorrencias:', error);
+        throw error;
+      }
+      
       setContas(data || []);
     } catch (error) {
       console.error('Erro ao buscar contas recorrentes:', error);
@@ -106,8 +109,6 @@ export function ContasRecorrentes() {
         description: 'Não foi possível carregar as contas recorrentes.',
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -156,7 +157,7 @@ export function ContasRecorrentes() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validações
+    // Validações básicas
     if (!formData.nome.trim()) {
       toast({
         title: 'Erro',
@@ -240,7 +241,7 @@ export function ContasRecorrentes() {
       console.error('Erro ao salvar conta recorrente:', error);
       toast({
         title: 'Erro',
-        description: 'Não foi possível salvar a conta recorrente.',
+        description: `Erro ao salvar: ${error.message || 'Erro desconhecido'}`,
         variant: 'destructive',
       });
     }
@@ -313,17 +314,17 @@ export function ContasRecorrentes() {
     }
   };
 
-  const gerarContasPendentes = async () => {
+  const gerarContasMes = async () => {
+    setGenerating(true);
     try {
+      const hoje = new Date();
+      const mesAtual = hoje.getMonth() + 1;
+      const anoAtual = hoje.getFullYear();
+
       // Buscar contas ativas
-      const { data: contasAtivas, error } = await supabase
-        .from('recorrencias')
-        .select('*')
-        .eq('ativa', true);
+      const contasAtivas = contas.filter(conta => conta.ativa);
 
-      if (error) throw error;
-
-      if (!contasAtivas || contasAtivas.length === 0) {
+      if (contasAtivas.length === 0) {
         toast({
           title: 'Informação',
           description: 'Nenhuma conta recorrente ativa encontrada.',
@@ -331,56 +332,80 @@ export function ContasRecorrentes() {
         return;
       }
 
-      // Simular geração de contas (aqui você implementaria a lógica real)
-      const hoje = new Date();
-      const mesAtual = hoje.getMonth() + 1;
-      const anoAtual = hoje.getFullYear();
-
       let contasGeradas = 0;
+      let contasJaExistentes = 0;
 
       for (const conta of contasAtivas) {
-        // Verificar se já existe conta para este mês
+        const descricaoConta = `${conta.nome} - ${String(mesAtual).padStart(2, '0')}/${anoAtual}`;
+        
+        // Verificar se já existe
         const { data: contaExistente } = await supabase
           .from('contas_pagar')
           .select('id')
-          .eq('descricao', `${conta.nome} - ${mesAtual}/${anoAtual}`)
+          .eq('descricao', descricaoConta)
           .limit(1);
 
         if (!contaExistente || contaExistente.length === 0) {
           // Calcular data de vencimento
-          const dataVencimento = new Date(anoAtual, mesAtual - 1, conta.dia_vencimento);
+          let dataVencimento;
+          try {
+            dataVencimento = new Date(anoAtual, mesAtual - 1, conta.dia_vencimento);
+            // Se a data é inválida (ex: 31 de fevereiro), usar último dia do mês
+            if (dataVencimento.getMonth() !== mesAtual - 1) {
+              dataVencimento = new Date(anoAtual, mesAtual, 0); // Último dia do mês anterior
+            }
+          } catch {
+            dataVencimento = new Date(anoAtual, mesAtual, 0);
+          }
           
           // Criar conta a pagar
-          const { error: insertError } = await supabase
+          const { data: novaConta, error: insertError } = await supabase
             .from('contas_pagar')
             .insert({
-              descricao: `${conta.nome} - ${mesAtual}/${anoAtual}`,
+              descricao: descricaoConta,
               valor_total_centavos: conta.valor_esperado_centavos,
               fornecedor_id: conta.fornecedor_id,
               categoria_id: conta.categoria_id,
               filial_id: conta.filial_id,
               num_parcelas: 1,
-              referencia: `REC-${conta.id}-${mesAtual}${anoAtual}`
-            });
+              referencia: `REC-${conta.id}-${String(mesAtual).padStart(2, '0')}${anoAtual}`
+            })
+            .select('id')
+            .single();
 
-          if (!insertError) {
+          if (!insertError && novaConta) {
+            // Criar parcela
+            await supabase
+              .from('contas_pagar_parcelas')
+              .insert({
+                conta_id: novaConta.id,
+                numero_parcela: 1,
+                valor_parcela_centavos: conta.valor_esperado_centavos,
+                vencimento: dataVencimento.toISOString().split('T')[0],
+                pago: false
+              });
+
             contasGeradas++;
           }
+        } else {
+          contasJaExistentes++;
         }
       }
 
       toast({
-        title: 'Sucesso',
-        description: `${contasGeradas} conta(s) gerada(s) com sucesso.`,
+        title: 'Geração Concluída',
+        description: `${contasGeradas} conta(s) gerada(s). ${contasJaExistentes} já existiam.`,
       });
       
     } catch (error) {
-      console.error('Erro ao gerar contas pendentes:', error);
+      console.error('Erro ao gerar contas:', error);
       toast({
         title: 'Erro',
-        description: 'Erro ao gerar contas pendentes.',
+        description: 'Erro ao gerar contas do mês.',
         variant: 'destructive',
       });
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -406,10 +431,24 @@ export function ContasRecorrentes() {
     }).format(centavos / 100);
   };
 
+  const getFornecedorNome = (fornecedorId?: number) => {
+    if (!fornecedorId) return 'Não definido';
+    const fornecedor = fornecedores.find(f => f.id === fornecedorId);
+    return fornecedor?.nome_fantasia || fornecedor?.razao_social || 'Não encontrado';
+  };
+
+  const getCategoriaNome = (categoriaId: number) => {
+    const categoria = categorias.find(c => c.id === categoriaId);
+    return categoria?.nome || 'Não encontrada';
+  };
+
+  const getFilialNome = (filialId: number) => {
+    const filial = filiais.find(f => f.id === filialId);
+    return filial?.nome || 'Não encontrada';
+  };
+
   const filteredContas = contas.filter(conta =>
-    conta.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (conta.pessoas_juridicas?.nome_fantasia && conta.pessoas_juridicas.nome_fantasia.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (conta.pessoas_juridicas?.razao_social && conta.pessoas_juridicas.razao_social.toLowerCase().includes(searchTerm.toLowerCase()))
+    conta.nome.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const contasAtivas = contas.filter(conta => conta.ativa).length;
@@ -435,12 +474,20 @@ export function ContasRecorrentes() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Contas Recorrentes</h1>
           <p className="text-muted-foreground">
-            Gerencie contas que se repetem periodicamente
+            Gerencie contas que se repetem mensalmente
           </p>
         </div>
         <div className="flex space-x-2">
-          <Button variant="outline" onClick={gerarContasPendentes}>
-            <RefreshCw className="mr-2 h-4 w-4" />
+          <Button 
+            variant="outline" 
+            onClick={gerarContasMes}
+            disabled={generating}
+          >
+            {generating ? (
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
             Gerar Contas do Mês
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -545,22 +592,6 @@ export function ContasRecorrentes() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label htmlFor="dia_fechamento">Dia do Fechamento (Opcional)</Label>
-                    <Select value={formData.dia_fechamento} onValueChange={(value) => setFormData({ ...formData, dia_fechamento: value })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o dia" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Não definido</SelectItem>
-                        {Array.from({ length: 31 }, (_, i) => i + 1).map((dia) => (
-                          <SelectItem key={dia} value={dia.toString()}>
-                            Dia {dia}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
                 
                 <div className="space-y-3">
@@ -580,15 +611,6 @@ export function ContasRecorrentes() {
                       onCheckedChange={(checked) => setFormData({ ...formData, livre: checked })}
                     />
                     <Label htmlFor="livre">Conta livre (valor pode variar)</Label>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="sem_data_final"
-                      checked={formData.sem_data_final}
-                      onCheckedChange={(checked) => setFormData({ ...formData, sem_data_final: checked })}
-                    />
-                    <Label htmlFor="sem_data_final">Sem data final (recorrente indefinidamente)</Label>
                   </div>
                 </div>
                 
@@ -641,7 +663,7 @@ export function ContasRecorrentes() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Valor Mensal</CardTitle>
-            <AlertCircle className="h-4 w-4 text-orange-600" />
+            <DollarSign className="h-4 w-4 text-orange-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">
@@ -655,14 +677,14 @@ export function ContasRecorrentes() {
         <CardHeader>
           <CardTitle>Buscar Contas Recorrentes</CardTitle>
           <CardDescription>
-            Use o campo abaixo para filtrar as contas por nome ou fornecedor
+            Use o campo abaixo para filtrar as contas por nome
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center space-x-2">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome da conta ou fornecedor..."
+              placeholder="Buscar por nome da conta..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="max-w-sm"
@@ -696,11 +718,9 @@ export function ContasRecorrentes() {
               {filteredContas.map((conta) => (
                 <TableRow key={conta.id}>
                   <TableCell className="font-medium">{conta.nome}</TableCell>
-                  <TableCell>
-                    {conta.pessoas_juridicas?.nome_fantasia || conta.pessoas_juridicas?.razao_social || 'Não definido'}
-                  </TableCell>
-                  <TableCell>{conta.categorias_financeiras?.nome}</TableCell>
-                  <TableCell>{conta.filiais?.nome}</TableCell>
+                  <TableCell>{getFornecedorNome(conta.fornecedor_id)}</TableCell>
+                  <TableCell>{getCategoriaNome(conta.categoria_id)}</TableCell>
+                  <TableCell>{getFilialNome(conta.filial_id)}</TableCell>
                   <TableCell>{formatCurrency(conta.valor_esperado_centavos)}</TableCell>
                   <TableCell>Dia {conta.dia_vencimento}</TableCell>
                   <TableCell>
