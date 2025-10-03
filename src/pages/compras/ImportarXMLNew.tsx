@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { useXMLImport } from '@/hooks/useXMLImportDebug';
+import { useXMLImport } from '@/hooks/useXMLImportSimple';
 
 interface ProcessResult {
   success: boolean;
