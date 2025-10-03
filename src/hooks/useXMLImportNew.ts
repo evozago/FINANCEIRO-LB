@@ -27,7 +27,7 @@ interface ProcessResult {
   xmlData?: XMLData;
 }
 
-export function useXMLImport() {
+export function useXMLImportNew() {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const { toast } = useToast();
