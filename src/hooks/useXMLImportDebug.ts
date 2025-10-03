@@ -10,6 +10,8 @@ interface XMLData {
   nomeFantasiaEmitente?: string;
   valorTotal: number;
   dataEmissao: string;
+  cnpjDestinatario: string;
+  razaoSocialDestinatario: string;
 }
 
 interface ProcessResult {
@@ -91,11 +93,26 @@ export function useXMLImport() {
         throw new Error('Valor total inválido');
       }
 
+      // Extrair dados do destinatário (nossa empresa/filial)
+      const dest = xmlDoc.querySelector('dest');
+      if (!dest) {
+        throw new Error('Dados do destinatário não encontrados');
+      }
+
+      const cnpjDestinatario = dest.querySelector('CNPJ')?.textContent || '';
+      const razaoSocialDestinatario = dest.querySelector('xNome')?.textContent || '';
+      
+      if (!cnpjDestinatario) {
+        throw new Error('CNPJ do destinatário não encontrado');
+      }
+
       // Extrair data de emissão
       const dataEmissao = xmlDoc.querySelector('dhEmi')?.textContent?.split('T')[0] || 
                          new Date().toISOString().split('T')[0];
 
-      console.log(`✅ XML parseado: NFe ${nfeNumber}, Valor: R$ ${valorTotal}, Fornecedor: ${razaoSocialEmitente}`);
+      console.log(`✅ XML parseado: NFe ${nfeNumber}, Valor: R$ ${valorTotal}`);
+      console.log(`📤 Fornecedor: ${razaoSocialEmitente} (${cnpjEmitente})`);
+      console.log(`📥 Destinatário: ${razaoSocialDestinatario} (${cnpjDestinatario})`);
 
       return {
         numeroNFe: nfeNumber,
@@ -104,7 +121,9 @@ export function useXMLImport() {
         razaoSocialEmitente,
         nomeFantasiaEmitente,
         valorTotal,
-        dataEmissao
+        dataEmissao,
+        cnpjDestinatario,
+        razaoSocialDestinatario
       };
 
     } catch (error) {
@@ -197,18 +216,101 @@ export function useXMLImport() {
     }
   };
 
-  // Buscar categoria e filial padrão com logs detalhados
-  const buscarDadosPadrao = async () => {
+  // Buscar/criar filial baseada no destinatário do XML
+  const buscarOuCriarFilial = async (xmlData: XMLData): Promise<number> => {
+    try {
+      console.log(`🔍 Buscando filial para CNPJ: ${xmlData.cnpjDestinatario}...`);
+      
+      // Primeiro, buscar a pessoa jurídica correspondente ao CNPJ do destinatário
+      const { data: pjDestinatario, error: pjError } = await supabase
+        .from('pessoas_juridicas')
+        .select('id, razao_social')
+        .eq('cnpj', xmlData.cnpjDestinatario)
+        .single();
+
+      if (pjError && pjError.code !== 'PGRST116') {
+        console.error('❌ Erro ao buscar pessoa jurídica destinatária:', pjError);
+        throw new Error(`Erro ao buscar empresa destinatária: ${pjError.message}`);
+      }
+
+      let pjId = pjDestinatario?.id;
+
+      // Se a pessoa jurídica não existe, criar
+      if (!pjDestinatario) {
+        console.log(`📝 Criando nova pessoa jurídica para: ${xmlData.razaoSocialDestinatario}`);
+        
+        const { data: novaPJ, error: novaPJError } = await supabase
+          .from('pessoas_juridicas')
+          .insert({
+            razao_social: xmlData.razaoSocialDestinatario,
+            cnpj: xmlData.cnpjDestinatario,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select('id')
+          .single();
+
+        if (novaPJError) {
+          console.error('❌ Erro ao criar pessoa jurídica:', novaPJError);
+          throw new Error(`Erro ao criar empresa destinatária: ${novaPJError.message}`);
+        }
+
+        pjId = novaPJ.id;
+        console.log(`✅ Nova pessoa jurídica criada: ID ${pjId}`);
+      }
+
+      // Agora buscar a filial correspondente
+      const { data: filialExistente, error: filialError } = await supabase
+        .from('filiais')
+        .select('id, nome')
+        .eq('pj_id', pjId)
+        .single();
+
+      if (filialError && filialError.code !== 'PGRST116') {
+        console.error('❌ Erro ao buscar filial:', filialError);
+        throw new Error(`Erro ao buscar filial: ${filialError.message}`);
+      }
+
+      let filialId = filialExistente?.id;
+
+      // Se a filial não existe, criar
+      if (!filialExistente) {
+        console.log(`📝 Criando nova filial para: ${xmlData.razaoSocialDestinatario}`);
+        
+        const { data: novaFilial, error: novaFilialError } = await supabase
+          .from('filiais')
+          .insert({
+            pj_id: pjId,
+            nome: xmlData.razaoSocialDestinatario,
+            created_at: new Date().toISOString()
+          })
+          .select('id')
+          .single();
+
+        if (novaFilialError) {
+          console.error('❌ Erro ao criar filial:', novaFilialError);
+          throw new Error(`Erro ao criar filial: ${novaFilialError.message}`);
+        }
+
+        filialId = novaFilial.id;
+        console.log(`✅ Nova filial criada: ID ${filialId}`);
+      } else {
+        console.log(`✅ Filial encontrada: ID ${filialId} (${filialExistente.nome})`);
+      }
+
+      return filialId;
+    } catch (error) {
+      console.error('❌ Erro ao buscar/criar filial:', error);
+      throw error;
+    }
+  };
+
+  // Buscar categoria padrão
+  const buscarCategoriaPadrao = async (): Promise<number> => {
     try {
       console.log('🔍 Buscando categoria padrão...');
       const { data: categorias, error: catError } = await supabase
         .from('categorias_financeiras')
-        .select('id, nome')
-        .limit(1);
-      
-      console.log('🔍 Buscando filial padrão...');
-      const { data: filiais, error: filError } = await supabase
-        .from('filiais')
         .select('id, nome')
         .limit(1);
 
@@ -217,28 +319,14 @@ export function useXMLImport() {
         throw new Error(`Erro ao buscar categoria: ${catError.message}`);
       }
 
-      if (filError) {
-        console.error('❌ Erro ao buscar filial:', filError);
-        throw new Error(`Erro ao buscar filial: ${filError.message}`);
-      }
-
-      const categoriaId = categorias && categorias.length > 0 ? categorias[0].id : null;
-      const filialId = filiais && filiais.length > 0 ? filiais[0].id : null;
-
-      if (!categoriaId) {
+      if (!categorias || categorias.length === 0) {
         throw new Error('Nenhuma categoria encontrada no sistema');
       }
 
-      if (!filialId) {
-        throw new Error('Nenhuma filial encontrada no sistema');
-      }
-
-      console.log(`✅ Categoria encontrada: ID ${categoriaId} (${categorias[0].nome || 'sem nome'})`);
-      console.log(`✅ Filial encontrada: ID ${filialId} (${filiais[0].nome || 'sem nome'})`);
-
-      return { categoriaId, filialId };
+      console.log(`✅ Categoria encontrada: ID ${categorias[0].id} (${categorias[0].nome})`);
+      return categorias[0].id;
     } catch (error) {
-      console.error('❌ Erro ao buscar dados padrão:', error);
+      console.error('❌ Erro ao buscar categoria padrão:', error);
       throw error;
     }
   };
@@ -248,7 +336,8 @@ export function useXMLImport() {
     try {
       console.log('📝 Iniciando criação da conta a pagar...');
 
-      const { categoriaId, filialId } = await buscarDadosPadrao();
+      const categoriaId = await buscarCategoriaPadrao();
+      const filialId = await buscarOuCriarFilial(xmlData);
 
       const contaData = {
         fornecedor_id: fornecedorId,
