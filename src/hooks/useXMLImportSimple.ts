@@ -242,7 +242,8 @@ export function useXMLImport() {
         cnpj: xmlData.cnpjEmitente,
         razao_social: xmlData.razaoSocialEmitente,
         nome_fantasia: xmlData.nomeFantasiaEmitente || null,
-        ativo: true
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
       const { data: fornecedorCriado, error: errorCriacao } = await supabase
@@ -271,28 +272,39 @@ export function useXMLImport() {
         ? `NFe ${xmlData.numeroNFe} - ${xmlData.razaoSocialEmitente}`
         : `NFe ${xmlData.numeroNFe} - ${xmlData.razaoSocialEmitente}`;
 
-      // Calcular data de vencimento
-      let dataVencimento = new Date();
+      // Calcular data de emissão (usar como vencimento quando não há parcelas)
+      let dataEmissao = new Date();
+      if (xmlData.dataEmissao) {
+        try {
+          dataEmissao = new Date(xmlData.dataEmissao);
+        } catch {
+          dataEmissao = new Date(); // Fallback para hoje
+        }
+      }
+
+      // Se não há parcelas, usar data de emissão como vencimento
+      // Se há parcelas, usar a primeira data de vencimento
+      let dataVencimento = dataEmissao;
       if (xmlData.duplicatas.length > 0 && xmlData.duplicatas[0].vencimento) {
         try {
           dataVencimento = new Date(xmlData.duplicatas[0].vencimento);
         } catch {
-          // Se a data for inválida, usar data atual + 30 dias
-          dataVencimento = new Date();
-          dataVencimento.setDate(dataVencimento.getDate() + 30);
+          dataVencimento = dataEmissao; // Fallback para data de emissão
         }
-      } else {
-        // Se não há vencimento, usar 30 dias a partir de hoje
-        dataVencimento.setDate(dataVencimento.getDate() + 30);
       }
 
       const novaConta = {
         descricao,
+        fornecedor_id: fornecedorId,
+        categoria_id: 1, // Categoria padrão
+        filial_id: 3, // Filial Lui Bambini
         valor_total_centavos: Math.round(xmlData.valorTotal * 100),
-        data_vencimento: dataVencimento.toISOString().split('T')[0],
-        pessoa_juridica_id: fornecedorId,
-        status: 'pendente' as const,
-        observacoes: `Importado do XML NFe ${xmlData.numeroNFe} em ${new Date().toLocaleDateString('pt-BR')}`
+        numero_nf: xmlData.numeroNFe,
+        chave_nfe: xmlData.chaveAcesso,
+        data_emissao: dataEmissao.toISOString().split('T')[0],
+        num_parcelas: xmlData.duplicatas.length,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
       const { data: contaCriada, error } = await supabase
