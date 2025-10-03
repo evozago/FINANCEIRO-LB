@@ -15,6 +15,8 @@ interface XMLData {
     valor: number;
     vencimento: string | null;
   }[];
+  cnpjDestinatario: string;
+  nomeDestinatario: string;
 }
 
 interface ProcessResult {
@@ -180,6 +182,20 @@ export function useXMLImport() {
         });
       }
 
+      // Extrair dados do destinatário
+      let cnpjDestinatario = '';
+      let nomeDestinatario = '';
+      
+      const destElements = ['dest', 'destinatario'];
+      for (const destTag of destElements) {
+        const destElement = doc.querySelector(destTag);
+        if (destElement) {
+          cnpjDestinatario = destElement.querySelector('CNPJ')?.textContent || '';
+          nomeDestinatario = destElement.querySelector('xNome')?.textContent || '';
+          if (cnpjDestinatario) break;
+        }
+      }
+
       return {
         numeroNFe,
         chaveAcesso,
@@ -188,12 +204,62 @@ export function useXMLImport() {
         nomeFantasiaEmitente,
         valorTotal,
         dataEmissao,
-        duplicatas
+        duplicatas,
+        cnpjDestinatario,
+        nomeDestinatario
       };
 
     } catch (error) {
       console.error('Erro ao processar XML:', error);
       throw error;
+    }
+  };
+
+  // Buscar filial por CNPJ do destinatário
+  const buscarFilialPorCNPJ = async (cnpjDestinatario: string): Promise<number> => {
+    try {
+      console.log('🔍 Buscando filial para CNPJ:', cnpjDestinatario);
+      
+      // Buscar pessoa jurídica pelo CNPJ
+      const { data: pessoaJuridica, error: errorPJ } = await supabase
+        .from('pessoas_juridicas')
+        .select('id')
+        .eq('cnpj', cnpjDestinatario)
+        .maybeSingle();
+
+      if (errorPJ) {
+        console.error('Erro ao buscar pessoa jurídica:', errorPJ);
+        return 3; // Fallback para Lui Bambini
+      }
+
+      if (!pessoaJuridica) {
+        console.warn('Pessoa jurídica não encontrada para CNPJ:', cnpjDestinatario);
+        return 3; // Fallback para Lui Bambini
+      }
+
+      // Buscar filial vinculada à pessoa jurídica
+      const { data: filial, error: errorFilial } = await supabase
+        .from('filiais')
+        .select('id, nome')
+        .eq('pj_id', pessoaJuridica.id)
+        .maybeSingle();
+
+      if (errorFilial) {
+        console.error('Erro ao buscar filial:', errorFilial);
+        return 3; // Fallback para Lui Bambini
+      }
+
+      if (!filial) {
+        console.warn('Filial não encontrada para pessoa jurídica ID:', pessoaJuridica.id);
+        return 3; // Fallback para Lui Bambini
+      }
+
+      console.log('✅ Filial encontrada:', filial.nome, 'ID:', filial.id);
+      return filial.id;
+
+    } catch (error) {
+      console.error('Erro ao buscar filial por CNPJ:', error);
+      return 3; // Fallback para Lui Bambini
     }
   };
 
@@ -297,7 +363,7 @@ export function useXMLImport() {
         descricao,
         fornecedor_id: fornecedorId,
         categoria_id: 1, // Categoria padrão
-        filial_id: 3, // Filial Lui Bambini
+        filial_id: await buscarFilialPorCNPJ(xmlData.cnpjDestinatario),
         valor_total_centavos: Math.round(xmlData.valorTotal * 100),
         numero_nf: xmlData.numeroNFe,
         chave_nfe: xmlData.chaveAcesso,
