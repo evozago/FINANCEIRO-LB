@@ -10,7 +10,7 @@ import { PessoasJuridicas } from "@/pages/cadastros/PessoasJuridicas";
 import { Filiais } from "@/pages/cadastros/Filiais";
 import { Cargos } from "@/pages/cadastros/Cargos";
 import { Marcas } from "@/pages/cadastros/Marcas";
-import { ContasPagar } from "@/pages/financeiro/ContasPagar";
+import { ContasPagarSimple as ContasPagar } from "@/pages/financeiro/ContasPagarSimple";
 import { ContasBancarias } from "@/pages/financeiro/ContasBancarias";
 import { FechamentoCaixa } from "@/pages/financeiro/FechamentoCaixa";
 import { ContasRecorrentes } from "@/pages/financeiro/ContasRecorrentes";
