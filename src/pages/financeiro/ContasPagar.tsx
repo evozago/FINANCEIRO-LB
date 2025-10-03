@@ -96,21 +96,31 @@ export function ContasPagar() {
         .from('contas_pagar_parcelas')
         .select(`
           *,
-          contas_pagar(*, pessoas_juridicas!fornecedor_id(nome_fantasia, razao_social))
+          contas_pagar!inner(
+            id,
+            descricao,
+            fornecedor_id,
+            pessoas_juridicas!fornecedor_id(nome_fantasia, razao_social)
+          )
         `)
         .eq('pago', false)
         .order('vencimento');
 
       if (error) throw error;
+      
       const transformedData = (data || []).map(parcela => ({
         id: parcela.id,
         descricao: (parcela as any).contas_pagar?.descricao || 'N/A',
         valor_total_centavos: parcela.valor_parcela_centavos,
         num_parcelas: 1,
-        pessoas_juridicas: (parcela as any).contas_pagar?.pessoas_juridicas || null,
+        pessoas_juridicas: (parcela as any).contas_pagar?.pessoas_juridicas || { nome_fantasia: 'N/A' },
         created_at: parcela.created_at,
         updated_at: parcela.updated_at,
+        parcela_num: parcela.numero_parcela || parcela.parcela_num,
+        vencimento: parcela.vencimento,
+        conta_id: parcela.conta_id
       }));
+      
       setContas(transformedData as any);
     } catch (error) {
       console.error('Erro ao buscar contas a pagar:', error);
