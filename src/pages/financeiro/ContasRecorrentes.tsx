@@ -596,19 +596,21 @@ export function ContasRecorrentes() {
                 
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2">
-                    <Switch
+                    <input
+                      type="checkbox"
                       id="ativa"
                       checked={formData.ativa}
-                      onCheckedChange={(checked) => setFormData({ ...formData, ativa: checked })}
+                      onChange={(e) => setFormData({ ...formData, ativa: e.target.checked })}
                     />
                     <Label htmlFor="ativa">Conta ativa (gerar automaticamente)</Label>
                   </div>
                   
                   <div className="flex items-center space-x-2">
-                    <Switch
+                    <input
+                      type="checkbox"
                       id="livre"
                       checked={formData.livre}
-                      onCheckedChange={(checked) => setFormData({ ...formData, livre: checked })}
+                      onChange={(e) => setFormData({ ...formData, livre: e.target.checked })}
                     />
                     <Label htmlFor="livre">Conta livre (valor pode variar)</Label>
                   </div>

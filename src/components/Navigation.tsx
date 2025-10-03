@@ -36,7 +36,7 @@ const navigationItems = [
     submenu: [
       { title: 'Contas a Pagar', href: '/financeiro/contas-pagar' },
       { title: 'Contas Bancárias', href: '/financeiro/contas-bancarias' },
-      { title: 'Recorrências', href: '/financeiro/recorrencias' },
+      { title: 'Recorrências', href: '/financeiro/contas-recorrentes' },
       { title: 'Fechamento de Caixa', href: '/financeiro/fechamento-caixa' },
       { title: 'Categorias', href: '/financeiro/categorias' },
     ],
