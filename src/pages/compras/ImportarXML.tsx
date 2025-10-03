@@ -1,3 +1,7 @@
+// Página de importação de notas fiscais em formato XML.
+// Usa o hook `useXMLImport` para processar múltiplos arquivos e apresentar os resultados
+// ao usuário. Permite selecionar arquivos, acompanha progresso e mostra um resumo ao final.
+
 import { useState, useRef } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -31,12 +35,9 @@ export function ImportarXML() {
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files || []);
-    const xmlFiles = selectedFiles.filter(file => 
-      file.name.toLowerCase().endsWith('.xml') || 
-      file.type === 'text/xml' || 
-      file.type === 'application/xml'
+    const xmlFiles = selectedFiles.filter((file) =>
+      file.name.toLowerCase().endsWith('.xml') || file.type === 'text/xml' || file.type === 'application/xml'
     );
-    
     if (xmlFiles.length !== selectedFiles.length) {
       toast({
         title: 'Aviso',
@@ -44,7 +45,6 @@ export function ImportarXML() {
         variant: 'destructive',
       });
     }
-    
     setFiles(xmlFiles);
     setResults([]);
     setShowResults(false);
@@ -56,19 +56,14 @@ export function ImportarXML() {
 
   const handleImport = async () => {
     if (files.length === 0) {
-      toast({
-        title: 'Erro',
-        description: 'Selecione pelo menos um arquivo XML.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro', description: 'Selecione pelo menos um arquivo XML.', variant: 'destructive' });
       return;
     }
-
     try {
       const processResults = await importFiles(files);
       setResults(processResults);
       setShowResults(true);
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Erro',
         description: error instanceof Error ? error.message : 'Erro desconhecido',
@@ -78,21 +73,18 @@ export function ImportarXML() {
   };
 
   const formatCurrency = (centavos: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(centavos / 100);
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(centavos / 100);
   };
 
   return (
     <div className="space-y-6">
+      {/* Cabeçalho da página */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Importar XML</h1>
-        <p className="text-muted-foreground">
-          Importe notas fiscais XML para criar contas a pagar automaticamente
-        </p>
+        <p className="text-muted-foreground">Importe notas fiscais XML para criar contas a pagar automaticamente</p>
       </div>
 
+      {/* Card de seleção de arquivos */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
@@ -113,19 +105,12 @@ export function ImportarXML() {
               onChange={handleFileSelect}
               className="hidden"
             />
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              variant="outline"
-              className="flex items-center space-x-2"
-            >
+            <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="flex items-center space-x-2">
               <Upload className="h-4 w-4" />
               <span>Selecionar Arquivos</span>
             </Button>
-            <span className="text-sm text-muted-foreground">
-              {files.length} arquivo(s) selecionado(s)
-            </span>
+            <span className="text-sm text-muted-foreground">{files.length} arquivo(s) selecionado(s)</span>
           </div>
-
           {files.length > 0 && (
             <div className="space-y-2">
               <Label>Arquivos Selecionados:</Label>
@@ -139,11 +124,7 @@ export function ImportarXML() {
                         {(file.size / 1024).toFixed(1)} KB
                       </Badge>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => removeFile(index)}
-                    >
+                    <Button size="sm" variant="ghost" onClick={() => removeFile(index)}>
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
@@ -151,23 +132,15 @@ export function ImportarXML() {
               </div>
             </div>
           )}
-
           {processing && (
             <div className="space-y-2">
               <Label>Processando arquivos...</Label>
               <Progress value={progress} className="w-full" />
-              <p className="text-sm text-muted-foreground">
-                {progress.toFixed(0)}% concluído
-              </p>
+              <p className="text-sm text-muted-foreground">{progress.toFixed(0)}% concluído</p>
             </div>
           )}
-
           <div className="flex space-x-2">
-            <Button
-              onClick={handleImport}
-              disabled={files.length === 0 || processing}
-              className="flex items-center space-x-2"
-            >
+            <Button onClick={handleImport} disabled={files.length === 0 || processing} className="flex items-center space-x-2">
               <Upload className="h-4 w-4" />
               <span>Importar XML</span>
             </Button>
@@ -208,7 +181,6 @@ export function ImportarXML() {
               </ul>
             </AlertDescription>
           </Alert>
-          
           <Alert>
             <CheckCircle className="h-4 w-4" />
             <AlertDescription>
@@ -224,44 +196,34 @@ export function ImportarXML() {
         </CardContent>
       </Card>
 
-      {/* Resultados */}
+      {/* Resultados da importação */}
       <Dialog open={showResults} onOpenChange={setShowResults}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Resultados da Importação</DialogTitle>
-            <DialogDescription>
-              Resumo do processamento dos arquivos XML
-            </DialogDescription>
+            <DialogDescription>Resumo do processamento dos arquivos XML</DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
               <Card>
                 <CardContent className="p-4">
-                  <div className="text-2xl font-bold text-green-600">
-                    {results.filter(r => r.success).length}
-                  </div>
+                  <div className="text-2xl font-bold text-green-600">{results.filter((r) => r.success).length}</div>
                   <p className="text-sm text-muted-foreground">Sucessos</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
-                  <div className="text-2xl font-bold text-red-600">
-                    {results.filter(r => !r.success).length}
-                  </div>
+                  <div className="text-2xl font-bold text-red-600">{results.filter((r) => !r.success).length}</div>
                   <p className="text-sm text-muted-foreground">Erros</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {results.filter(r => r.fornecedorCriado).length}
-                  </div>
+                  <div className="text-2xl font-bold text-blue-600">{results.filter((r) => r.fornecedorCriado).length}</div>
                   <p className="text-sm text-muted-foreground">Fornecedores Criados</p>
                 </CardContent>
               </Card>
             </div>
-
             <Table>
               <TableHeader>
                 <TableRow>
@@ -288,23 +250,17 @@ export function ImportarXML() {
                       )}
                     </TableCell>
                     <TableCell className="max-w-md">
-                      <div className="truncate" title={result.message}>
-                        {result.message}
-                      </div>
+                      <div className="truncate" title={result.message}>{result.message}</div>
                     </TableCell>
                     <TableCell>
-                      {result.contaId && (
-                        <Badge variant="outline">#{result.contaId}</Badge>
-                      )}
+                      {result.contaId && <Badge variant="outline">#{result.contaId}</Badge>}
                     </TableCell>
                     <TableCell>
                       {result.fornecedorId && (
                         <div className="flex items-center space-x-1">
                           <Badge variant="outline">#{result.fornecedorId}</Badge>
                           {result.fornecedorCriado && (
-                            <Badge className="bg-blue-100 text-blue-800 text-xs">
-                              Novo
-                            </Badge>
+                            <Badge className="bg-blue-100 text-blue-800 text-xs">Novo</Badge>
                           )}
                         </div>
                       )}
