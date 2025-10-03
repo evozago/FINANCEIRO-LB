@@ -318,6 +318,52 @@ export function useXMLImport() {
         return false;
       }
 
+      // Criar parcelas individuais
+      if (contaCriada && contaCriada.id) {
+        console.log('✅ Conta criada, criando parcelas...');
+        
+        for (let i = 0; i < xmlData.duplicatas.length; i++) {
+          const duplicata = xmlData.duplicatas[i];
+          
+          // Calcular data de vencimento da parcela
+          let vencimentoParcela = dataVencimento;
+          if (duplicata.vencimento) {
+            try {
+              vencimentoParcela = new Date(duplicata.vencimento);
+            } catch {
+              // Se data inválida, usar data de emissão + dias
+              vencimentoParcela = new Date(dataEmissao);
+              vencimentoParcela.setDate(vencimentoParcela.getDate() + (i * 30)); // 30 dias entre parcelas
+            }
+          } else {
+            // Se não há vencimento, usar data de emissão + dias
+            vencimentoParcela = new Date(dataEmissao);
+            vencimentoParcela.setDate(vencimentoParcela.getDate() + (i * 30));
+          }
+          
+          const novaParcela = {
+            conta_id: contaCriada.id,
+            numero_parcela: i + 1,
+            parcela_num: i + 1,
+            valor_parcela_centavos: Math.round(duplicata.valor * 100),
+            vencimento: vencimentoParcela.toISOString().split('T')[0],
+            pago: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          
+          const { error: errorParcela } = await supabase
+            .from('contas_pagar_parcelas')
+            .insert(novaParcela);
+          
+          if (errorParcela) {
+            console.error(`Erro ao criar parcela ${i + 1}:`, errorParcela);
+          } else {
+            console.log(`✅ Parcela ${i + 1}/${xmlData.duplicatas.length} criada - R$ ${duplicata.valor.toFixed(2)}`);
+          }
+        }
+      }
+
       return !!contaCriada;
 
     } catch (error) {
