@@ -206,7 +206,7 @@ export function Relatorios() {
           contas_pagar!inner(
             id,
             descricao,
-            pessoas_juridicas(razao_social, nome_fantasia)
+            pessoas_juridicas!fornecedor_id(razao_social, nome_fantasia)
           )
         `)
         .eq('pago', false)

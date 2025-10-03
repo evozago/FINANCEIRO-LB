@@ -96,7 +96,7 @@ export function ContasPagar() {
         .from('contas_pagar_parcelas')
         .select(`
           *,
-          contas_pagar(*, pessoas_juridicas(nome_fantasia, razao_social))
+          contas_pagar(*, pessoas_juridicas!fornecedor_id(nome_fantasia, razao_social))
         `)
         .eq('pago', false)
         .order('vencimento');

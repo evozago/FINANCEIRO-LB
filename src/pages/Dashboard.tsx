@@ -99,7 +99,7 @@ export function Dashboard() {
           pago,
           contas_pagar!inner(
             descricao,
-            pessoas_juridicas!inner(razao_social, nome_fantasia)
+            pessoas_juridicas!fornecedor_id(razao_social, nome_fantasia)
           )
         `)
         .eq('pago', false);
