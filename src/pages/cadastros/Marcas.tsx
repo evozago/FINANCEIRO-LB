@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -143,8 +142,7 @@ export function Marcas() {
     setFormData({
       nome: marca.nome,
       descricao: marca.descricao || '',
-        pj_vinculada_id: marca.pj_vinculada_id !== undefined && marca.pj_vinculada_id !== null ? String(marca.pj_vinculada_id) : 
-        null,
+      pj_vinculada_id: marca.pj_vinculada_id !== undefined && marca.pj_vinculada_id !== null ? String(marca.pj_vinculada_id) : '',
     });
     setIsDialogOpen(true);
   };
@@ -225,33 +223,29 @@ export function Marcas() {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <Label htmlFor="nome">Nome da Marca *</Label>
+                <Label htmlFor="nome">Nome da Marca</Label>
                 <Input
                   id="nome"
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                   placeholder="Ex: Nike, Adidas, Samsung..."
-                  required
                 />
               </div>
               <div>
                 <Label htmlFor="pj_vinculada_id">Empresa Vinculada</Label>
-                <Select
+                <select
+                  id="pj_vinculada_id"
                   value={formData.pj_vinculada_id}
-                  onValueChange={(value) => setFormData({ ...formData, pj_vinculada_id: value })}
+                  onChange={(e) => setFormData({ ...formData, pj_vinculada_id: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma empresa (opcional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Nenhuma empresa</SelectItem>
-                    {pessoasJuridicas.map((pj) => (
-                      <SelectItem key={pj.id} value={pj.id.toString()}>
-                        {pj.nome_fantasia || pj.razao_social}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <option value="">Selecione uma empresa (opcional)</option>
+                  {pessoasJuridicas.map((pj) => (
+                    <option key={pj.id} value={pj.id.toString()}>
+                      {pj.nome_fantasia || pj.razao_social}
+                    </option>
+                  ))}
+                </select>
                 <p className="text-sm text-muted-foreground mt-1">
                   Vincule a marca a uma empresa para associação automática
                 </p>

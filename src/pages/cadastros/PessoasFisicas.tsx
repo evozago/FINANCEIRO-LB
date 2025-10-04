@@ -60,9 +60,15 @@ export function PessoasFisicas() {
   });
 
   useEffect(() => {
-    fetchPessoas();
-    fetchFiliais();
-    fetchCargos();
+    const loadInitialData = async () => {
+      await Promise.all([
+        fetchPessoas(),
+        fetchFiliais(),
+        fetchCargos()
+      ]);
+      setLoading(false);
+    };
+    loadInitialData();
   }, []);
 
   const fetchPessoas = async () => {
@@ -321,33 +327,35 @@ export function PessoasFisicas() {
                 </div>
                 <div>
                   <Label htmlFor="filial_id">Filial</Label>
-                  <Select value={formData.filial_id} onValueChange={(value) => setFormData({ ...formData, filial_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma filial" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filiais.map((filial) => (
-                        <SelectItem key={filial.id} value={filial.id.toString()}>
-                          {filial.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    id="filial_id"
+                    value={formData.filial_id}
+                    onChange={(e) => setFormData({ ...formData, filial_id: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">Selecione uma filial</option>
+                    {filiais.map((filial) => (
+                      <option key={filial.id} value={filial.id.toString()}>
+                        {filial.nome}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <Label htmlFor="cargo_id">Cargo</Label>
-                  <Select value={formData.cargo_id} onValueChange={(value) => setFormData({ ...formData, cargo_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cargo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cargos.map((cargo) => (
-                        <SelectItem key={cargo.id} value={cargo.id.toString()}>
-                          {cargo.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    id="cargo_id"
+                    value={formData.cargo_id}
+                    onChange={(e) => setFormData({ ...formData, cargo_id: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">Selecione um cargo</option>
+                    {cargos.map((cargo) => (
+                      <option key={cargo.id} value={cargo.id.toString()}>
+                        {cargo.nome}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="col-span-2">

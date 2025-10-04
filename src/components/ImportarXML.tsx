@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
@@ -373,39 +372,37 @@ export function ImportarXML() {
                 <CardContent className="space-y-4">
                   <div>
                     <Label htmlFor="fornecedor">Sua Empresa (Destinatário) *</Label>
-                    <Select value={selectedFornecedor} onValueChange={setSelectedFornecedor}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione sua empresa" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {fornecedores.map((fornecedor) => (
-                          <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                            <div>
-                              <div>{fornecedor.nome_fantasia || fornecedor.razao_social}</div>
-                              {fornecedor.cnpj && (
-                                <div className="text-sm text-muted-foreground">{fornecedor.cnpj}</div>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <select
+                      id="fornecedor"
+                      value={selectedFornecedor}
+                      onChange={(e) => setSelectedFornecedor(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="">Selecione sua empresa</option>
+                      {fornecedores.map((fornecedor) => (
+                        <option key={fornecedor.id} value={fornecedor.id.toString()}>
+                          {fornecedor.nome_fantasia || fornecedor.razao_social}
+                          {fornecedor.cnpj && ` - ${fornecedor.cnpj}`}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <Label htmlFor="categoria">Categoria *</Label>
-                    <Select value={selectedCategoria} onValueChange={setSelectedCategoria}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a categoria" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categorias.map((categoria) => (
-                          <SelectItem key={categoria.id} value={categoria.id.toString()}>
-                            {categoria.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <select
+                      id="categoria"
+                      value={selectedCategoria}
+                      onChange={(e) => setSelectedCategoria(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="">Selecione a categoria</option>
+                      {categorias.map((categoria) => (
+                        <option key={categoria.id} value={categoria.id.toString()}>
+                          {categoria.nome}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </CardContent>
               </Card>
@@ -462,9 +459,9 @@ export function ImportarXML() {
           <div className="text-center space-y-4">
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
             <div>
-              <h3 className="text-lg font-medium">Importação Concluída!</h3>
+              <h3 className="text-lg font-semibold">Importação Concluída!</h3>
               <p className="text-muted-foreground">
-                A nota fiscal foi importada com sucesso.
+                A nota fiscal foi importada com sucesso para o sistema.
               </p>
             </div>
           </div>

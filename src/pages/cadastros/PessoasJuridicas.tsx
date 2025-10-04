@@ -22,6 +22,7 @@ interface PessoaJuridica {
   email?: string;
   endereco?: string;
   fundacao?: string;
+  categoria_id?: number;
   created_at: string;
   updated_at: string;
 }
@@ -495,24 +496,19 @@ export function PessoasJuridicas() {
                     </div>
                     <div>
                       <Label htmlFor="categoria_id">Categoria</Label>
-                      <Select value={formData.categoria_id} onValueChange={(value) => setFormData({ ...formData, categoria_id: value })}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma categoria" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">Sem categoria</SelectItem>
-                          {categorias.map((categoria) => (
-                            <SelectItem key={categoria.id} value={categoria.id.toString()}>
-                              <div>
-                                <div className="font-medium">{categoria.nome}</div>
-                                {categoria.descricao && (
-                                  <div className="text-sm text-muted-foreground">{categoria.descricao}</div>
-                                )}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <select
+                        id="categoria_id"
+                        value={formData.categoria_id}
+                        onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <option value="">Sem categoria</option>
+                        {categorias.map((categoria) => (
+                          <option key={categoria.id} value={categoria.id.toString()}>
+                            {categoria.nome} {categoria.descricao && `- ${categoria.descricao}`}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                   <div>
