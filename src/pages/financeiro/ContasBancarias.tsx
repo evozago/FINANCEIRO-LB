@@ -16,14 +16,14 @@ import { useToast } from '@/hooks/use-toast';
 interface ContaBancaria {
   id: number;
   banco: string;
-  agencia: string;
-  conta: string;
-  tipo_conta: string;
+  agencia?: string;
+  numero_conta?: string;
+  nome_conta: string;
   saldo_atual_centavos: number;
-  limite_credito_centavos?: number;
   ativa: boolean;
-  observacoes?: string;
+  pj_id: number;
   created_at: string;
+  updated_at: string;
 }
 
 const tiposConta = [
@@ -83,14 +83,13 @@ export function ContasBancarias() {
     
     try {
       const dataToSubmit = {
+        nome_conta: formData.banco + ' - ' + formData.agencia + ' - ' + formData.conta,
         banco: formData.banco,
         agencia: formData.agencia,
-        conta: formData.conta,
-        tipo_conta: formData.tipo_conta,
+        numero_conta: formData.conta,
         saldo_atual_centavos: formData.saldo_atual_centavos ? Math.round(parseFloat(formData.saldo_atual_centavos) * 100) : 0,
-        limite_credito_centavos: formData.limite_credito_centavos ? Math.round(parseFloat(formData.limite_credito_centavos) * 100) : null,
         ativa: formData.ativa,
-        observacoes: formData.observacoes || null,
+        pj_id: 1, // Using default PJ ID for now
       };
 
       if (editingConta) {
@@ -136,13 +135,13 @@ export function ContasBancarias() {
     setEditingConta(conta);
     setFormData({
       banco: conta.banco,
-      agencia: conta.agencia,
-      conta: conta.conta,
-      tipo_conta: conta.tipo_conta,
+      agencia: conta.agencia || '',
+      conta: conta.numero_conta || '',
+      tipo_conta: 'corrente', // Default since tipo_conta doesn't exist in DB
       saldo_atual_centavos: (conta.saldo_atual_centavos / 100).toString(),
-      limite_credito_centavos: conta.limite_credito_centavos ? (conta.limite_credito_centavos / 100).toString() : '',
+      limite_credito_centavos: '', // This field doesn't exist in DB
       ativa: conta.ativa,
-      observacoes: conta.observacoes || '',
+      observacoes: '', // This field doesn't exist in DB
     });
     setIsDialogOpen(true);
   };
@@ -199,8 +198,8 @@ export function ContasBancarias() {
 
   const filteredContas = contas.filter(conta =>
     conta.banco.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conta.agencia.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conta.conta.toLowerCase().includes(searchTerm.toLowerCase())
+    (conta.agencia && conta.agencia.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (conta.numero_conta && conta.numero_conta.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const totalSaldo = contas.reduce((sum, conta) => sum + conta.saldo_atual_centavos, 0);
@@ -435,11 +434,11 @@ export function ContasBancarias() {
                       <span>{conta.banco}</span>
                     </div>
                   </TableCell>
-                  <TableCell>{getTipoContaLabel(conta.tipo_conta)}</TableCell>
+                  <TableCell>Conta Corrente</TableCell>
                   <TableCell>
                     <div>
-                      <div className="font-medium">Ag: {conta.agencia}</div>
-                      <div className="text-sm text-muted-foreground">Cc: {conta.conta}</div>
+                      <div className="font-medium">Ag: {conta.agencia || 'N/A'}</div>
+                      <div className="text-sm text-muted-foreground">Cc: {conta.numero_conta || 'N/A'}</div>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -448,10 +447,7 @@ export function ContasBancarias() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    {conta.limite_credito_centavos 
-                      ? (showSaldos ? formatCurrency(conta.limite_credito_centavos) : '••••••')
-                      : 'N/A'
-                    }
+                    N/A
                   </TableCell>
                   <TableCell>
                     <Badge variant={conta.ativa ? 'default' : 'secondary'}>

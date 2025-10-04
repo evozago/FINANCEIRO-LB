@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { ImportarXML } from '@/components/ImportarXML';
+
 
 interface ContaPagar {
   id: number;
@@ -93,12 +93,35 @@ export function ContasPagar() {
   const fetchContas = async () => {
     try {
       const { data, error } = await supabase
-        .from('contas_pagar_abertas')
-        .select('*')
-        .order('proximo_vencimento');
+        .from('contas_pagar_parcelas')
+        .select(`
+          *,
+          contas_pagar!inner(
+            id,
+            descricao,
+            fornecedor_id,
+            pessoas_juridicas!fornecedor_id(nome_fantasia, razao_social)
+          )
+        `)
+        .eq('pago', false)
+        .order('vencimento');
 
       if (error) throw error;
-      setContas(data || []);
+      
+      const transformedData = (data || []).map(parcela => ({
+        id: parcela.id,
+        descricao: (parcela as any).contas_pagar?.descricao || 'N/A',
+        valor_total_centavos: parcela.valor_parcela_centavos,
+        num_parcelas: 1,
+        pessoas_juridicas: (parcela as any).contas_pagar?.pessoas_juridicas || { nome_fantasia: 'N/A' },
+        created_at: parcela.created_at,
+        updated_at: parcela.updated_at,
+        parcela_num: parcela.numero_parcela || parcela.parcela_num,
+        vencimento: parcela.vencimento,
+        conta_id: parcela.conta_id
+      }));
+      
+      setContas(transformedData as any);
     } catch (error) {
       console.error('Erro ao buscar contas a pagar:', error);
       toast({
@@ -207,12 +230,8 @@ export function ContasPagar() {
 
         if (contaError) throw contaError;
 
-        // Gerar parcelas automaticamente
-        const { error: parcelasError } = await supabase.rpc('gera_parcelas_conta', {
-          conta_id: contaData.id
-        });
-
-        if (parcelasError) throw parcelasError;
+        // Note: Automatic parcel generation will be implemented later
+        // For now, parcels need to be created manually
 
         toast({
           title: 'Sucesso',
@@ -336,7 +355,7 @@ export function ContasPagar() {
           </p>
         </div>
         <div className="flex space-x-2">
-          <ImportarXML />
+
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => { resetForm(); setEditingConta(null); }}>
