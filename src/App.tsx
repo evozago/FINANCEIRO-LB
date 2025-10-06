@@ -11,6 +11,8 @@ import { Filiais } from "@/pages/cadastros/Filiais";
 import { Cargos } from "@/pages/cadastros/Cargos";
 import { Marcas } from "@/pages/cadastros/Marcas";
 import { ContasPagarSimple as ContasPagar } from "@/pages/financeiro/ContasPagarSimple";
+import { ContaDetalhes } from "@/pages/financeiro/ContaDetalhes";
+import { FornecedorDetalhes } from "@/pages/financeiro/FornecedorDetalhes";
 import { ContasBancarias } from "@/pages/financeiro/ContasBancarias";
 import { FechamentoCaixa } from "@/pages/financeiro/FechamentoCaixa";
 import { ContasRecorrentes } from "@/pages/financeiro/ContasRecorrentes";
@@ -43,6 +45,8 @@ const App = () => (
             <Route path="cadastros/cargos" element={<Cargos />} />
             <Route path="cadastros/marcas" element={<Marcas />} />
             <Route path="financeiro/contas-pagar" element={<ContasPagar />} />
+            <Route path="financeiro/conta/:id" element={<ContaDetalhes />} />
+            <Route path="financeiro/fornecedor/:id" element={<FornecedorDetalhes />} />
             <Route path="financeiro/contas-bancarias" element={<ContasBancarias />} />
             <Route path="financeiro/fechamento-caixa" element={<FechamentoCaixa />} />
             <Route path="financeiro/contas-recorrentes" element={<ContasRecorrentes />} />

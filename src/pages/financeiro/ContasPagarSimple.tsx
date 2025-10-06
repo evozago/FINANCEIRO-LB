@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +66,7 @@ interface FormaPagamento {
 
 export function ContasPagarSimple() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [parcelas, setParcelas] = useState<ParcelaCompleta[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedParcelas, setSelectedParcelas] = useState<number[]>([]);
@@ -604,17 +606,38 @@ export function ContasPagarSimple() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredAndSortedParcelas.map((parcela) => (
-                    <TableRow key={parcela.id}>
-                      <TableCell>
+                   filteredAndSortedParcelas.map((parcela) => (
+                    <TableRow key={parcela.id} className="cursor-pointer hover:bg-muted/50">
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selectedParcelas.includes(parcela.id)}
                           onCheckedChange={() => toggleSelectParcela(parcela.id)}
                         />
                       </TableCell>
-                      {visibleColumns.fornecedor && <TableCell className="font-medium">{parcela.fornecedor}</TableCell>}
-                      {visibleColumns.descricao && <TableCell>{parcela.descricao}</TableCell>}
-                      {visibleColumns.numero_nota && <TableCell>{parcela.numero_nota}</TableCell>}
+                      {visibleColumns.fornecedor && (
+                        <TableCell 
+                          className="font-medium cursor-pointer hover:underline"
+                          onClick={() => navigate(`/financeiro/fornecedor/${parcela.fornecedor_id}`)}
+                        >
+                          {parcela.fornecedor}
+                        </TableCell>
+                      )}
+                      {visibleColumns.descricao && (
+                        <TableCell 
+                          className="cursor-pointer hover:underline"
+                          onClick={() => navigate(`/financeiro/conta/${parcela.conta_id}`)}
+                        >
+                          {parcela.descricao}
+                        </TableCell>
+                      )}
+                      {visibleColumns.numero_nota && (
+                        <TableCell 
+                          className="cursor-pointer hover:underline"
+                          onClick={() => navigate(`/financeiro/conta/${parcela.conta_id}`)}
+                        >
+                          {parcela.numero_nota}
+                        </TableCell>
+                      )}
                       {visibleColumns.categoria && <TableCell>{parcela.categoria}</TableCell>}
                       {visibleColumns.filial && <TableCell>{parcela.filial}</TableCell>}
                       {visibleColumns.valor_parcela && <TableCell>{formatCurrency(parcela.valor_parcela_centavos)}</TableCell>}
