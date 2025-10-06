@@ -15,17 +15,17 @@ import { useToast } from '@/hooks/use-toast';
 
 interface Pedido {
   id: number;
-  numero: string;
+  numero_pedido: string;
   data_pedido: string;
   previsao_entrega?: string;
   status: string;
-  qtd_pecas_total?: number;
-  qtd_referencias?: number;
+  quantidade_pecas?: number;
+  quantidade_referencias?: number;
   valor_bruto_centavos?: number;
   desconto_percentual?: number;
   desconto_valor_centavos?: number;
   valor_liquido_centavos?: number;
-  preco_medio_centavos?: number;
+  valor_medio_peca_centavos?: number;
   observacoes?: string;
   fornecedor_id?: number;
   marca_id?: number;
@@ -58,10 +58,9 @@ interface PessoaFisica {
 }
 
 const statusOptions = [
-  { value: 'pendente', label: 'Pendente', color: 'bg-yellow-500' },
-  { value: 'aprovado', label: 'Aprovado', color: 'bg-blue-500' },
-  { value: 'enviado', label: 'Enviado', color: 'bg-purple-500' },
-  { value: 'entregue', label: 'Entregue', color: 'bg-green-500' },
+  { value: 'aberto', label: 'Aberto', color: 'bg-yellow-500' },
+  { value: 'parcial', label: 'Parcial', color: 'bg-blue-500' },
+  { value: 'recebido', label: 'Recebido', color: 'bg-green-500' },
   { value: 'cancelado', label: 'Cancelado', color: 'bg-red-500' },
 ];
 
@@ -77,17 +76,16 @@ export function Pedidos() {
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
-    numero: '',
+    numero_pedido: '',
     data_pedido: new Date(),
     previsao_entrega: undefined as Date | undefined,
-    status: 'pendente',
-    qtd_pecas_total: '',
-    qtd_referencias: '',
+    status: 'aberto',
+    quantidade_pecas: '',
+    quantidade_referencias: '',
     valor_bruto_centavos: '',
     desconto_percentual: '',
     desconto_valor_centavos: '',
     valor_liquido_centavos: '',
-    preco_medio_centavos: '',
     observacoes: '',
     fornecedor_id: '',
     marca_id: '',
@@ -174,17 +172,16 @@ export function Pedidos() {
     
     try {
       const dataToSubmit = {
-        numero: formData.numero,
+        numero_pedido: formData.numero_pedido,
         data_pedido: formData.data_pedido.toISOString().split('T')[0],
         previsao_entrega: formData.previsao_entrega?.toISOString().split('T')[0] || null,
         status: formData.status as 'aberto' | 'cancelado' | 'parcial' | 'recebido',
-        qtd_pecas_total: formData.qtd_pecas_total ? parseInt(formData.qtd_pecas_total) : null,
-        qtd_referencias: formData.qtd_referencias ? parseInt(formData.qtd_referencias) : null,
+        quantidade_pecas: formData.quantidade_pecas ? parseInt(formData.quantidade_pecas) : null,
+        quantidade_referencias: formData.quantidade_referencias ? parseInt(formData.quantidade_referencias) : null,
         valor_bruto_centavos: formData.valor_bruto_centavos ? Math.round(parseFloat(formData.valor_bruto_centavos) * 100) : null,
         desconto_percentual: formData.desconto_percentual ? parseFloat(formData.desconto_percentual) : null,
         desconto_valor_centavos: formData.desconto_valor_centavos ? Math.round(parseFloat(formData.desconto_valor_centavos) * 100) : null,
         valor_liquido_centavos: formData.valor_liquido_centavos ? Math.round(parseFloat(formData.valor_liquido_centavos) * 100) : null,
-        preco_medio_centavos: formData.preco_medio_centavos ? Math.round(parseFloat(formData.preco_medio_centavos) * 100) : null,
         observacoes: formData.observacoes || null,
         fornecedor_id: formData.fornecedor_id ? parseInt(formData.fornecedor_id) : null,
         marca_id: formData.marca_id ? parseInt(formData.marca_id) : null,
@@ -233,17 +230,16 @@ export function Pedidos() {
   const handleEdit = (pedido: Pedido) => {
     setEditingPedido(pedido);
     setFormData({
-      numero: pedido.numero,
+      numero_pedido: pedido.numero_pedido,
       data_pedido: new Date(pedido.data_pedido),
       previsao_entrega: pedido.previsao_entrega ? new Date(pedido.previsao_entrega) : undefined,
       status: pedido.status,
-      qtd_pecas_total: pedido.qtd_pecas_total?.toString() || '',
-      qtd_referencias: pedido.qtd_referencias?.toString() || '',
+      quantidade_pecas: pedido.quantidade_pecas?.toString() || '',
+      quantidade_referencias: pedido.quantidade_referencias?.toString() || '',
       valor_bruto_centavos: pedido.valor_bruto_centavos ? (pedido.valor_bruto_centavos / 100).toString() : '',
       desconto_percentual: pedido.desconto_percentual?.toString() || '',
       desconto_valor_centavos: pedido.desconto_valor_centavos ? (pedido.desconto_valor_centavos / 100).toString() : '',
       valor_liquido_centavos: pedido.valor_liquido_centavos ? (pedido.valor_liquido_centavos / 100).toString() : '',
-      preco_medio_centavos: pedido.preco_medio_centavos ? (pedido.preco_medio_centavos / 100).toString() : '',
       observacoes: pedido.observacoes || '',
       fornecedor_id: pedido.fornecedor_id?.toString() || '',
       marca_id: pedido.marca_id?.toString() || '',
@@ -280,17 +276,16 @@ export function Pedidos() {
 
   const resetForm = () => {
     setFormData({
-      numero: '',
+      numero_pedido: '',
       data_pedido: new Date(),
       previsao_entrega: undefined,
-      status: 'pendente',
-      qtd_pecas_total: '',
-      qtd_referencias: '',
+      status: 'aberto',
+      quantidade_pecas: '',
+      quantidade_referencias: '',
       valor_bruto_centavos: '',
       desconto_percentual: '',
       desconto_valor_centavos: '',
       valor_liquido_centavos: '',
-      preco_medio_centavos: '',
       observacoes: '',
       fornecedor_id: '',
       marca_id: '',
@@ -315,7 +310,7 @@ export function Pedidos() {
   };
 
   const filteredPedidos = pedidos.filter(pedido =>
-    pedido.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    pedido.numero_pedido.toLowerCase().includes(searchTerm.toLowerCase()) ||
     pedido.pessoas_juridicas?.nome_fantasia.toLowerCase().includes(searchTerm.toLowerCase()) ||
     pedido.marcas?.nome.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -352,11 +347,11 @@ export function Pedidos() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="numero">Número do Pedido *</Label>
+                  <Label htmlFor="numero_pedido">Número do Pedido *</Label>
                   <Input
-                    id="numero"
-                    value={formData.numero}
-                    onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
+                    id="numero_pedido"
+                    value={formData.numero_pedido}
+                    onChange={(e) => setFormData({ ...formData, numero_pedido: e.target.value })}
                     required
                   />
                 </div>
@@ -436,21 +431,21 @@ export function Pedidos() {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="qtd_pecas_total">Qtd. Peças Total</Label>
+                  <Label htmlFor="quantidade_pecas">Qtd. Peças Total</Label>
                   <Input
-                    id="qtd_pecas_total"
+                    id="quantidade_pecas"
                     type="number"
-                    value={formData.qtd_pecas_total}
-                    onChange={(e) => setFormData({ ...formData, qtd_pecas_total: e.target.value })}
+                    value={formData.quantidade_pecas}
+                    onChange={(e) => setFormData({ ...formData, quantidade_pecas: e.target.value })}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="qtd_referencias">Qtd. Referências</Label>
+                  <Label htmlFor="quantidade_referencias">Qtd. Referências</Label>
                   <Input
-                    id="qtd_referencias"
+                    id="quantidade_referencias"
                     type="number"
-                    value={formData.qtd_referencias}
-                    onChange={(e) => setFormData({ ...formData, qtd_referencias: e.target.value })}
+                    value={formData.quantidade_referencias}
+                    onChange={(e) => setFormData({ ...formData, quantidade_referencias: e.target.value })}
                   />
                 </div>
                 <div>
@@ -551,7 +546,7 @@ export function Pedidos() {
                   <TableCell className="font-medium">
                     <div className="flex items-center space-x-2">
                       <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                      <span>{pedido.numero}</span>
+                      <span>{pedido.numero_pedido}</span>
                     </div>
                   </TableCell>
                   <TableCell>

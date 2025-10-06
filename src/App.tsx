@@ -18,6 +18,7 @@ import { Categorias } from "@/pages/financeiro/Categorias";
 import { VendasDiarias } from "@/pages/vendas/VendasDiarias";
 import { Metas } from "@/pages/vendas/Metas";
 import { RelatoriosVendas } from "@/pages/vendas/RelatoriosVendas";
+import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
 import { Pedidos } from "@/pages/compras/Pedidos";
 import ImportarXML from "@/pages/compras/ImportarXMLNew";
 import { Relatorios } from "@/pages/Relatorios";
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="vendas/vendas-diarias" element={<VendasDiarias />} />
             <Route path="vendas/metas" element={<Metas />} />
             <Route path="vendas/relatorios" element={<RelatoriosVendas />} />
+            <Route path="vendas/simulador-metas" element={<SimuladorMetas />} />
             <Route path="compras/pedidos" element={<Pedidos />} />
             <Route path="compras/importar-xml" element={<ImportarXML />} />
             <Route path="relatorios" element={<Relatorios />} />
