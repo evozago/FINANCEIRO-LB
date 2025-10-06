@@ -6,27 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, TrendingDown, Calendar, DollarSign } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-
-interface CrescimentoYoY {
-  mes: number;
-  ano: number;
-  filial_id: number;
-  filial_nome: string;
-  valor_atual: number;
-  valor_anterior: number;
-  crescimento_percentual: number;
-  crescimento_absoluto: number;
-}
-
-interface VendasMensal {
-  mes: number;
-  ano: number;
-  filial_id: number;
-  filial_nome: string;
-  valor_liquido_total: number;
-  total_vendas: number;
-  ticket_medio: number;
-}
+import { CrescimentoYoY, VendasMensal } from '@/lib/supabase-views';
 
 interface DadosTrimestre {
   trimestre: string;

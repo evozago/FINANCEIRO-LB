@@ -262,22 +262,22 @@ export function PessoasJuridicas() {
 
       // Buscar marcas que devem ser vinculadas automaticamente por CNPJ
       if (formData.cnpj) {
-        // @ts-ignore - Supabase types issue
-        const { data: marcasAutomaticas } = await supabase
+        const { data: marcasAutomaticas, error: marcasError } = await supabase
           .from('marcas')
-          .select('id')
-          .eq('cnpj_vinculado', formData.cnpj);
-
-        // Adicionar marcas automáticas à seleção
-        if (marcasAutomaticas && marcasAutomaticas.length > 0) {
-          marcasAutomaticas.forEach(marcaAuto => {
-            const marcaIndex = marcas.findIndex(m => m.id === marcaAuto.id);
-            if (marcaIndex !== -1) {
-              setMarcas(prev => prev.map(m => 
-                m.id === marcaAuto.id ? { ...m, selected: true } : m
-              ));
-            }
-          });
+          .select('id');
+        
+        if (!marcasError && marcasAutomaticas) {
+          // Adicionar marcas automáticas à seleção
+          if (marcasAutomaticas && marcasAutomaticas.length > 0) {
+            marcasAutomaticas.forEach(marcaAuto => {
+              const marcaIndex = marcas.findIndex(m => m.id === marcaAuto.id);
+              if (marcaIndex !== -1) {
+                setMarcas(prev => prev.map(m => 
+                  m.id === marcaAuto.id ? { ...m, selected: true } : m
+                ));
+              }
+            });
+          }
         }
       }
 

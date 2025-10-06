@@ -9,6 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { VendasMensal, VendedorasMensal, VendedorasMensalComMeta } from '@/lib/supabase-views';
 
 interface VendaMensal {
   ano: number;
@@ -61,9 +62,9 @@ interface Filial {
 }
 
 export function RelatoriosVendas() {
-  const [vendasMensais, setVendasMensais] = useState<VendaMensal[]>([]);
-  const [vendedorasMensais, setVendedorasMensais] = useState<VendedoraMensal[]>([]);
-  const [vendedorasComMeta, setVendedorasComMeta] = useState<VendedoraComMeta[]>([]);
+  const [vendasMensais, setVendasMensais] = useState<VendasMensal[]>([]);
+  const [vendedorasMensais, setVendedorasMensais] = useState<VendedorasMensal[]>([]);
+  const [vendedorasComMeta, setVendedorasComMeta] = useState<VendedorasMensalComMeta[]>([]);
   const [filiais, setFiliais] = useState<Filial[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedFilial, setSelectedFilial] = useState<string>('all');
@@ -102,23 +103,20 @@ export function RelatoriosVendas() {
   const fetchVendasMensais = async () => {
     try {
       setLoading(true);
-      // @ts-ignore - Supabase types issue
       let query = supabase
-        // @ts-ignore
         .from('vendas_mensal')
         .select('*')
         .eq('ano', selectedDate.getFullYear())
         .eq('mes', selectedDate.getMonth() + 1);
 
       if (selectedFilial !== 'all') {
-        // @ts-ignore
         query = query.eq('filial_id', parseInt(selectedFilial));
       }
 
       const { data, error } = await query.order('valor_liquido_total', { ascending: false });
 
       if (error) throw error;
-      setVendasMensais((data || []) as any);
+      setVendasMensais((data || []) as VendasMensal[]);
     } catch (error) {
       console.error('Erro ao buscar vendas mensais:', error);
       toast({
@@ -134,9 +132,7 @@ export function RelatoriosVendas() {
   const fetchVendedorasMensais = async () => {
     try {
       setLoading(true);
-      // @ts-ignore - Supabase types issue
       let query = supabase
-        // @ts-ignore
         .from('vendedoras_mensal')
         .select('*')
         .eq('ano', selectedDate.getFullYear())
@@ -149,7 +145,7 @@ export function RelatoriosVendas() {
       const { data, error } = await query.order('valor_liquido_total', { ascending: false });
 
       if (error) throw error;
-      setVendedorasMensais((data || []) as any);
+      setVendedorasMensais((data || []) as VendedorasMensal[]);
     } catch (error) {
       console.error('Erro ao buscar vendedoras mensais:', error);
       toast({

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { VendedorasMensalComMeta } from '@/lib/supabase-views';
 
 interface MetaVendedora {
   id: number;
@@ -56,7 +57,7 @@ const meses = [
 
 export function Metas() {
   const [metas, setMetas] = useState<MetaVendedora[]>([]);
-  const [vendedorasComMeta, setVendedorasComMeta] = useState<VendedoraComMeta[]>([]);
+  const [vendedorasComMeta, setVendedorasComMeta] = useState<VendedorasMensalComMeta[]>([]);
   const [vendedoras, setVendedoras] = useState<Vendedora[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -121,9 +122,7 @@ export function Metas() {
 
   const fetchVendedorasComMeta = async () => {
     try {
-      // @ts-ignore - Supabase types issue
       const { data, error } = await supabase
-        // @ts-ignore
         .from('vendedoras_mensal_com_meta')
         .select('*')
         .eq('ano', selectedAno)
@@ -131,7 +130,7 @@ export function Metas() {
         .order('vendedora_nome');
 
       if (error) throw error;
-      setVendedorasComMeta((data || []) as any);
+      setVendedorasComMeta((data || []) as VendedorasMensalComMeta[]);
     } catch (error) {
       console.error('Erro ao buscar vendedoras com meta:', error);
     }
