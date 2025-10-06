@@ -262,6 +262,7 @@ export function PessoasJuridicas() {
 
       // Buscar marcas que devem ser vinculadas automaticamente por CNPJ
       if (formData.cnpj) {
+        // @ts-ignore - Supabase types issue
         const { data: marcasAutomaticas } = await supabase
           .from('marcas')
           .select('id')

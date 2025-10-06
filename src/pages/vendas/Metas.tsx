@@ -121,7 +121,9 @@ export function Metas() {
 
   const fetchVendedorasComMeta = async () => {
     try {
+      // @ts-ignore - Supabase types issue
       const { data, error } = await supabase
+        // @ts-ignore
         .from('vendedoras_mensal_com_meta')
         .select('*')
         .eq('ano', selectedAno)
