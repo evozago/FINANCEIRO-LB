@@ -27,63 +27,61 @@ export function ContasPagarSimple() {
     try {
       console.log('🔍 Buscando parcelas...');
       
-      // Consulta direta (função RPC não existe)
-      const { data, error } = null as any;
+      // Buscar parcelas não pagas
+      const { data: parcelasData, error: parcelasError } = await supabase
+        .from('contas_pagar_parcelas')
+        .select('*')
+        .eq('pago', false)
+        .order('vencimento')
+        .limit(50);
+        
+      if (parcelasError) throw parcelasError;
       
-      if (error) {
-        console.error('Erro RPC, tentando consulta direta:', error);
-        
-        // Fallback: consulta direta
-        const { data: parcelasData, error: parcelasError } = await supabase
-          .from('contas_pagar_parcelas')
-          .select('*')
-          .eq('pago', false)
-          .order('vencimento')
-          .limit(50);
-          
-        if (parcelasError) throw parcelasError;
-        
-        // Buscar dados das contas separadamente
-        const contasIds = [...new Set(parcelasData?.map(p => p.conta_id) || [])];
-        const { data: contasData, error: contasError } = await supabase
-          .from('contas_pagar')
-          .select('id, descricao, fornecedor_id')
-          .in('id', contasIds);
-          
-        if (contasError) throw contasError;
-        
-        // Buscar fornecedores
-        const fornecedorIds = [...new Set(contasData?.map(c => c.fornecedor_id) || [])];
-        const { data: fornecedoresData, error: fornecedoresError } = await supabase
-          .from('pessoas_juridicas')
-          .select('id, nome_fantasia')
-          .in('id', fornecedorIds);
-          
-        if (fornecedoresError) throw fornecedoresError;
-        
-        // Combinar dados
-        const parcelasCompletas = parcelasData?.map(parcela => {
-          const conta = contasData?.find(c => c.id === parcela.conta_id);
-          const fornecedor = fornecedoresData?.find(f => f.id === conta?.fornecedor_id);
-          
-          return {
-            id: parcela.id,
-            conta_id: parcela.conta_id,
-            numero_parcela: parcela.parcela_num || 1,
-            valor_parcela_centavos: parcela.valor_parcela_centavos,
-            vencimento: parcela.vencimento,
-            pago: parcela.pago,
-            descricao: conta?.descricao || 'N/A',
-            fornecedor: fornecedor?.nome_fantasia || 'N/A'
-          };
-        }) || [];
-        
-        setParcelas(parcelasCompletas as any);
-      } else {
-        setParcelas(data || []);
+      // Buscar dados das contas separadamente
+      const contasIds = [...new Set(parcelasData?.map(p => p.conta_id) || [])];
+      
+      if (contasIds.length === 0) {
+        setParcelas([]);
+        console.log('✅ Nenhuma parcela encontrada');
+        return;
       }
       
-      console.log('✅ Parcelas carregadas:', parcelas.length);
+      const { data: contasData, error: contasError } = await supabase
+        .from('contas_pagar')
+        .select('id, descricao, fornecedor_id')
+        .in('id', contasIds);
+        
+      if (contasError) throw contasError;
+      
+      // Buscar fornecedores
+      const fornecedorIds = [...new Set(contasData?.map(c => c.fornecedor_id).filter(id => id) || [])];
+      
+      const { data: fornecedoresData, error: fornecedoresError } = await supabase
+        .from('pessoas_juridicas')
+        .select('id, nome_fantasia, razao_social')
+        .in('id', fornecedorIds);
+        
+      if (fornecedoresError) throw fornecedoresError;
+      
+      // Combinar dados
+      const parcelasCompletas = parcelasData?.map(parcela => {
+        const conta = contasData?.find(c => c.id === parcela.conta_id);
+        const fornecedor = fornecedoresData?.find(f => f.id === conta?.fornecedor_id);
+        
+        return {
+          id: parcela.id,
+          conta_id: parcela.conta_id,
+          numero_parcela: parcela.numero_parcela || parcela.parcela_num || 1,
+          valor_parcela_centavos: parcela.valor_parcela_centavos,
+          vencimento: parcela.vencimento,
+          pago: parcela.pago,
+          descricao: conta?.descricao || 'N/A',
+          fornecedor: fornecedor?.nome_fantasia || fornecedor?.razao_social || 'N/A'
+        };
+      }) || [];
+      
+      setParcelas(parcelasCompletas);
+      console.log('✅ Parcelas carregadas:', parcelasCompletas.length);
     } catch (error) {
       console.error('Erro ao buscar parcelas:', error);
       setParcelas([]);
