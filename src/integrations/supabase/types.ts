@@ -74,37 +74,68 @@ export type Database = {
         }
         Relationships: []
       }
-      compras_pedido_anexos: {
+      categorias_pj: {
         Row: {
-          arquivo_path: string
+          created_at: string | null
           descricao: string | null
           id: number
-          mime_type: string | null
-          pedido_id: number
-          uploaded_at: string
+          nome: string
         }
         Insert: {
-          arquivo_path: string
+          created_at?: string | null
           descricao?: string | null
           id?: number
-          mime_type?: string | null
-          pedido_id: number
-          uploaded_at?: string
+          nome: string
         }
         Update: {
-          arquivo_path?: string
+          created_at?: string | null
           descricao?: string | null
           id?: number
-          mime_type?: string | null
+          nome?: string
+        }
+        Relationships: []
+      }
+      compras_pedido_anexos: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: number
+          pedido_id: number
+          tipo_anexo: string
+          updated_at: string
+          url_anexo: string
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: never
+          pedido_id: number
+          tipo_anexo: string
+          updated_at?: string
+          url_anexo: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: never
           pedido_id?: number
-          uploaded_at?: string
+          tipo_anexo?: string
+          updated_at?: string
+          url_anexo?: string
         }
         Relationships: [
           {
-            foreignKeyName: "compras_pedido_anexos_pedido_id_fkey"
+            foreignKeyName: "compras_pedido_anexos_new_pedido_id_fkey"
             columns: ["pedido_id"]
             isOneToOne: false
             referencedRelation: "compras_pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compras_pedido_anexos_new_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos_compra_resumo"
             referencedColumns: ["id"]
           },
         ]
@@ -151,6 +182,13 @@ export type Database = {
             referencedRelation: "compras_pedidos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "compras_pedido_itens_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos_compra_resumo"
+            referencedColumns: ["id"]
+          },
         ]
       }
       compras_pedido_links: {
@@ -186,6 +224,13 @@ export type Database = {
             referencedRelation: "compras_pedidos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "compras_pedido_links_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos_compra_resumo"
+            referencedColumns: ["id"]
+          },
         ]
       }
       compras_pedidos: {
@@ -197,17 +242,18 @@ export type Database = {
           fornecedor_id: number
           id: number
           marca_id: number | null
-          numero: string
+          numero_pedido: string
           observacoes: string | null
           preco_medio_centavos: number | null
           previsao_entrega: string | null
-          qtd_pecas_total: number | null
-          qtd_referencias: number | null
+          quantidade_pecas: number | null
+          quantidade_referencias: number | null
           representante_pf_id: number | null
           status: Database["public"]["Enums"]["status_pedido"]
           updated_at: string
           valor_bruto_centavos: number | null
           valor_liquido_centavos: number | null
+          valor_medio_peca_centavos: number | null
         }
         Insert: {
           created_at?: string
@@ -217,17 +263,18 @@ export type Database = {
           fornecedor_id: number
           id?: number
           marca_id?: number | null
-          numero: string
+          numero_pedido: string
           observacoes?: string | null
           preco_medio_centavos?: number | null
           previsao_entrega?: string | null
-          qtd_pecas_total?: number | null
-          qtd_referencias?: number | null
+          quantidade_pecas?: number | null
+          quantidade_referencias?: number | null
           representante_pf_id?: number | null
           status?: Database["public"]["Enums"]["status_pedido"]
           updated_at?: string
           valor_bruto_centavos?: number | null
           valor_liquido_centavos?: number | null
+          valor_medio_peca_centavos?: number | null
         }
         Update: {
           created_at?: string
@@ -237,19 +284,27 @@ export type Database = {
           fornecedor_id?: number
           id?: number
           marca_id?: number | null
-          numero?: string
+          numero_pedido?: string
           observacoes?: string | null
           preco_medio_centavos?: number | null
           previsao_entrega?: string | null
-          qtd_pecas_total?: number | null
-          qtd_referencias?: number | null
+          quantidade_pecas?: number | null
+          quantidade_referencias?: number | null
           representante_pf_id?: number | null
           status?: Database["public"]["Enums"]["status_pedido"]
           updated_at?: string
           valor_bruto_centavos?: number | null
           valor_liquido_centavos?: number | null
+          valor_medio_peca_centavos?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "compras_pedidos_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "analise_fornecedores"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "compras_pedidos_fornecedor_id_fkey"
             columns: ["fornecedor_id"]
@@ -315,6 +370,13 @@ export type Database = {
             foreignKeyName: "contas_bancarias_pj_id_fkey"
             columns: ["pj_id"]
             isOneToOne: false
+            referencedRelation: "analise_fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_bancarias_pj_id_fkey"
+            columns: ["pj_id"]
+            isOneToOne: false
             referencedRelation: "pessoas_juridicas"
             referencedColumns: ["id"]
           },
@@ -370,43 +432,55 @@ export type Database = {
       }
       contas_pagar: {
         Row: {
-          categoria_id: number
+          categoria_id: number | null
           chave_nfe: string | null
           created_at: string
+          data_emissao: string | null
           descricao: string | null
-          filial_id: number
+          empresa_destinataria_id: number | null
+          filial_id: number | null
           fornecedor_id: number
           id: number
-          num_parcelas: number
+          num_parcelas: number | null
+          numero_nf: string | null
           numero_nota: string | null
+          qtd_parcelas: number | null
           referencia: string | null
           updated_at: string
           valor_total_centavos: number
         }
         Insert: {
-          categoria_id: number
+          categoria_id?: number | null
           chave_nfe?: string | null
           created_at?: string
+          data_emissao?: string | null
           descricao?: string | null
-          filial_id: number
+          empresa_destinataria_id?: number | null
+          filial_id?: number | null
           fornecedor_id: number
           id?: number
-          num_parcelas: number
+          num_parcelas?: number | null
+          numero_nf?: string | null
           numero_nota?: string | null
+          qtd_parcelas?: number | null
           referencia?: string | null
           updated_at?: string
           valor_total_centavos: number
         }
         Update: {
-          categoria_id?: number
+          categoria_id?: number | null
           chave_nfe?: string | null
           created_at?: string
+          data_emissao?: string | null
           descricao?: string | null
-          filial_id?: number
+          empresa_destinataria_id?: number | null
+          filial_id?: number | null
           fornecedor_id?: number
           id?: number
-          num_parcelas?: number
+          num_parcelas?: number | null
+          numero_nf?: string | null
           numero_nota?: string | null
+          qtd_parcelas?: number | null
           referencia?: string | null
           updated_at?: string
           valor_total_centavos?: number
@@ -420,10 +494,31 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "contas_pagar_empresa_destinataria_id_fkey"
+            columns: ["empresa_destinataria_id"]
+            isOneToOne: false
+            referencedRelation: "analise_fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_empresa_destinataria_id_fkey"
+            columns: ["empresa_destinataria_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_juridicas"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "contas_pagar_filial_id_fkey"
             columns: ["filial_id"]
             isOneToOne: false
             referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "analise_fornecedores"
             referencedColumns: ["id"]
           },
           {
@@ -442,6 +537,7 @@ export type Database = {
           created_at: string
           forma_pagamento_id: number | null
           id: number
+          numero_parcela: number | null
           observacao: string | null
           pago: boolean
           pago_em: string | null
@@ -457,6 +553,7 @@ export type Database = {
           created_at?: string
           forma_pagamento_id?: number | null
           id?: number
+          numero_parcela?: number | null
           observacao?: string | null
           pago?: boolean
           pago_em?: string | null
@@ -472,6 +569,7 @@ export type Database = {
           created_at?: string
           forma_pagamento_id?: number | null
           id?: number
+          numero_parcela?: number | null
           observacao?: string | null
           pago?: boolean
           pago_em?: string | null
@@ -497,10 +595,81 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "contas_pagar_parcelas_conta_id_fkey"
+            columns: ["conta_id"]
+            isOneToOne: false
+            referencedRelation: "contas_pagar_abertas"
+            referencedColumns: ["conta_id"]
+          },
+          {
             foreignKeyName: "contas_pagar_parcelas_forma_pagamento_id_fkey"
             columns: ["forma_pagamento_id"]
             isOneToOne: false
             referencedRelation: "formas_pagamento"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contas_recorrentes: {
+        Row: {
+          ativa: boolean | null
+          categoria_id: number | null
+          created_at: string | null
+          descricao: string
+          dia_vencimento: number | null
+          fornecedor_id: number | null
+          id: number
+          observacoes: string | null
+          proxima_geracao: string
+          tipo_recorrencia: string | null
+          valor_centavos: number
+        }
+        Insert: {
+          ativa?: boolean | null
+          categoria_id?: number | null
+          created_at?: string | null
+          descricao: string
+          dia_vencimento?: number | null
+          fornecedor_id?: number | null
+          id?: number
+          observacoes?: string | null
+          proxima_geracao: string
+          tipo_recorrencia?: string | null
+          valor_centavos: number
+        }
+        Update: {
+          ativa?: boolean | null
+          categoria_id?: number | null
+          created_at?: string | null
+          descricao?: string
+          dia_vencimento?: number | null
+          fornecedor_id?: number | null
+          id?: number
+          observacoes?: string | null
+          proxima_geracao?: string
+          tipo_recorrencia?: string | null
+          valor_centavos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contas_recorrentes_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "categorias_financeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_recorrentes_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "analise_fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_recorrentes_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_juridicas"
             referencedColumns: ["id"]
           },
         ]
@@ -582,6 +751,68 @@ export type Database = {
           },
         ]
       }
+      fechamentos_caixa: {
+        Row: {
+          created_at: string | null
+          data_fechamento: string
+          filial_id: number | null
+          id: number
+          observacoes: string | null
+          outras_entradas_centavos: number | null
+          outras_saidas_centavos: number | null
+          pagamentos_fornecedores_centavos: number | null
+          saldo_final_centavos: number | null
+          status: string | null
+          total_entradas_centavos: number | null
+          total_saidas_centavos: number | null
+          vendas_cartao_centavos: number | null
+          vendas_dinheiro_centavos: number | null
+          vendas_pix_centavos: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          data_fechamento: string
+          filial_id?: number | null
+          id?: number
+          observacoes?: string | null
+          outras_entradas_centavos?: number | null
+          outras_saidas_centavos?: number | null
+          pagamentos_fornecedores_centavos?: number | null
+          saldo_final_centavos?: number | null
+          status?: string | null
+          total_entradas_centavos?: number | null
+          total_saidas_centavos?: number | null
+          vendas_cartao_centavos?: number | null
+          vendas_dinheiro_centavos?: number | null
+          vendas_pix_centavos?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          data_fechamento?: string
+          filial_id?: number | null
+          id?: number
+          observacoes?: string | null
+          outras_entradas_centavos?: number | null
+          outras_saidas_centavos?: number | null
+          pagamentos_fornecedores_centavos?: number | null
+          saldo_final_centavos?: number | null
+          status?: string | null
+          total_entradas_centavos?: number | null
+          total_saidas_centavos?: number | null
+          vendas_cartao_centavos?: number | null
+          vendas_dinheiro_centavos?: number | null
+          vendas_pix_centavos?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fechamentos_caixa_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ferias_vendedoras: {
         Row: {
           created_at: string
@@ -641,6 +872,13 @@ export type Database = {
             foreignKeyName: "filiais_pj_id_fkey"
             columns: ["pj_id"]
             isOneToOne: false
+            referencedRelation: "analise_fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filiais_pj_id_fkey"
+            columns: ["pj_id"]
+            isOneToOne: false
             referencedRelation: "pessoas_juridicas"
             referencedColumns: ["id"]
           },
@@ -667,23 +905,44 @@ export type Database = {
       marcas: {
         Row: {
           created_at: string
+          descricao: string | null
           id: number
           nome: string
+          pj_vinculada_id: number | null
           updated_at: string
         }
         Insert: {
           created_at?: string
+          descricao?: string | null
           id?: number
           nome: string
+          pj_vinculada_id?: number | null
           updated_at?: string
         }
         Update: {
           created_at?: string
+          descricao?: string | null
           id?: number
           nome?: string
+          pj_vinculada_id?: number | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "marcas_pj_vinculada_id_fkey"
+            columns: ["pj_vinculada_id"]
+            isOneToOne: false
+            referencedRelation: "analise_fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marcas_pj_vinculada_id_fkey"
+            columns: ["pj_vinculada_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_juridicas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       metas_vendedoras: {
         Row: {
@@ -724,7 +983,7 @@ export type Database = {
         Row: {
           cargo_id: number | null
           celular: string | null
-          cpf: string
+          cpf: string | null
           created_at: string
           email: string | null
           endereco: string | null
@@ -732,13 +991,13 @@ export type Database = {
           id: number
           nascimento: string | null
           nome_completo: string
-          num_cadastro_folha: string
+          num_cadastro_folha: string | null
           updated_at: string
         }
         Insert: {
           cargo_id?: number | null
           celular?: string | null
-          cpf: string
+          cpf?: string | null
           created_at?: string
           email?: string | null
           endereco?: string | null
@@ -746,13 +1005,13 @@ export type Database = {
           id?: number
           nascimento?: string | null
           nome_completo: string
-          num_cadastro_folha: string
+          num_cadastro_folha?: string | null
           updated_at?: string
         }
         Update: {
           cargo_id?: number | null
           celular?: string | null
-          cpf?: string
+          cpf?: string | null
           created_at?: string
           email?: string | null
           endereco?: string | null
@@ -760,7 +1019,7 @@ export type Database = {
           id?: number
           nascimento?: string | null
           nome_completo?: string
-          num_cadastro_folha?: string
+          num_cadastro_folha?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -782,6 +1041,7 @@ export type Database = {
       }
       pessoas_juridicas: {
         Row: {
+          categoria_id: number | null
           celular: string | null
           cnpj: string | null
           created_at: string
@@ -791,10 +1051,11 @@ export type Database = {
           id: number
           insc_estadual: string | null
           nome_fantasia: string | null
-          razao_social: string
+          razao_social: string | null
           updated_at: string
         }
         Insert: {
+          categoria_id?: number | null
           celular?: string | null
           cnpj?: string | null
           created_at?: string
@@ -804,10 +1065,11 @@ export type Database = {
           id?: number
           insc_estadual?: string | null
           nome_fantasia?: string | null
-          razao_social: string
+          razao_social?: string | null
           updated_at?: string
         }
         Update: {
+          categoria_id?: number | null
           celular?: string | null
           cnpj?: string | null
           created_at?: string
@@ -817,10 +1079,18 @@ export type Database = {
           id?: number
           insc_estadual?: string | null
           nome_fantasia?: string | null
-          razao_social?: string
+          razao_social?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pessoas_juridicas_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "categorias_pj"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pj_marcas: {
         Row: {
@@ -841,6 +1111,13 @@ export type Database = {
             columns: ["marca_id"]
             isOneToOne: false
             referencedRelation: "marcas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pj_marcas_pj_id_fkey"
+            columns: ["pj_id"]
+            isOneToOne: false
+            referencedRelation: "analise_fornecedores"
             referencedColumns: ["id"]
           },
           {
@@ -871,6 +1148,13 @@ export type Database = {
             columns: ["pf_id"]
             isOneToOne: false
             referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pj_representantes_pj_id_fkey"
+            columns: ["pj_id"]
+            isOneToOne: false
+            referencedRelation: "analise_fornecedores"
             referencedColumns: ["id"]
           },
           {
@@ -909,7 +1193,7 @@ export type Database = {
       recorrencias: {
         Row: {
           ativa: boolean
-          categoria_id: number
+          categoria_id: number | null
           created_at: string
           dia_fechamento: number | null
           dia_vencimento: number | null
@@ -924,7 +1208,7 @@ export type Database = {
         }
         Insert: {
           ativa?: boolean
-          categoria_id: number
+          categoria_id?: number | null
           created_at?: string
           dia_fechamento?: number | null
           dia_vencimento?: number | null
@@ -939,7 +1223,7 @@ export type Database = {
         }
         Update: {
           ativa?: boolean
-          categoria_id?: number
+          categoria_id?: number | null
           created_at?: string
           dia_fechamento?: number | null
           dia_vencimento?: number | null
@@ -965,6 +1249,13 @@ export type Database = {
             columns: ["filial_id"]
             isOneToOne: false
             referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recorrencias_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "analise_fornecedores"
             referencedColumns: ["id"]
           },
           {
@@ -1109,9 +1400,246 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      analise_fornecedores: {
+        Row: {
+          cnpj: string | null
+          id: number | null
+          nome_fantasia: string | null
+          parcelas_abertas: number | null
+          parcelas_pagas: number | null
+          primeira_compra: string | null
+          razao_social: string | null
+          ticket_medio: number | null
+          total_parcelas: number | null
+          total_titulos: number | null
+          ultima_compra: string | null
+          valor_em_aberto: number | null
+          valor_total_comprado: number | null
+        }
+        Relationships: []
+      }
+      contas_pagar_abertas: {
+        Row: {
+          categoria: string | null
+          conta_id: number | null
+          descricao: string | null
+          filial: string | null
+          fornecedor: string | null
+          num_parcelas: number | null
+          numero_nota: string | null
+          parcelas_abertas: number | null
+          parcelas_pagas: number | null
+          proximo_vencimento: string | null
+          referencia: string | null
+          status_pagamento: string | null
+          total_parcelas: number | null
+          valor_em_aberto: number | null
+          valor_total_centavos: number | null
+        }
+        Relationships: []
+      }
+      crescimento_yoy: {
+        Row: {
+          ano: number | null
+          crescimento_absoluto: number | null
+          crescimento_percentual: number | null
+          filial_id: number | null
+          filial_nome: string | null
+          mes: number | null
+          valor_anterior: number | null
+          valor_atual: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendas_diarias_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fluxo_caixa: {
+        Row: {
+          banco: string | null
+          entradas: number | null
+          mes: string | null
+          nome_conta: string | null
+          saidas: number | null
+          saldo_periodo: number | null
+        }
+        Relationships: []
+      }
+      pedidos_compra_resumo: {
+        Row: {
+          data_pedido: string | null
+          desconto_percentual: number | null
+          desconto_valor_centavos: number | null
+          fornecedor: string | null
+          id: number | null
+          marca: string | null
+          numero: string | null
+          preco_medio_centavos: number | null
+          previsao_entrega: string | null
+          qtd_pecas_total: number | null
+          qtd_pecas_total_calculada: number | null
+          qtd_referencias: number | null
+          representante: string | null
+          status: Database["public"]["Enums"]["status_pedido"] | null
+          total_itens: number | null
+          valor_bruto_calculado: number | null
+          valor_bruto_centavos: number | null
+          valor_liquido_centavos: number | null
+        }
+        Relationships: []
+      }
+      vendas_mensal: {
+        Row: {
+          ano: number | null
+          desconto_total: number | null
+          filial_id: number | null
+          filial_nome: string | null
+          mes: number | null
+          qtd_itens_total: number | null
+          ticket_medio: number | null
+          total_vendas: number | null
+          valor_bruto_total: number | null
+          valor_liquido_total: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendas_diarias_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendedoras_mensal: {
+        Row: {
+          ano: number | null
+          desconto_total: number | null
+          filial_id: number | null
+          filial_nome: string | null
+          mes: number | null
+          qtd_itens_total: number | null
+          ticket_medio: number | null
+          total_vendas: number | null
+          valor_bruto_total: number | null
+          valor_liquido_total: number | null
+          vendedora_nome: string | null
+          vendedora_pf_id: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendas_diarias_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_diarias_vendedora_pf_id_fkey"
+            columns: ["vendedora_pf_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendedoras_mensal_com_meta: {
+        Row: {
+          ano: number | null
+          desconto_total: number | null
+          dias_ferias: number | null
+          dias_no_mes: number | null
+          dias_trabalhados: number | null
+          filial_id: number | null
+          filial_nome: string | null
+          mes: number | null
+          meta_ajustada: number | null
+          meta_original: number | null
+          percentual_meta: number | null
+          qtd_itens_total: number | null
+          ticket_medio: number | null
+          total_vendas: number | null
+          valor_bruto_total: number | null
+          valor_liquido_total: number | null
+          vendedora_nome: string | null
+          vendedora_pf_id: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendas_diarias_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_diarias_vendedora_pf_id_fkey"
+            columns: ["vendedora_pf_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      aplicar_recorrencia_mes: {
+        Args: { ano: number; mes: number; recorrencia_id: number }
+        Returns: undefined
+      }
+      contas_recorrentes_vencidas: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          dia_vencimento: number
+          meses_atrasados: number
+          nome: string
+          recorrencia_id: number
+          ultimo_mes_gerado: string
+          valor_esperado_centavos: number
+        }[]
+      }
+      days_in_month: {
+        Args: { ano: number; mes: number }
+        Returns: number
+      }
+      ferias_dias_no_mes: {
+        Args: { ano: number; mes: number; pf_id: number }
+        Returns: number
+      }
+      gen_numero_nf_like: {
+        Args: { categoria_id: number }
+        Returns: string
+      }
+      gera_parcelas_conta: {
+        Args: { conta_id: number }
+        Returns: undefined
+      }
+      gerar_contas_mes_atual: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          conta_id: number
+          mensagem: string
+          nome: string
+          recorrencia_id: number
+          status: string
+          valor_centavos: number
+        }[]
+      }
+      gerar_contas_recorrentes: {
+        Args: { p_ano?: number; p_mes?: number }
+        Returns: {
+          conta_id: number
+          nome: string
+          recorrencia_id: number
+          status: string
+          valor_centavos: number
+        }[]
+      }
       gtrgm_compress: {
         Args: { "": unknown }
         Returns: unknown
@@ -1135,6 +1663,30 @@ export type Database = {
       is_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
+      }
+      pagar_parcela: {
+        Args: {
+          conta_bancaria_id: number
+          forma_pagamento_id: number
+          observacao_param?: string
+          parcela_id: number
+          valor_pago_centavos: number
+        }
+        Returns: undefined
+      }
+      proximas_contas_recorrentes: {
+        Args: { dias_antecedencia?: number }
+        Returns: {
+          categoria: string
+          dia_vencimento: number
+          dias_restantes: number
+          filial: string
+          fornecedor: string
+          nome: string
+          proxima_geracao: string
+          recorrencia_id: number
+          valor_esperado_centavos: number
+        }[]
       }
       set_limit: {
         Args: { "": number }
