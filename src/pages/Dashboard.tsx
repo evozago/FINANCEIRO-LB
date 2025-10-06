@@ -1,32 +1,38 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { 
   DollarSign, 
   TrendingUp, 
-  TrendingDown, 
-  Users, 
   CreditCard, 
-  ShoppingCart,
   AlertTriangle,
   Calendar,
-  Target
+  Target,
+  CheckCircle2,
+  Clock,
+  FileText,
+  Upload,
+  Plus
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 interface DashboardMetrics {
-  total_contas_abertas: number;
-  valor_total_em_aberto: number;
-  contas_vencendo_hoje: number;
-  contas_vencidas: number;
+  vencendo_hoje_valor: number;
+  vencendo_hoje_qtd: number;
+  pagas_hoje_valor: number;
+  pagas_hoje_qtd: number;
+  vence_ate_fim_mes_valor: number;
+  vence_ate_fim_mes_qtd: number;
+  vencidas_valor: number;
+  vencidas_qtd: number;
+  pendentes_nao_recorrentes_valor: number;
+  pendentes_nao_recorrentes_qtd: number;
   total_vendas_mes: number;
   valor_vendas_mes: number;
   ticket_medio_mes: number;
-  total_pessoas_fisicas: number;
-  total_pessoas_juridicas: number;
-  total_filiais: number;
 }
 
 interface ContaVencendo {
@@ -45,17 +51,21 @@ interface VendedoraPerformance {
 }
 
 export function Dashboard() {
+  const navigate = useNavigate();
   const [metrics, setMetrics] = useState<DashboardMetrics>({
-    total_contas_abertas: 0,
-    valor_total_em_aberto: 0,
-    contas_vencendo_hoje: 0,
-    contas_vencidas: 0,
+    vencendo_hoje_valor: 0,
+    vencendo_hoje_qtd: 0,
+    pagas_hoje_valor: 0,
+    pagas_hoje_qtd: 0,
+    vence_ate_fim_mes_valor: 0,
+    vence_ate_fim_mes_qtd: 0,
+    vencidas_valor: 0,
+    vencidas_qtd: 0,
+    pendentes_nao_recorrentes_valor: 0,
+    pendentes_nao_recorrentes_qtd: 0,
     total_vendas_mes: 0,
     valor_vendas_mes: 0,
     ticket_medio_mes: 0,
-    total_pessoas_fisicas: 0,
-    total_pessoas_juridicas: 0,
-    total_filiais: 0,
   });
   const [contasVencendo, setContasVencendo] = useState<ContaVencendo[]>([]);
   const [vendedorasPerformance, setVendedorasPerformance] = useState<VendedoraPerformance[]>([]);
@@ -71,7 +81,6 @@ export function Dashboard() {
       await Promise.all([
         fetchContasMetrics(),
         fetchVendasMetrics(),
-        fetchCadastrosMetrics(),
         fetchContasVencendo(),
         fetchVendedorasPerformance(),
       ]);
@@ -89,42 +98,59 @@ export function Dashboard() {
 
   const fetchContasMetrics = async () => {
     try {
-      // Total de contas em aberto - usando query manual por problemas com view
-      const { data: contasAbertas, error: contasError } = await supabase
+      const hoje = new Date().toISOString().split('T')[0];
+      const fimMes = new Date();
+      fimMes.setMonth(fimMes.getMonth() + 1);
+      fimMes.setDate(0);
+      const fimMesStr = fimMes.toISOString().split('T')[0];
+
+      // Buscar todas as parcelas não pagas
+      const { data: parcelasNaoPagas, error: naoPagasError } = await supabase
         .from('contas_pagar_parcelas')
-        .select(`
-          id,
-          valor_parcela_centavos,
-          vencimento,
-          pago,
-          contas_pagar!inner(
-            descricao,
-            pessoas_juridicas!fornecedor_id(razao_social, nome_fantasia)
-          )
-        `)
+        .select('id, valor_parcela_centavos, vencimento, conta_id')
         .eq('pago', false);
 
-      if (contasError) throw contasError;
+      if (naoPagasError) throw naoPagasError;
 
-      const hoje = new Date().toISOString().split('T')[0];
-      const contasVencendoHoje = contasAbertas?.filter(conta => 
-        conta.vencimento === hoje
-      ).length || 0;
+      // Buscar parcelas pagas hoje
+      const { data: parcelasPagasHoje, error: pagasHojeError } = await supabase
+        .from('contas_pagar_parcelas')
+        .select('id, valor_pago_centavos')
+        .eq('pago', true)
+        .eq('pago_em', hoje);
 
-      const contasVencidas = contasAbertas?.filter(conta => 
-        conta.vencimento < hoje
-      ).length || 0;
+      if (pagasHojeError) throw pagasHojeError;
 
-      const valorTotalEmAberto = contasAbertas?.reduce((sum, conta) => 
-        sum + (conta.valor_parcela_centavos || 0), 0
-      ) || 0;
+      // Calcular métricas
+      const vencendoHoje = parcelasNaoPagas?.filter(p => p.vencimento === hoje) || [];
+      const vencidas = parcelasNaoPagas?.filter(p => p.vencimento < hoje) || [];
+      const venceAteFimMes = parcelasNaoPagas?.filter(p => 
+        p.vencimento > hoje && p.vencimento <= fimMesStr
+      ) || [];
+
+      // Buscar contas não recorrentes (sem referência ou referência null)
+      const { data: contasNaoRecorrentes } = await supabase
+        .from('contas_pagar')
+        .select('id')
+        .is('referencia', null);
+
+      const idsContasNaoRecorrentes = new Set(contasNaoRecorrentes?.map(c => c.id) || []);
+
+      // Filtrar parcelas não pagas de contas não recorrentes
+      const pendentesNaoRec = parcelasNaoPagas?.filter(p => idsContasNaoRecorrentes.has(p.conta_id)) || [];
 
       setMetrics(prev => ({
         ...prev,
-        total_contas_abertas: contasAbertas?.length || 0,
-        valor_total_em_aberto: valorTotalEmAberto,
-        contas_vencendo_hoje: contasVencendoHoje,
-        contas_vencidas: contasVencidas,
+        vencendo_hoje_valor: vencendoHoje.reduce((sum, p) => sum + (p.valor_parcela_centavos || 0), 0),
+        vencendo_hoje_qtd: vencendoHoje.length,
+        pagas_hoje_valor: (parcelasPagasHoje || []).reduce((sum, p) => sum + (p.valor_pago_centavos || 0), 0),
+        pagas_hoje_qtd: parcelasPagasHoje?.length || 0,
+        vence_ate_fim_mes_valor: venceAteFimMes.reduce((sum, p) => sum + (p.valor_parcela_centavos || 0), 0),
+        vence_ate_fim_mes_qtd: venceAteFimMes.length,
+        vencidas_valor: vencidas.reduce((sum, p) => sum + (p.valor_parcela_centavos || 0), 0),
+        vencidas_qtd: vencidas.length,
+        pendentes_nao_recorrentes_valor: pendentesNaoRec.reduce((sum, p) => sum + (p.valor_parcela_centavos || 0), 0),
+        pendentes_nao_recorrentes_qtd: pendentesNaoRec.length,
       }));
     } catch (error) {
       console.error('Erro ao buscar métricas de contas:', error);
@@ -159,25 +185,6 @@ export function Dashboard() {
       }));
     } catch (error) {
       console.error('Erro ao buscar métricas de vendas:', error);
-    }
-  };
-
-  const fetchCadastrosMetrics = async () => {
-    try {
-      const [pessoasFisicas, pessoasJuridicas, filiais] = await Promise.all([
-        supabase.from('pessoas_fisicas').select('id', { count: 'exact', head: true }),
-        supabase.from('pessoas_juridicas').select('id', { count: 'exact', head: true }),
-        supabase.from('filiais').select('id', { count: 'exact', head: true }),
-      ]);
-
-      setMetrics(prev => ({
-        ...prev,
-        total_pessoas_fisicas: pessoasFisicas.count || 0,
-        total_pessoas_juridicas: pessoasJuridicas.count || 0,
-        total_filiais: filiais.count || 0,
-      }));
-    } catch (error) {
-      console.error('Erro ao buscar métricas de cadastros:', error);
     }
   };
 
@@ -228,7 +235,6 @@ export function Dashboard() {
       const ano = hoje.getFullYear();
       const mes = hoje.getMonth() + 1;
 
-      // Buscar vendas do mês atual das vendedoras
       const { data: vendas, error } = await supabase
         .from('vendas_diarias')
         .select(`
@@ -241,7 +247,6 @@ export function Dashboard() {
 
       if (error) throw error;
       
-      // Agrupar por vendedora
       const vendedorasMap = new Map();
       vendas?.forEach(venda => {
         const vendedoraId = venda.vendedora_pf_id;
@@ -252,7 +257,7 @@ export function Dashboard() {
             vendedora_nome: nome,
             valor_liquido_total: 0,
             percentual_meta: 0,
-            meta_ajustada: 100000 // Meta padrão de R$ 1000
+            meta_ajustada: 100000
           });
         }
         
@@ -288,28 +293,137 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Visão geral do sistema financeiro
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Gestão financeira e controle de pagamentos
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => navigate('/compras/importar-xml')}>
+            <Upload className="h-4 w-4 mr-2" />
+            Importar XML
+          </Button>
+          <Button onClick={() => navigate('/financeiro/contas-pagar')}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Conta
+          </Button>
+        </div>
       </div>
 
-      {/* Métricas Principais */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Contas em Aberto</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.total_contas_abertas}</div>
-            <p className="text-xs text-muted-foreground">
-              {formatCurrency(metrics.valor_total_em_aberto)} em aberto
-            </p>
-          </CardContent>
-        </Card>
+      {/* Resumo Financeiro - Situação Atual */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Resumo Financeiro - Situação Atual</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {/* Vencendo Hoje */}
+            <Card className="border-[hsl(var(--warning))] bg-[hsl(var(--warning))]/10">
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-[hsl(var(--warning-foreground))]">
+                      Vencendo Hoje
+                    </p>
+                    <p className="text-2xl font-bold text-[hsl(var(--warning-foreground))]">
+                      {formatCurrency(metrics.vencendo_hoje_valor)}
+                    </p>
+                    <p className="text-xs text-[hsl(var(--warning-foreground))]/70">
+                      {metrics.vencendo_hoje_qtd} títulos
+                    </p>
+                  </div>
+                  <Clock className="h-8 w-8 text-[hsl(var(--warning))]" />
+                </div>
+              </CardContent>
+            </Card>
 
+            {/* Pagas Hoje */}
+            <Card className="border-[hsl(var(--success))] bg-[hsl(var(--success))]/10">
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-[hsl(var(--success-foreground))]">
+                      Pagas Hoje
+                    </p>
+                    <p className="text-2xl font-bold text-[hsl(var(--success-foreground))]">
+                      {formatCurrency(metrics.pagas_hoje_valor)}
+                    </p>
+                    <p className="text-xs text-[hsl(var(--success-foreground))]/70">
+                      {metrics.pagas_hoje_qtd} títulos
+                    </p>
+                  </div>
+                  <CheckCircle2 className="h-8 w-8 text-[hsl(var(--success))]" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Vence até Fim do Mês */}
+            <Card className="border-[hsl(var(--info))] bg-[hsl(var(--info))]/10">
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-[hsl(var(--info-foreground))]">
+                      Vence até Fim do Mês
+                    </p>
+                    <p className="text-2xl font-bold text-[hsl(var(--info-foreground))]">
+                      {formatCurrency(metrics.vence_ate_fim_mes_valor)}
+                    </p>
+                    <p className="text-xs text-[hsl(var(--info-foreground))]/70">
+                      {metrics.vence_ate_fim_mes_qtd} títulos
+                    </p>
+                  </div>
+                  <Calendar className="h-8 w-8 text-[hsl(var(--info))]" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Vencidas */}
+            <Card className="border-[hsl(var(--destructive))] bg-[hsl(var(--destructive))]/10">
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-[hsl(var(--destructive-foreground))]">
+                      Vencidas
+                    </p>
+                    <p className="text-2xl font-bold text-[hsl(var(--destructive-foreground))]">
+                      {formatCurrency(metrics.vencidas_valor)}
+                    </p>
+                    <p className="text-xs text-[hsl(var(--destructive-foreground))]/70">
+                      {metrics.vencidas_qtd} títulos
+                    </p>
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-[hsl(var(--destructive))]" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pendentes Não Recorrentes */}
+            <Card className="border-[hsl(var(--purple))] bg-[hsl(var(--purple))]/10">
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-[hsl(var(--purple-foreground))]">
+                      Pendentes Não Recorrentes
+                    </p>
+                    <p className="text-2xl font-bold text-[hsl(var(--purple-foreground))]">
+                      {formatCurrency(metrics.pendentes_nao_recorrentes_valor)}
+                    </p>
+                    <p className="text-xs text-[hsl(var(--purple-foreground))]/70">
+                      {metrics.pendentes_nao_recorrentes_qtd} títulos
+                    </p>
+                  </div>
+                  <FileText className="h-8 w-8 text-[hsl(var(--purple))]" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Métricas de Vendas */}
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Vendas do Mês</CardTitle>
@@ -338,45 +452,19 @@ export function Dashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cadastros</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total em Contas</CardTitle>
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.total_pessoas_fisicas + metrics.total_pessoas_juridicas}</div>
+            <div className="text-2xl font-bold">
+              {metrics.vencendo_hoje_qtd + metrics.vence_ate_fim_mes_qtd + metrics.vencidas_qtd}
+            </div>
             <p className="text-xs text-muted-foreground">
-              {metrics.total_filiais} filiais ativas
+              Parcelas em aberto
             </p>
           </CardContent>
         </Card>
       </div>
-
-      {/* Alertas */}
-      {(metrics.contas_vencidas > 0 || metrics.contas_vencendo_hoje > 0) && (
-        <Card className="border-red-200 bg-red-50">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2 text-red-700">
-              <AlertTriangle className="h-5 w-5" />
-              <span>Alertas Financeiros</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {metrics.contas_vencidas > 0 && (
-                <div className="flex items-center space-x-2">
-                  <Badge variant="destructive">{metrics.contas_vencidas}</Badge>
-                  <span className="text-sm">conta(s) vencida(s)</span>
-                </div>
-              )}
-              {metrics.contas_vencendo_hoje > 0 && (
-                <div className="flex items-center space-x-2">
-                  <Badge variant="secondary">{metrics.contas_vencendo_hoje}</Badge>
-                  <span className="text-sm">conta(s) vencendo hoje</span>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Contas Vencendo */}
