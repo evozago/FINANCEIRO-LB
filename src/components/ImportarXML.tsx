@@ -231,14 +231,12 @@ export function ImportarXML() {
       const { data: contaData, error: contaError } = await supabase
         .from('contas_pagar')
         .insert([{
-          descricao: `NF ${xmlData.numeroNF}/${xmlData.serie} - ${xmlData.nomeEmitente}`,
           valor_total_centavos: Math.round(xmlData.valorTotal * 100),
           num_parcelas: 1,
           fornecedor_id: fornecedorId,
           categoria_id: parseInt(selectedCategoria),
-          empresa_destinataria_id: parseInt(selectedFornecedor),
+          filial_id: parseInt(selectedFornecedor),
           numero_nota: `${xmlData.numeroNF}/${xmlData.serie}`,
-          data_emissao: xmlData.dataEmissao,
           referencia: `Importado de XML - CNPJ: ${xmlData.cnpjEmitente}`,
         }])
         .select()

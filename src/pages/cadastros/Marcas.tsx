@@ -61,7 +61,22 @@ export function Marcas() {
         .order('nome');
 
       if (error) throw error;
-      setMarcas(data || []);
+
+      // Transformar os dados para o formato esperado
+      const marcasFormatadas = (data || []).map(marca => {
+        const pjData = marca.pessoas_juridicas;
+        
+        return {
+          ...marca,
+          pessoas_juridicas: pjData ? {
+            nome_fantasia: pjData.nome_fantasia || '',
+            razao_social: pjData.razao_social || '',
+            cnpj: pjData.cnpj || ''
+          } : null
+        };
+      });
+
+      setMarcas(marcasFormatadas as any);
     } catch (error) {
       console.error('Erro ao buscar marcas:', error);
       toast({

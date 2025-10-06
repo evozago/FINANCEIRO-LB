@@ -188,7 +188,7 @@ export function useXMLImport() {
       
       const destElements = ['dest', 'destinatario'];
       for (const destTag of destElements) {
-        const destElement = doc.querySelector(destTag);
+        const destElement = xmlDoc.querySelector(destTag);
         if (destElement) {
           cnpjDestinatario = destElement.querySelector('CNPJ')?.textContent || '';
           nomeDestinatario = destElement.querySelector('xNome')?.textContent || '';

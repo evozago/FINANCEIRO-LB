@@ -296,12 +296,12 @@ export function useXMLImport() {
         const { error: insertError } = await supabase
           .from('contas_pagar')
           .insert({
-            descricao: `NFe ${xmlData.numeroNFe || 'sem número'} - ${xmlData.razaoSocialEmitente}`,
             valor_total_centavos: Math.round(xmlData.valorTotal * 100),
-            data_vencimento: vencimento,
-            pessoa_juridica_id: fornecedorId,
-            status: status,
-            observacoes: `Importado de XML em ${new Date().toLocaleDateString('pt-BR')}${xmlData.chaveAcesso ? '. Chave de Acesso: ' + xmlData.chaveAcesso : ''}`
+            fornecedor_id: fornecedorId,
+            num_parcelas: 1,
+            referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - ${xmlData.razaoSocialEmitente}`,
+            numero_nota: xmlData.numeroNFe,
+            chave_nfe: xmlData.chaveAcesso
           });
         
         if (insertError) {
@@ -327,12 +327,12 @@ export function useXMLImport() {
           const { error: insertError } = await supabase
             .from('contas_pagar')
             .insert({
-              descricao: `NFe ${xmlData.numeroNFe || 'sem número'} - Parcela ${i + 1}/${xmlData.duplicatas.length} - ${xmlData.razaoSocialEmitente}`,
               valor_total_centavos: Math.round(parcela.valor * 100),
-              data_vencimento: vencimento,
-              pessoa_juridica_id: fornecedorId,
-              status: status,
-              observacoes: `Parcela ${i + 1} de ${xmlData.duplicatas.length} - Importado de XML${xmlData.chaveAcesso ? '. Chave: ' + xmlData.chaveAcesso : ''}`
+              fornecedor_id: fornecedorId,
+              num_parcelas: xmlData.duplicatas.length,
+              referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - Parcela ${i + 1}/${xmlData.duplicatas.length}`,
+              numero_nota: xmlData.numeroNFe,
+              chave_nfe: xmlData.chaveAcesso
             });
           
           if (insertError) {

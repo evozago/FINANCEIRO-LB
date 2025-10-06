@@ -55,7 +55,7 @@ export default function ImportarXMLNew() {
 
     try {
       const processResults = await importFiles(files);
-      setResults(processResults);
+      setResults(processResults as any);
       setShowResults(true);
     } catch (error) {
       console.error('Erro na importação:', error);

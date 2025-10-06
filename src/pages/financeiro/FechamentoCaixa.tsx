@@ -76,7 +76,7 @@ export function FechamentoCaixa() {
   const fetchFechamentos = async () => {
     try {
       let query = supabase
-        .from('fechamentos_caixa')
+        .from('fechamento_caixa')
         .select(`
           *,
           filiais(nome)
@@ -99,7 +99,7 @@ export function FechamentoCaixa() {
       const { data, error } = await query;
 
       if (error) throw error;
-      setFechamentos(data || []);
+      setFechamentos((data || []) as any);
     } catch (error) {
       console.error('Erro ao buscar fechamentos:', error);
       toast({

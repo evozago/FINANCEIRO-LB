@@ -134,13 +134,14 @@ export function PessoasJuridicas() {
 
   const fetchCategorias = async () => {
     try {
+      // Tabela categorias_pj não existe, usando categorias_financeiras
       const { data, error } = await supabase
-        .from('categorias_pj')
-        .select('id, nome, descricao')
+        .from('categorias_financeiras')
+        .select('id, nome')
         .order('nome');
 
       if (error) throw error;
-      setCategorias(data || []);
+      setCategorias((data || []).map(cat => ({ id: cat.id, nome: cat.nome })));
     } catch (error) {
       console.error('Erro ao buscar categorias:', error);
     }

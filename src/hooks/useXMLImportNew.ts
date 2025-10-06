@@ -311,28 +311,22 @@ export function useXMLImportNew() {
         throw new Error('Falha ao criar conta a pagar');
       }
 
-      // Se há múltiplas parcelas, criar as parcelas adicionais
-      if (xmlData.duplicatas.length > 1) {
-        const parcelasAdicionais = xmlData.duplicatas.slice(1).map((parcela, index) => ({
-          descricao: `${descricao} - Parcela ${parseInt(parcela.numero)}`,
-          valor_total_centavos: Math.round(parcela.valor * 100),
-          data_vencimento: parcela.vencimento || new Date().toISOString().split('T')[0],
-          pessoa_juridica_id: fornecedorId,
-          status: 'pendente' as const,
-          categoria_id: null,
-          filial_id: null,
-          num_parcelas: null,
-          observacoes: `Parcela ${parseInt(parcela.numero)} de ${xmlData.duplicatas.length} - Importado do XML`
-        }));
+      // Criar parcelas na tabela contas_pagar_parcelas
+      const parcelas = xmlData.duplicatas.map((parcela, index) => ({
+        conta_id: contaCriada.id,
+        parcela_num: index + 1,
+        valor_parcela_centavos: Math.round(parcela.valor * 100),
+        vencimento: parcela.vencimento || new Date().toISOString().split('T')[0],
+        pago: false
+      }));
 
-        const { error: errorParcelas } = await supabase
-          .from('contas_pagar')
-          .insert(parcelasAdicionais);
+      const { error: errorParcelas } = await supabase
+        .from('contas_pagar_parcelas')
+        .insert(parcelas);
 
-        if (errorParcelas) {
-          console.error('Erro ao criar parcelas adicionais:', errorParcelas);
-          // Não falha a operação principal, apenas registra o erro
-        }
+      if (errorParcelas) {
+        console.error('Erro ao criar parcelas:', errorParcelas);
+        // Não falha a operação principal, apenas registra o erro
       }
 
       return contaCriada.id;
