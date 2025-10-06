@@ -57,6 +57,7 @@ const navigationItems = [
       { title: 'Metas', href: '/vendas/metas' },
       { title: 'Relatórios', href: '/vendas/relatorios' },
       { title: 'Simulador de Metas', href: '/vendas/simulador-metas' },
+      { title: 'Dashboard Comparativo', href: '/vendas/dashboard-comparativo' },
     ],
   },
   {

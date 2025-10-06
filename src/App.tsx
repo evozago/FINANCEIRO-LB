@@ -19,6 +19,7 @@ import { VendasDiarias } from "@/pages/vendas/VendasDiarias";
 import { Metas } from "@/pages/vendas/Metas";
 import { RelatoriosVendas } from "@/pages/vendas/RelatoriosVendas";
 import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
+import { DashboardComparativo } from "@/pages/vendas/DashboardComparativo";
 import { Pedidos } from "@/pages/compras/Pedidos";
 import ImportarXML from "@/pages/compras/ImportarXMLNew";
 import { Relatorios } from "@/pages/Relatorios";
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="vendas/metas" element={<Metas />} />
             <Route path="vendas/relatorios" element={<RelatoriosVendas />} />
             <Route path="vendas/simulador-metas" element={<SimuladorMetas />} />
+            <Route path="vendas/dashboard-comparativo" element={<DashboardComparativo />} />
             <Route path="compras/pedidos" element={<Pedidos />} />
             <Route path="compras/importar-xml" element={<ImportarXML />} />
             <Route path="relatorios" element={<Relatorios />} />
