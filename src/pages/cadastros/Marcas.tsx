@@ -64,14 +64,16 @@ export function Marcas() {
 
       // Transformar os dados para o formato esperado
       const marcasFormatadas = (data || []).map(marca => {
-        const pjData = marca.pessoas_juridicas;
+        const pjData = Array.isArray(marca.pessoas_juridicas) 
+          ? marca.pessoas_juridicas[0] 
+          : marca.pessoas_juridicas;
         
         return {
           ...marca,
           pessoas_juridicas: pjData ? {
-            nome_fantasia: pjData.nome_fantasia || '',
-            razao_social: pjData.razao_social || '',
-            cnpj: pjData.cnpj || ''
+            nome_fantasia: (pjData as any).nome_fantasia || '',
+            razao_social: (pjData as any).razao_social || '',
+            cnpj: (pjData as any).cnpj || ''
           } : null
         };
       });

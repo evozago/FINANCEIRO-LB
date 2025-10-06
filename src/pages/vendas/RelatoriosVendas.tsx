@@ -115,7 +115,7 @@ export function RelatoriosVendas() {
       const { data, error } = await query.order('valor_liquido_total', { ascending: false });
 
       if (error) throw error;
-      setVendasMensais(data || []);
+      setVendasMensais((data || []) as any);
     } catch (error) {
       console.error('Erro ao buscar vendas mensais:', error);
       toast({
@@ -144,7 +144,7 @@ export function RelatoriosVendas() {
       const { data, error } = await query.order('valor_liquido_total', { ascending: false });
 
       if (error) throw error;
-      setVendedorasMensais(data || []);
+      setVendedorasMensais((data || []) as any);
     } catch (error) {
       console.error('Erro ao buscar vendedoras mensais:', error);
       toast({

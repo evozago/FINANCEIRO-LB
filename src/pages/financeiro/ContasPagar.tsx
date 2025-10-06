@@ -116,7 +116,7 @@ export function ContasPagar() {
         pessoas_juridicas: (parcela as any).contas_pagar?.pessoas_juridicas || { nome_fantasia: 'N/A' },
         created_at: parcela.created_at,
         updated_at: parcela.updated_at,
-        parcela_num: parcela.numero_parcela || parcela.parcela_num,
+        parcela_num: parcela.parcela_num,
         vencimento: parcela.vencimento,
         conta_id: parcela.conta_id
       }));

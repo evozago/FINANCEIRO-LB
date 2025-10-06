@@ -377,7 +377,7 @@ export function ContasRecorrentes() {
               .from('contas_pagar_parcelas')
               .insert({
                 conta_id: novaConta.id,
-                numero_parcela: 1,
+                parcela_num: 1,
                 valor_parcela_centavos: conta.valor_esperado_centavos,
                 vencimento: dataVencimento.toISOString().split('T')[0],
                 pago: false

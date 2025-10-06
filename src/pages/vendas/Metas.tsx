@@ -129,7 +129,7 @@ export function Metas() {
         .order('vendedora_nome');
 
       if (error) throw error;
-      setVendedorasComMeta(data || []);
+      setVendedorasComMeta((data || []) as any);
     } catch (error) {
       console.error('Erro ao buscar vendedoras com meta:', error);
     }

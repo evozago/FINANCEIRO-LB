@@ -295,14 +295,16 @@ export function useXMLImport() {
         
         const { error: insertError } = await supabase
           .from('contas_pagar')
-          .insert({
+          .insert([{
             valor_total_centavos: Math.round(xmlData.valorTotal * 100),
             fornecedor_id: fornecedorId,
             num_parcelas: 1,
+            categoria_id: 1,
+            filial_id: 1,
             referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - ${xmlData.razaoSocialEmitente}`,
             numero_nota: xmlData.numeroNFe,
             chave_nfe: xmlData.chaveAcesso
-          });
+          }]);
         
         if (insertError) {
           console.error('Erro ao inserir conta única:', insertError);
@@ -326,14 +328,16 @@ export function useXMLImport() {
           
           const { error: insertError } = await supabase
             .from('contas_pagar')
-            .insert({
+            .insert([{
               valor_total_centavos: Math.round(parcela.valor * 100),
               fornecedor_id: fornecedorId,
               num_parcelas: xmlData.duplicatas.length,
+              categoria_id: 1,
+              filial_id: 1,
               referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - Parcela ${i + 1}/${xmlData.duplicatas.length}`,
               numero_nota: xmlData.numeroNFe,
               chave_nfe: xmlData.chaveAcesso
-            });
+            }]);
           
           if (insertError) {
             console.error('Erro ao inserir parcela:', insertError);

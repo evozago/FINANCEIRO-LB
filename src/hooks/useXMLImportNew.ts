@@ -286,20 +286,19 @@ export function useXMLImportNew() {
         : `NFe ${xmlData.numeroNFe} - ${xmlData.razaoSocialEmitente}`;
 
       const novaConta = {
-        descricao,
-        valor_total_centavos: Math.round(xmlData.valorTotal * 100),
-        data_vencimento: xmlData.duplicatas[0]?.vencimento || new Date().toISOString().split('T')[0],
-        pessoa_juridica_id: fornecedorId,
-        status: 'pendente' as const,
-        categoria_id: null,
-        filial_id: null,
-        num_parcelas: xmlData.duplicatas.length > 1 ? xmlData.duplicatas.length : null,
-        observacoes: `Importado automaticamente do XML em ${new Date().toLocaleDateString('pt-BR')}`
+        valor_total_centavos: Math.round(xmlData.duplicatas[0].valor * 100),
+        fornecedor_id: fornecedorId,
+        num_parcelas: xmlData.duplicatas.length > 1 ? xmlData.duplicatas.length : 1,
+        referencia: descricao,
+        numero_nota: xmlData.numeroNFe,
+        chave_nfe: xmlData.chaveAcesso,
+        categoria_id: 1,
+        filial_id: 1
       };
 
       const { data: contaCriada, error } = await supabase
         .from('contas_pagar')
-        .insert(novaConta)
+        .insert([novaConta])
         .select('id')
         .single();
 

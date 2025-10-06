@@ -159,7 +159,7 @@ export function FechamentoCaixa() {
 
       if (editingFechamento) {
         const { error } = await supabase
-          .from('fechamentos_caixa')
+          .from('fechamento_caixa')
           .update(dataToSubmit)
           .eq('id', editingFechamento.id);
 
@@ -171,7 +171,7 @@ export function FechamentoCaixa() {
         });
       } else {
         const { error } = await supabase
-          .from('fechamentos_caixa')
+          .from('fechamento_caixa')
           .insert([dataToSubmit]);
 
         if (error) throw error;
