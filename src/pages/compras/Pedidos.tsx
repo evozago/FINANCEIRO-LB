@@ -12,6 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { AnexosPedido } from '@/components/compras/AnexosPedido';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Pedido {
   id: number;
@@ -73,7 +75,20 @@ export function Pedidos() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPedido, setEditingPedido] = useState<Pedido | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isQuickFornecedorOpen, setIsQuickFornecedorOpen] = useState(false);
+  const [isQuickMarcaOpen, setIsQuickMarcaOpen] = useState(false);
   const { toast } = useToast();
+
+  const [quickFornecedor, setQuickFornecedor] = useState({
+    nome_fantasia: '',
+    razao_social: '',
+    cnpj: '',
+  });
+
+  const [quickMarca, setQuickMarca] = useState({
+    nome: '',
+    descricao: '',
+  });
 
   const [formData, setFormData] = useState({
     numero_pedido: '',
@@ -274,6 +289,64 @@ export function Pedidos() {
     }
   };
 
+  const handleQuickFornecedor = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pessoas_juridicas')
+        .insert([quickFornecedor])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: 'Sucesso',
+        description: 'Fornecedor cadastrado com sucesso.',
+      });
+
+      setQuickFornecedor({ nome_fantasia: '', razao_social: '', cnpj: '' });
+      setIsQuickFornecedorOpen(false);
+      await fetchFornecedores();
+      setFormData({ ...formData, fornecedor_id: data.id.toString() });
+    } catch (error) {
+      console.error('Erro ao cadastrar fornecedor:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível cadastrar o fornecedor.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleQuickMarca = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('marcas')
+        .insert([quickMarca])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: 'Sucesso',
+        description: 'Marca cadastrada com sucesso.',
+      });
+
+      setQuickMarca({ nome: '', descricao: '' });
+      setIsQuickMarcaOpen(false);
+      await fetchMarcas();
+      setFormData({ ...formData, marca_id: data.id.toString() });
+    } catch (error) {
+      console.error('Erro ao cadastrar marca:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível cadastrar a marca.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       numero_pedido: '',
@@ -344,7 +417,15 @@ export function Pedidos() {
                 Preencha as informações do pedido de compra
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            
+            {editingPedido ? (
+              <Tabs defaultValue="dados" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="dados">Dados do Pedido</TabsTrigger>
+                  <TabsTrigger value="anexos">Anexos</TabsTrigger>
+                </TabsList>
+                <TabsContent value="dados">
+                  <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="numero_pedido">Número do Pedido *</Label>
@@ -387,33 +468,43 @@ export function Pedidos() {
                 </div>
                 <div>
                   <Label htmlFor="fornecedor_id">Fornecedor</Label>
-                  <Select value={formData.fornecedor_id} onValueChange={(value) => setFormData({ ...formData, fornecedor_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um fornecedor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fornecedores.map((fornecedor) => (
-                        <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                          {fornecedor.nome_fantasia || fornecedor.razao_social}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Select value={formData.fornecedor_id} onValueChange={(value) => setFormData({ ...formData, fornecedor_id: value })}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Selecione um fornecedor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fornecedores.map((fornecedor) => (
+                          <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
+                            {fornecedor.nome_fantasia || fornecedor.razao_social}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickFornecedorOpen(true)}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="marca_id">Marca</Label>
-                  <Select value={formData.marca_id} onValueChange={(value) => setFormData({ ...formData, marca_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma marca" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {marcas.map((marca) => (
-                        <SelectItem key={marca.id} value={marca.id.toString()}>
-                          {marca.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Select value={formData.marca_id} onValueChange={(value) => setFormData({ ...formData, marca_id: value })}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Selecione uma marca" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {marcas.map((marca) => (
+                          <SelectItem key={marca.id} value={marca.id.toString()}>
+                            {marca.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickMarcaOpen(true)}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="representante_pf_id">Representante</Label>
@@ -497,6 +588,263 @@ export function Pedidos() {
                 </Button>
               </div>
             </form>
+                </TabsContent>
+                <TabsContent value="anexos">
+                  <AnexosPedido pedidoId={editingPedido.id} />
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="numero_pedido">Número do Pedido *</Label>
+                    <Input
+                      id="numero_pedido"
+                      value={formData.numero_pedido}
+                      onChange={(e) => setFormData({ ...formData, numero_pedido: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="status">Status</Label>
+                    <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((status) => (
+                          <SelectItem key={status.value} value={status.value}>
+                            {status.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="data_pedido">Data do Pedido *</Label>
+                    <DatePicker
+                      date={formData.data_pedido}
+                      onSelect={(date) => setFormData({ ...formData, data_pedido: date || new Date() })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="previsao_entrega">Previsão de Entrega</Label>
+                    <DatePicker
+                      date={formData.previsao_entrega}
+                      onSelect={(date) => setFormData({ ...formData, previsao_entrega: date })}
+                      placeholder="Selecione a data de entrega"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="fornecedor_id">Fornecedor</Label>
+                    <div className="flex gap-2">
+                      <Select value={formData.fornecedor_id} onValueChange={(value) => setFormData({ ...formData, fornecedor_id: value })}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Selecione um fornecedor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {fornecedores.map((fornecedor) => (
+                            <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
+                              {fornecedor.nome_fantasia || fornecedor.razao_social}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickFornecedorOpen(true)}>
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="marca_id">Marca</Label>
+                    <div className="flex gap-2">
+                      <Select value={formData.marca_id} onValueChange={(value) => setFormData({ ...formData, marca_id: value })}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Selecione uma marca" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {marcas.map((marca) => (
+                            <SelectItem key={marca.id} value={marca.id.toString()}>
+                              {marca.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickMarcaOpen(true)}>
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="representante_pf_id">Representante</Label>
+                    <Select value={formData.representante_pf_id} onValueChange={(value) => setFormData({ ...formData, representante_pf_id: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um representante" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {representantes.map((rep) => (
+                          <SelectItem key={rep.id} value={rep.id.toString()}>
+                            {rep.nome_completo}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="quantidade_pecas">Qtd. Peças Total</Label>
+                    <Input
+                      id="quantidade_pecas"
+                      type="number"
+                      value={formData.quantidade_pecas}
+                      onChange={(e) => setFormData({ ...formData, quantidade_pecas: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="quantidade_referencias">Qtd. Referências</Label>
+                    <Input
+                      id="quantidade_referencias"
+                      type="number"
+                      value={formData.quantidade_referencias}
+                      onChange={(e) => setFormData({ ...formData, quantidade_referencias: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="valor_bruto_centavos">Valor Bruto (R$)</Label>
+                    <Input
+                      id="valor_bruto_centavos"
+                      type="number"
+                      step="0.01"
+                      value={formData.valor_bruto_centavos}
+                      onChange={(e) => setFormData({ ...formData, valor_bruto_centavos: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="desconto_percentual">Desconto (%)</Label>
+                    <Input
+                      id="desconto_percentual"
+                      type="number"
+                      step="0.01"
+                      value={formData.desconto_percentual}
+                      onChange={(e) => setFormData({ ...formData, desconto_percentual: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="valor_liquido_centavos">Valor Líquido (R$)</Label>
+                    <Input
+                      id="valor_liquido_centavos"
+                      type="number"
+                      step="0.01"
+                      value={formData.valor_liquido_centavos}
+                      onChange={(e) => setFormData({ ...formData, valor_liquido_centavos: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="observacoes">Observações</Label>
+                  <Textarea
+                    id="observacoes"
+                    value={formData.observacoes}
+                    onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit">
+                    Cadastrar
+                  </Button>
+                </div>
+              </form>
+            )}
+          </DialogContent>
+        </Dialog>
+        
+        {/* Dialog Cadastro Rápido Fornecedor */}
+        <Dialog open={isQuickFornecedorOpen} onOpenChange={setIsQuickFornecedorOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cadastro Rápido - Fornecedor</DialogTitle>
+              <DialogDescription>
+                Cadastre um novo fornecedor rapidamente
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="quick-nome-fantasia">Nome Fantasia *</Label>
+                <Input
+                  id="quick-nome-fantasia"
+                  value={quickFornecedor.nome_fantasia}
+                  onChange={(e) => setQuickFornecedor({ ...quickFornecedor, nome_fantasia: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="quick-razao-social">Razão Social</Label>
+                <Input
+                  id="quick-razao-social"
+                  value={quickFornecedor.razao_social}
+                  onChange={(e) => setQuickFornecedor({ ...quickFornecedor, razao_social: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="quick-cnpj">CNPJ</Label>
+                <Input
+                  id="quick-cnpj"
+                  value={quickFornecedor.cnpj}
+                  onChange={(e) => setQuickFornecedor({ ...quickFornecedor, cnpj: e.target.value })}
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setIsQuickFornecedorOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleQuickFornecedor}>
+                  Cadastrar
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog Cadastro Rápido Marca */}
+        <Dialog open={isQuickMarcaOpen} onOpenChange={setIsQuickMarcaOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cadastro Rápido - Marca</DialogTitle>
+              <DialogDescription>
+                Cadastre uma nova marca rapidamente
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="quick-marca-nome">Nome *</Label>
+                <Input
+                  id="quick-marca-nome"
+                  value={quickMarca.nome}
+                  onChange={(e) => setQuickMarca({ ...quickMarca, nome: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="quick-marca-descricao">Descrição</Label>
+                <Textarea
+                  id="quick-marca-descricao"
+                  value={quickMarca.descricao}
+                  onChange={(e) => setQuickMarca({ ...quickMarca, descricao: e.target.value })}
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setIsQuickMarcaOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleQuickMarca}>
+                  Cadastrar
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
