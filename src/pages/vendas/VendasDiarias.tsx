@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Calendar, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -62,8 +63,8 @@ export function VendasDiarias() {
     data: new Date().toISOString().split('T')[0],
     filial_id: '',
     vendedora_pf_id: '',
-    valor_bruto_centavos: '',
-    desconto_centavos: '0',
+    valor_bruto_centavos: 0,
+    desconto_centavos: 0,
     qtd_itens: '1',
   });
 
@@ -156,8 +157,8 @@ export function VendasDiarias() {
     e.preventDefault();
     
     try {
-      const valor_bruto_centavos = Math.round(parseFloat(formData.valor_bruto_centavos) * 100);
-      const desconto_centavos = Math.round(parseFloat(formData.desconto_centavos) * 100);
+      const valor_bruto_centavos = formData.valor_bruto_centavos;
+      const desconto_centavos = formData.desconto_centavos;
       const valor_liquido_centavos = valor_bruto_centavos - desconto_centavos;
 
       const dataToSubmit = {
@@ -215,8 +216,8 @@ export function VendasDiarias() {
       data: venda.data,
       filial_id: '', // Será preenchido quando tivermos os dados completos
       vendedora_pf_id: '',
-      valor_bruto_centavos: (venda.valor_bruto_centavos / 100).toString(),
-      desconto_centavos: (venda.desconto_centavos / 100).toString(),
+      valor_bruto_centavos: venda.valor_bruto_centavos,
+      desconto_centavos: venda.desconto_centavos,
       qtd_itens: venda.qtd_itens.toString(),
     });
     setIsDialogOpen(true);
@@ -253,8 +254,8 @@ export function VendasDiarias() {
       data: new Date().toISOString().split('T')[0],
       filial_id: '',
       vendedora_pf_id: '',
-      valor_bruto_centavos: '',
-      desconto_centavos: '0',
+      valor_bruto_centavos: 0,
+      desconto_centavos: 0,
       qtd_itens: '1',
     });
   };
@@ -353,24 +354,18 @@ export function VendasDiarias() {
                 </div>
                 <div>
                   <Label htmlFor="valor_bruto_centavos">Valor Bruto (R$)</Label>
-                  <Input
+                  <CurrencyInput
                     id="valor_bruto_centavos"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={formData.valor_bruto_centavos}
-                    onChange={(e) => setFormData({ ...formData, valor_bruto_centavos: e.target.value })}
+                    onValueChange={(value) => setFormData({ ...formData, valor_bruto_centavos: value })}
                   />
                 </div>
                 <div>
                   <Label htmlFor="desconto_centavos">Desconto (R$)</Label>
-                  <Input
+                  <CurrencyInput
                     id="desconto_centavos"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={formData.desconto_centavos}
-                    onChange={(e) => setFormData({ ...formData, desconto_centavos: e.target.value })}
+                    onValueChange={(value) => setFormData({ ...formData, desconto_centavos: value })}
                   />
                 </div>
               </div>

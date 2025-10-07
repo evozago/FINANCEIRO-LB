@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, CreditCard, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -47,7 +48,7 @@ export function ContasBancarias() {
     agencia: '',
     conta: '',
     tipo_conta: 'corrente',
-    saldo_atual_centavos: '',
+    saldo_atual_centavos: 0,
     limite_credito_centavos: '',
     ativa: true,
     observacoes: '',
@@ -87,7 +88,7 @@ export function ContasBancarias() {
         banco: formData.banco,
         agencia: formData.agencia,
         numero_conta: formData.conta,
-        saldo_atual_centavos: formData.saldo_atual_centavos ? Math.round(parseFloat(formData.saldo_atual_centavos) * 100) : 0,
+        saldo_atual_centavos: formData.saldo_atual_centavos,
         ativa: formData.ativa,
         pj_id: 1, // Using default PJ ID for now
       };
@@ -138,7 +139,7 @@ export function ContasBancarias() {
       agencia: conta.agencia || '',
       conta: conta.numero_conta || '',
       tipo_conta: 'corrente', // Default since tipo_conta doesn't exist in DB
-      saldo_atual_centavos: (conta.saldo_atual_centavos / 100).toString(),
+      saldo_atual_centavos: conta.saldo_atual_centavos,
       limite_credito_centavos: '', // This field doesn't exist in DB
       ativa: conta.ativa,
       observacoes: '', // This field doesn't exist in DB
@@ -178,7 +179,7 @@ export function ContasBancarias() {
       agencia: '',
       conta: '',
       tipo_conta: 'corrente',
-      saldo_atual_centavos: '',
+      saldo_atual_centavos: 0,
       limite_credito_centavos: '',
       ativa: true,
       observacoes: '',
@@ -282,12 +283,10 @@ export function ContasBancarias() {
                 </div>
                 <div>
                   <Label htmlFor="saldo_atual_centavos">Saldo Atual (R$)</Label>
-                  <Input
+                  <CurrencyInput
                     id="saldo_atual_centavos"
-                    type="number"
-                    step="0.01"
                     value={formData.saldo_atual_centavos}
-                    onChange={(e) => setFormData({ ...formData, saldo_atual_centavos: e.target.value })}
+                    onValueChange={(value) => setFormData({ ...formData, saldo_atual_centavos: value })}
                     placeholder="0,00"
                   />
                 </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, ShoppingCart, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -97,10 +98,10 @@ export function Pedidos() {
     status: 'aberto',
     quantidade_pecas: '',
     quantidade_referencias: '',
-    valor_bruto_centavos: '',
+    valor_bruto_centavos: 0,
     desconto_percentual: '',
-    desconto_valor_centavos: '',
-    valor_liquido_centavos: '',
+    desconto_valor_centavos: 0,
+    valor_liquido_centavos: 0,
     observacoes: '',
     fornecedor_id: '',
     marca_id: '',
@@ -193,10 +194,10 @@ export function Pedidos() {
         status: formData.status as 'aberto' | 'cancelado' | 'parcial' | 'recebido',
         quantidade_pecas: formData.quantidade_pecas ? parseInt(formData.quantidade_pecas) : null,
         quantidade_referencias: formData.quantidade_referencias ? parseInt(formData.quantidade_referencias) : null,
-        valor_bruto_centavos: formData.valor_bruto_centavos ? Math.round(parseFloat(formData.valor_bruto_centavos) * 100) : null,
+        valor_bruto_centavos: formData.valor_bruto_centavos || null,
         desconto_percentual: formData.desconto_percentual ? parseFloat(formData.desconto_percentual) : null,
-        desconto_valor_centavos: formData.desconto_valor_centavos ? Math.round(parseFloat(formData.desconto_valor_centavos) * 100) : null,
-        valor_liquido_centavos: formData.valor_liquido_centavos ? Math.round(parseFloat(formData.valor_liquido_centavos) * 100) : null,
+        desconto_valor_centavos: formData.desconto_valor_centavos || null,
+        valor_liquido_centavos: formData.valor_liquido_centavos || null,
         observacoes: formData.observacoes || null,
         fornecedor_id: formData.fornecedor_id ? parseInt(formData.fornecedor_id) : null,
         marca_id: formData.marca_id ? parseInt(formData.marca_id) : null,
@@ -251,10 +252,10 @@ export function Pedidos() {
       status: pedido.status,
       quantidade_pecas: pedido.quantidade_pecas?.toString() || '',
       quantidade_referencias: pedido.quantidade_referencias?.toString() || '',
-      valor_bruto_centavos: pedido.valor_bruto_centavos ? (pedido.valor_bruto_centavos / 100).toString() : '',
+      valor_bruto_centavos: pedido.valor_bruto_centavos || 0,
       desconto_percentual: pedido.desconto_percentual?.toString() || '',
-      desconto_valor_centavos: pedido.desconto_valor_centavos ? (pedido.desconto_valor_centavos / 100).toString() : '',
-      valor_liquido_centavos: pedido.valor_liquido_centavos ? (pedido.valor_liquido_centavos / 100).toString() : '',
+      desconto_valor_centavos: pedido.desconto_valor_centavos || 0,
+      valor_liquido_centavos: pedido.valor_liquido_centavos || 0,
       observacoes: pedido.observacoes || '',
       fornecedor_id: pedido.fornecedor_id?.toString() || '',
       marca_id: pedido.marca_id?.toString() || '',
@@ -355,10 +356,10 @@ export function Pedidos() {
       status: 'aberto',
       quantidade_pecas: '',
       quantidade_referencias: '',
-      valor_bruto_centavos: '',
+      valor_bruto_centavos: 0,
       desconto_percentual: '',
-      desconto_valor_centavos: '',
-      valor_liquido_centavos: '',
+      desconto_valor_centavos: 0,
+      valor_liquido_centavos: 0,
       observacoes: '',
       fornecedor_id: '',
       marca_id: '',
@@ -541,12 +542,10 @@ export function Pedidos() {
                 </div>
                 <div>
                   <Label htmlFor="valor_bruto_centavos">Valor Bruto (R$)</Label>
-                  <Input
+                  <CurrencyInput
                     id="valor_bruto_centavos"
-                    type="number"
-                    step="0.01"
                     value={formData.valor_bruto_centavos}
-                    onChange={(e) => setFormData({ ...formData, valor_bruto_centavos: e.target.value })}
+                    onValueChange={(value) => setFormData({ ...formData, valor_bruto_centavos: value })}
                   />
                 </div>
                 <div>
@@ -561,12 +560,10 @@ export function Pedidos() {
                 </div>
                 <div>
                   <Label htmlFor="valor_liquido_centavos">Valor Líquido (R$)</Label>
-                  <Input
+                  <CurrencyInput
                     id="valor_liquido_centavos"
-                    type="number"
-                    step="0.01"
                     value={formData.valor_liquido_centavos}
-                    onChange={(e) => setFormData({ ...formData, valor_liquido_centavos: e.target.value })}
+                    onValueChange={(value) => setFormData({ ...formData, valor_liquido_centavos: value })}
                   />
                 </div>
               </div>
@@ -710,12 +707,10 @@ export function Pedidos() {
                   </div>
                   <div>
                     <Label htmlFor="valor_bruto_centavos">Valor Bruto (R$)</Label>
-                    <Input
+                    <CurrencyInput
                       id="valor_bruto_centavos"
-                      type="number"
-                      step="0.01"
                       value={formData.valor_bruto_centavos}
-                      onChange={(e) => setFormData({ ...formData, valor_bruto_centavos: e.target.value })}
+                      onValueChange={(value) => setFormData({ ...formData, valor_bruto_centavos: value })}
                     />
                   </div>
                   <div>
@@ -730,12 +725,10 @@ export function Pedidos() {
                   </div>
                   <div>
                     <Label htmlFor="valor_liquido_centavos">Valor Líquido (R$)</Label>
-                    <Input
+                    <CurrencyInput
                       id="valor_liquido_centavos"
-                      type="number"
-                      step="0.01"
                       value={formData.valor_liquido_centavos}
-                      onChange={(e) => setFormData({ ...formData, valor_liquido_centavos: e.target.value })}
+                      onValueChange={(value) => setFormData({ ...formData, valor_liquido_centavos: value })}
                     />
                   </div>
                 </div>

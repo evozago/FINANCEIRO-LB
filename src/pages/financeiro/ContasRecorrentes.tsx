@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, RefreshCw, Calendar, Play, Pause, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -56,7 +57,7 @@ export function ContasRecorrentes() {
 
   const [formData, setFormData] = useState({
     nome: '',
-    valor_esperado_centavos: '',
+    valor_esperado_centavos: 0,
     dia_vencimento: '1',
     fornecedor_id: '',
     categoria_id: '',
@@ -183,7 +184,7 @@ export function ContasRecorrentes() {
       return;
     }
 
-    if (!formData.valor_esperado_centavos || parseFloat(formData.valor_esperado_centavos) <= 0) {
+    if (!formData.valor_esperado_centavos || formData.valor_esperado_centavos <= 0) {
       toast({
         title: 'Erro',
         description: 'Valor deve ser maior que zero.',
@@ -195,7 +196,7 @@ export function ContasRecorrentes() {
     try {
       const dataToSubmit = {
         nome: formData.nome.trim(),
-        valor_esperado_centavos: Math.round(parseFloat(formData.valor_esperado_centavos) * 100),
+        valor_esperado_centavos: formData.valor_esperado_centavos,
         dia_vencimento: parseInt(formData.dia_vencimento),
         fornecedor_id: formData.fornecedor_id ? parseInt(formData.fornecedor_id) : null,
         categoria_id: parseInt(formData.categoria_id),
@@ -249,7 +250,7 @@ export function ContasRecorrentes() {
     setEditingConta(conta);
     setFormData({
       nome: conta.nome,
-      valor_esperado_centavos: (conta.valor_esperado_centavos / 100).toString(),
+      valor_esperado_centavos: conta.valor_esperado_centavos,
       dia_vencimento: conta.dia_vencimento.toString(),
       fornecedor_id: conta.fornecedor_id?.toString() || '',
       categoria_id: conta.categoria_id.toString(),
@@ -410,7 +411,7 @@ export function ContasRecorrentes() {
   const resetForm = () => {
     setFormData({
       nome: '',
-      valor_esperado_centavos: '',
+      valor_esperado_centavos: 0,
       dia_vencimento: '1',
       fornecedor_id: '',
       categoria_id: '',
@@ -518,13 +519,10 @@ export function ContasRecorrentes() {
                   </div>
                   <div>
                     <Label htmlFor="valor_esperado_centavos">Valor Esperado (R$) *</Label>
-                    <Input
+                    <CurrencyInput
                       id="valor_esperado_centavos"
-                      type="number"
-                      step="0.01"
-                      min="0.01"
                       value={formData.valor_esperado_centavos}
-                      onChange={(e) => setFormData({ ...formData, valor_esperado_centavos: e.target.value })}
+                      onValueChange={(value) => setFormData({ ...formData, valor_esperado_centavos: value })}
                       placeholder="0,00"
                       required
                     />

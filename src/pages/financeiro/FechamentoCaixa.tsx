@@ -9,6 +9,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -58,12 +59,12 @@ export function FechamentoCaixa() {
   const [formData, setFormData] = useState({
     data_fechamento: new Date(),
     filial_id: '',
-    vendas_dinheiro_centavos: '',
-    vendas_cartao_centavos: '',
-    vendas_pix_centavos: '',
-    outras_entradas_centavos: '',
-    pagamentos_fornecedores_centavos: '',
-    outras_saidas_centavos: '',
+    vendas_dinheiro_centavos: 0,
+    vendas_cartao_centavos: 0,
+    vendas_pix_centavos: 0,
+    outras_entradas_centavos: 0,
+    pagamentos_fornecedores_centavos: 0,
+    outras_saidas_centavos: 0,
     observacoes: '',
     status: 'aberto',
   });
@@ -130,12 +131,12 @@ export function FechamentoCaixa() {
     e.preventDefault();
     
     try {
-      const vendasDinheiro = formData.vendas_dinheiro_centavos ? Math.round(parseFloat(formData.vendas_dinheiro_centavos) * 100) : 0;
-      const vendasCartao = formData.vendas_cartao_centavos ? Math.round(parseFloat(formData.vendas_cartao_centavos) * 100) : 0;
-      const vendasPix = formData.vendas_pix_centavos ? Math.round(parseFloat(formData.vendas_pix_centavos) * 100) : 0;
-      const outrasEntradas = formData.outras_entradas_centavos ? Math.round(parseFloat(formData.outras_entradas_centavos) * 100) : 0;
-      const pagamentosFornecedores = formData.pagamentos_fornecedores_centavos ? Math.round(parseFloat(formData.pagamentos_fornecedores_centavos) * 100) : 0;
-      const outrasSaidas = formData.outras_saidas_centavos ? Math.round(parseFloat(formData.outras_saidas_centavos) * 100) : 0;
+      const vendasDinheiro = formData.vendas_dinheiro_centavos;
+      const vendasCartao = formData.vendas_cartao_centavos;
+      const vendasPix = formData.vendas_pix_centavos;
+      const outrasEntradas = formData.outras_entradas_centavos;
+      const pagamentosFornecedores = formData.pagamentos_fornecedores_centavos;
+      const outrasSaidas = formData.outras_saidas_centavos;
 
       const totalEntradas = vendasDinheiro + vendasCartao + vendasPix + outrasEntradas;
       const totalSaidas = pagamentosFornecedores + outrasSaidas;
@@ -201,12 +202,12 @@ export function FechamentoCaixa() {
     setFormData({
       data_fechamento: new Date(fechamento.data_fechamento),
       filial_id: fechamento.filial_id?.toString() || '',
-      vendas_dinheiro_centavos: (fechamento.vendas_dinheiro_centavos / 100).toString(),
-      vendas_cartao_centavos: (fechamento.vendas_cartao_centavos / 100).toString(),
-      vendas_pix_centavos: (fechamento.vendas_pix_centavos / 100).toString(),
-      outras_entradas_centavos: (fechamento.outras_entradas_centavos / 100).toString(),
-      pagamentos_fornecedores_centavos: (fechamento.pagamentos_fornecedores_centavos / 100).toString(),
-      outras_saidas_centavos: (fechamento.outras_saidas_centavos / 100).toString(),
+      vendas_dinheiro_centavos: fechamento.vendas_dinheiro_centavos,
+      vendas_cartao_centavos: fechamento.vendas_cartao_centavos,
+      vendas_pix_centavos: fechamento.vendas_pix_centavos,
+      outras_entradas_centavos: fechamento.outras_entradas_centavos,
+      pagamentos_fornecedores_centavos: fechamento.pagamentos_fornecedores_centavos,
+      outras_saidas_centavos: fechamento.outras_saidas_centavos,
       observacoes: fechamento.observacoes || '',
       status: fechamento.status,
     });
@@ -217,12 +218,12 @@ export function FechamentoCaixa() {
     setFormData({
       data_fechamento: new Date(),
       filial_id: '',
-      vendas_dinheiro_centavos: '',
-      vendas_cartao_centavos: '',
-      vendas_pix_centavos: '',
-      outras_entradas_centavos: '',
-      pagamentos_fornecedores_centavos: '',
-      outras_saidas_centavos: '',
+      vendas_dinheiro_centavos: 0,
+      vendas_cartao_centavos: 0,
+      vendas_pix_centavos: 0,
+      outras_entradas_centavos: 0,
+      pagamentos_fornecedores_centavos: 0,
+      outras_saidas_centavos: 0,
       observacoes: '',
       status: 'aberto',
     });
@@ -365,42 +366,34 @@ export function FechamentoCaixa() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="vendas_dinheiro_centavos">Vendas Dinheiro (R$)</Label>
-                    <Input
+                    <CurrencyInput
                       id="vendas_dinheiro_centavos"
-                      type="number"
-                      step="0.01"
                       value={formData.vendas_dinheiro_centavos}
-                      onChange={(e) => setFormData({ ...formData, vendas_dinheiro_centavos: e.target.value })}
+                      onValueChange={(value) => setFormData({ ...formData, vendas_dinheiro_centavos: value })}
                     />
                   </div>
                   <div>
                     <Label htmlFor="vendas_cartao_centavos">Vendas Cartão (R$)</Label>
-                    <Input
+                    <CurrencyInput
                       id="vendas_cartao_centavos"
-                      type="number"
-                      step="0.01"
                       value={formData.vendas_cartao_centavos}
-                      onChange={(e) => setFormData({ ...formData, vendas_cartao_centavos: e.target.value })}
+                      onValueChange={(value) => setFormData({ ...formData, vendas_cartao_centavos: value })}
                     />
                   </div>
                   <div>
                     <Label htmlFor="vendas_pix_centavos">Vendas PIX (R$)</Label>
-                    <Input
+                    <CurrencyInput
                       id="vendas_pix_centavos"
-                      type="number"
-                      step="0.01"
                       value={formData.vendas_pix_centavos}
-                      onChange={(e) => setFormData({ ...formData, vendas_pix_centavos: e.target.value })}
+                      onValueChange={(value) => setFormData({ ...formData, vendas_pix_centavos: value })}
                     />
                   </div>
                   <div>
                     <Label htmlFor="outras_entradas_centavos">Outras Entradas (R$)</Label>
-                    <Input
+                    <CurrencyInput
                       id="outras_entradas_centavos"
-                      type="number"
-                      step="0.01"
                       value={formData.outras_entradas_centavos}
-                      onChange={(e) => setFormData({ ...formData, outras_entradas_centavos: e.target.value })}
+                      onValueChange={(value) => setFormData({ ...formData, outras_entradas_centavos: value })}
                     />
                   </div>
                 </div>
@@ -411,22 +404,18 @@ export function FechamentoCaixa() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="pagamentos_fornecedores_centavos">Pagamentos Fornecedores (R$)</Label>
-                    <Input
+                    <CurrencyInput
                       id="pagamentos_fornecedores_centavos"
-                      type="number"
-                      step="0.01"
                       value={formData.pagamentos_fornecedores_centavos}
-                      onChange={(e) => setFormData({ ...formData, pagamentos_fornecedores_centavos: e.target.value })}
+                      onValueChange={(value) => setFormData({ ...formData, pagamentos_fornecedores_centavos: value })}
                     />
                   </div>
                   <div>
                     <Label htmlFor="outras_saidas_centavos">Outras Saídas (R$)</Label>
-                    <Input
+                    <CurrencyInput
                       id="outras_saidas_centavos"
-                      type="number"
-                      step="0.01"
                       value={formData.outras_saidas_centavos}
-                      onChange={(e) => setFormData({ ...formData, outras_saidas_centavos: e.target.value })}
+                      onValueChange={(value) => setFormData({ ...formData, outras_saidas_centavos: value })}
                     />
                   </div>
                 </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Target, TrendingUp, TrendingDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -71,7 +72,7 @@ export function Metas() {
     vendedora_pf_id: '',
     ano: new Date().getFullYear().toString(),
     mes: (new Date().getMonth() + 1).toString(),
-    meta_centavos: '',
+    meta_centavos: 0,
   });
 
   useEffect(() => {
@@ -144,7 +145,7 @@ export function Metas() {
         vendedora_pf_id: parseInt(formData.vendedora_pf_id),
         ano: parseInt(formData.ano),
         mes: parseInt(formData.mes),
-        meta_centavos: Math.round(parseFloat(formData.meta_centavos) * 100),
+        meta_centavos: formData.meta_centavos,
       };
 
       if (editingMeta) {
@@ -193,7 +194,7 @@ export function Metas() {
       vendedora_pf_id: meta.vendedora_pf_id.toString(),
       ano: meta.ano.toString(),
       mes: meta.mes.toString(),
-      meta_centavos: (meta.meta_centavos / 100).toString(),
+      meta_centavos: meta.meta_centavos,
     });
     setIsDialogOpen(true);
   };
@@ -230,7 +231,7 @@ export function Metas() {
       vendedora_pf_id: '',
       ano: new Date().getFullYear().toString(),
       mes: (new Date().getMonth() + 1).toString(),
-      meta_centavos: '',
+      meta_centavos: 0,
     });
   };
 
@@ -315,13 +316,10 @@ export function Metas() {
                 </div>
                 <div>
                   <Label htmlFor="meta_centavos">Meta (R$)</Label>
-                  <Input
+                  <CurrencyInput
                     id="meta_centavos"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={formData.meta_centavos}
-                    onChange={(e) => setFormData({ ...formData, meta_centavos: e.target.value })}
+                    onValueChange={(value) => setFormData({ ...formData, meta_centavos: value })}
                   />
                 </div>
                 <div>
