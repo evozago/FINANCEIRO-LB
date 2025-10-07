@@ -43,6 +43,7 @@ export function ContasBancarias() {
   const [showSaldos, setShowSaldos] = useState(false);
   const { toast } = useToast();
 
+  const [pessoasJuridicas, setPessoasJuridicas] = useState<{ id: number; razao_social: string }[]>([]);
   const [formData, setFormData] = useState({
     banco: '',
     agencia: '',
@@ -51,12 +52,33 @@ export function ContasBancarias() {
     saldo_atual_centavos: 0,
     limite_credito_centavos: '',
     ativa: true,
+    pj_id: '', // Adicionado para selecionar a Pessoa Jurídica
     observacoes: '',
   });
 
   useEffect(() => {
     fetchContas();
+    fetchPessoasJuridicas();
   }, []);
+
+  const fetchPessoasJuridicas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("pessoas_juridicas")
+        .select("id, razao_social")
+        .order("razao_social");
+
+      if (error) throw error;
+      setPessoasJuridicas(data || []);
+    } catch (error) {
+      console.error("Erro ao buscar pessoas jurídicas:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as pessoas jurídicas.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const fetchContas = async () => {
     try {
@@ -90,7 +112,7 @@ export function ContasBancarias() {
         numero_conta: formData.conta,
         saldo_atual_centavos: formData.saldo_atual_centavos,
         ativa: formData.ativa,
-        pj_id: 1, // Using default PJ ID for now
+        pj_id: parseInt(formData.pj_id),
       };
 
       if (editingConta) {
@@ -142,6 +164,7 @@ export function ContasBancarias() {
       saldo_atual_centavos: conta.saldo_atual_centavos,
       limite_credito_centavos: '', // This field doesn't exist in DB
       ativa: conta.ativa,
+      pj_id: String(conta.pj_id),
       observacoes: '', // This field doesn't exist in DB
     });
     setIsDialogOpen(true);
@@ -182,6 +205,7 @@ export function ContasBancarias() {
       saldo_atual_centavos: 0,
       limite_credito_centavos: '',
       ativa: true,
+      pj_id: '', // Adicionado para selecionar a Pessoa Jurídica
       observacoes: '',
     });
   };
@@ -300,6 +324,21 @@ export function ContasBancarias() {
                     onChange={(e) => setFormData({ ...formData, limite_credito_centavos: e.target.value })}
                     placeholder="0,00"
                   />
+                </div>
+                <div>
+                  <Label htmlFor="pj_id">Pessoa Jurídica *</Label>
+                  <Select value={formData.pj_id} onValueChange={(value) => setFormData({ ...formData, pj_id: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma PJ" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pessoasJuridicas.map((pj) => (
+                        <SelectItem key={pj.id} value={String(pj.id)}>
+                          {pj.razao_social}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
@@ -437,24 +476,32 @@ export function ContasBancarias() {
                   <TableCell>
                     <div>
                       <div className="font-medium">Ag: {conta.agencia || 'N/A'}</div>
-                      <div className="text-sm text-muted-foreground">Cc: {conta.numero_conta || 'N/A'}</div>
+                      <div className="text-sm text-muted-foreground">
+                        Cc: {conta.numero_conta || 'N/A'}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className={conta.saldo_atual_centavos < 0 ? 'text-red-600' : 'text-green-600'}>
-                      {showSaldos ? formatCurrency(conta.saldo_atual_centavos) : '••••••'}
+                    <span
+                      className={
+                        conta.saldo_atual_centavos < 0
+                          ? 'text-red-600'
+                          : 'text-green-600'
+                      }
+                    >
+                      {showSaldos
+                        ? formatCurrency(conta.saldo_atual_centavos)
+                        : '••••••'}
                     </span>
                   </TableCell>
-                  <TableCell>
-                    N/A
-                  </TableCell>
+                  <TableCell>N/A</TableCell>
                   <TableCell>
                     <Badge variant={conta.ativa ? 'default' : 'secondary'}>
                       {conta.ativa ? 'Ativa' : 'Inativa'}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end space-x-2">
+                    <div className="flex items-center justify-end space-x-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -463,7 +510,7 @@ export function ContasBancarias() {
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button
-                        variant="outline"
+                        variant="destructive"
                         size="sm"
                         onClick={() => handleDelete(conta.id)}
                       >
@@ -480,3 +527,4 @@ export function ContasBancarias() {
     </div>
   );
 }
+
