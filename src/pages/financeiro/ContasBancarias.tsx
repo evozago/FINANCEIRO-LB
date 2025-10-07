@@ -22,7 +22,8 @@ interface ContaBancaria {
   nome_conta: string;
   saldo_atual_centavos: number;
   ativa: boolean;
-  pj_id: number;
+  pj_id: number | null;
+  pf_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -43,6 +44,8 @@ export function ContasBancarias() {
   const [showSaldos, setShowSaldos] = useState(false);
   const { toast } = useToast();
 
+  const [pessoasJuridicas, setPessoasJuridicas] = useState<{ id: number; razao_social: string }[]>([]);
+  const [pessoasFisicas, setPessoasFisicas] = useState<{ id: number; nome_completo: string }[]>([]);
   const [formData, setFormData] = useState({
     banco: '',
     agencia: '',
@@ -52,11 +55,51 @@ export function ContasBancarias() {
     limite_credito_centavos: '',
     ativa: true,
     observacoes: '',
+    pj_id: '', // Adicionado para selecionar a Pessoa Jurídica
+    pf_id: '', // Adicionado para selecionar a Pessoa Física
   });
 
   useEffect(() => {
     fetchContas();
+    fetchPessoasJuridicas();
+    fetchPessoasFisicas();
   }, []);
+
+  const fetchPessoasJuridicas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("pessoas_juridicas")
+        .select("id, razao_social")
+        .order("razao_social");
+      if (error) throw error;
+      setPessoasJuridicas(data || []);
+    } catch (error) {
+      console.error("Erro ao buscar Pessoas Jurídicas:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as Pessoas Jurídicas.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchPessoasFisicas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("pessoas_fisicas")
+        .select("id, nome_completo")
+        .order("nome_completo");
+      if (error) throw error;
+      setPessoasFisicas(data || []);
+    } catch (error) {
+      console.error("Erro ao buscar Pessoas Físicas:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as Pessoas Físicas.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const fetchContas = async () => {
     try {
@@ -90,7 +133,8 @@ export function ContasBancarias() {
         numero_conta: formData.conta,
         saldo_atual_centavos: formData.saldo_atual_centavos,
         ativa: formData.ativa,
-        pj_id: 1, // Using default PJ ID for now
+        pj_id: formData.pj_id ? parseInt(formData.pj_id) : null,
+        pf_id: formData.pf_id ? parseInt(formData.pf_id) : null,
       };
 
       if (editingConta) {
@@ -143,6 +187,8 @@ export function ContasBancarias() {
       limite_credito_centavos: '', // This field doesn't exist in DB
       ativa: conta.ativa,
       observacoes: '', // This field doesn't exist in DB
+      pj_id: conta.pj_id ? String(conta.pj_id) : '',
+      pf_id: conta.pf_id ? String(conta.pf_id) : '',
     });
     setIsDialogOpen(true);
   };
@@ -183,6 +229,8 @@ export function ContasBancarias() {
       limite_credito_centavos: '',
       ativa: true,
       observacoes: '',
+      pj_id: '',
+      pf_id: '',
     });
   };
 
@@ -280,6 +328,38 @@ export function ContasBancarias() {
                     placeholder="Ex: 12345-6"
                     required
                   />
+                </div>
+                <div>
+                  <Label htmlFor="pj_id">Pessoa Jurídica</Label>
+                  <select
+                    id="pj_id"
+                    value={formData.pj_id}
+                    onChange={(e) => setFormData({ ...formData, pj_id: e.target.value, pf_id: '' })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">Nenhuma</option>
+                    {pessoasJuridicas.map((pj) => (
+                      <option key={pj.id} value={String(pj.id)}>
+                        {pj.razao_social}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="pf_id">Pessoa Física</Label>
+                  <select
+                    id="pf_id"
+                    value={formData.pf_id}
+                    onChange={(e) => setFormData({ ...formData, pf_id: e.target.value, pj_id: '' })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">Nenhuma</option>
+                    {pessoasFisicas.map((pf) => (
+                      <option key={pf.id} value={String(pf.id)}>
+                        {pf.nome_completo}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <Label htmlFor="saldo_atual_centavos">Saldo Atual (R$)</Label>
