@@ -226,14 +226,14 @@ export function Categorias() {
               <div>
                 <Label htmlFor="categoria_pai_id">Categoria Pai (opcional)</Label>
                 <Select 
-                  value={formData.categoria_pai_id} 
-                  onValueChange={(value) => setFormData({ ...formData, categoria_pai_id: value })}
+                  value={formData.categoria_pai_id || "none"} 
+                  onValueChange={(value) => setFormData({ ...formData, categoria_pai_id: value === "none" ? "" : value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione uma categoria pai (se for subcategoria)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma (categoria principal)</SelectItem>
+                    <SelectItem value="none">Nenhuma (categoria principal)</SelectItem>
                     {categoriasPrincipais
                       .filter(c => !editingCategoria || c.id !== editingCategoria.id)
                       .map(c => (
