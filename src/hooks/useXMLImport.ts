@@ -243,7 +243,7 @@ export function useXMLImport() {
     }
   };
 
-  // Criar conta principal com logs detalhados
+  // Criar conta principal e parcela com logs detalhados
   const criarContaPrincipal = async (xmlData: XMLData, fornecedorId: number): Promise<boolean> => {
     try {
       console.log('📝 Iniciando criação da conta a pagar...');
@@ -259,6 +259,7 @@ export function useXMLImport() {
         chave_nfe: xmlData.chaveAcesso,
         valor_total_centavos: Math.round(xmlData.valorTotal * 100),
         num_parcelas: 1,
+        data_emissao: xmlData.dataEmissao,
         referencia: `Importado de XML em ${new Date().toLocaleDateString('pt-BR')}`
       };
 
@@ -280,6 +281,29 @@ export function useXMLImport() {
       }
 
       console.log(`✅ Conta a pagar criada com sucesso: ID ${contaCriada.id}`);
+
+      // Criar parcela única com vencimento = data de emissão (quando não há faturas no XML)
+      const parcelaData = {
+        conta_id: contaCriada.id,
+        parcela_num: 1,
+        numero_parcela: 1,
+        valor_parcela_centavos: Math.round(xmlData.valorTotal * 100),
+        vencimento: xmlData.dataEmissao, // Data de emissão como vencimento
+        pago: false
+      };
+
+      console.log('📝 Criando parcela única:', parcelaData);
+
+      const { error: parcelaError } = await supabase
+        .from('contas_pagar_parcelas')
+        .insert([parcelaData]);
+
+      if (parcelaError) {
+        console.error('❌ Erro ao criar parcela:', parcelaError);
+        throw new Error(`Erro ao criar parcela: ${parcelaError.message}`);
+      }
+
+      console.log(`✅ Parcela criada com vencimento em ${xmlData.dataEmissao}`);
       return true;
 
     } catch (error) {

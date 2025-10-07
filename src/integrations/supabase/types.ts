@@ -52,6 +52,7 @@ export type Database = {
       }
       categorias_financeiras: {
         Row: {
+          categoria_pai_id: number | null
           created_at: string
           id: number
           nome: string
@@ -59,6 +60,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          categoria_pai_id?: number | null
           created_at?: string
           id?: number
           nome: string
@@ -66,13 +68,22 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          categoria_pai_id?: number | null
           created_at?: string
           id?: number
           nome?: string
           tipo?: Database["public"]["Enums"]["tipo_categoria"]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "categorias_financeiras_categoria_pai_id_fkey"
+            columns: ["categoria_pai_id"]
+            isOneToOne: false
+            referencedRelation: "categorias_financeiras"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       categorias_pj: {
         Row: {

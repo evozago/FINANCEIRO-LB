@@ -22,6 +22,7 @@ interface ParcelaCompleta {
   id: number;
   conta_id: number;
   numero_parcela: number;
+  num_parcelas: number;
   valor_parcela_centavos: number;
   vencimento: string;
   pago: boolean;
@@ -190,6 +191,7 @@ export function ContasPagarSimple() {
         id: parcela.id,
         conta_id: parcela.conta_id,
         numero_parcela: parcela.numero_parcela || parcela.parcela_num || 1,
+        num_parcelas: conta?.num_parcelas || conta?.qtd_parcelas || 1,
         valor_parcela_centavos: parcela.valor_parcela_centavos,
         vencimento: parcela.vencimento,
         pago: parcela.pago,
@@ -641,7 +643,13 @@ export function ContasPagarSimple() {
                       {visibleColumns.categoria && <TableCell>{parcela.categoria}</TableCell>}
                       {visibleColumns.filial && <TableCell>{parcela.filial}</TableCell>}
                       {visibleColumns.valor_parcela && <TableCell>{formatCurrency(parcela.valor_parcela_centavos)}</TableCell>}
-                      {visibleColumns.parcela && <TableCell>{parcela.numero_parcela}</TableCell>}
+                      {visibleColumns.parcela && (
+                        <TableCell>
+                          <Badge variant="outline">
+                            {parcela.numero_parcela}/{parcela.num_parcelas}
+                          </Badge>
+                        </TableCell>
+                      )}
                       {visibleColumns.vencimento && <TableCell>{formatDate(parcela.vencimento)}</TableCell>}
                       {visibleColumns.status && <TableCell>{getStatusBadge(parcela.vencimento, parcela.pago)}</TableCell>}
                     </TableRow>

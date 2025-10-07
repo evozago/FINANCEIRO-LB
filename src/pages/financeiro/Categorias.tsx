@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -14,6 +16,8 @@ interface Categoria {
   id: number;
   nome: string;
   descricao?: string;
+  categoria_pai_id?: number | null;
+  categoria_pai_nome?: string;
   created_at: string;
   updated_at: string;
 }
@@ -26,7 +30,8 @@ export function Categorias() {
   const [editingCategoria, setEditingCategoria] = useState<Categoria | null>(null);
   const [formData, setFormData] = useState({
     nome: '',
-    descricao: ''
+    descricao: '',
+    categoria_pai_id: ''
   });
   const { toast } = useToast();
 
@@ -38,11 +43,23 @@ export function Categorias() {
     try {
       const { data, error } = await supabase
         .from('categorias_financeiras')
-        .select('*')
+        .select(`
+          *,
+          categoria_pai:categoria_pai_id (
+            id,
+            nome
+          )
+        `)
         .order('nome');
 
       if (error) throw error;
-      setCategorias(data || []);
+      
+      const categoriasFormatadas = (data || []).map(cat => ({
+        ...cat,
+        categoria_pai_nome: cat.categoria_pai?.nome
+      }));
+      
+      setCategorias(categoriasFormatadas);
     } catch (error) {
       console.error('Erro ao buscar categorias:', error);
       toast({
@@ -65,6 +82,7 @@ export function Categorias() {
           .update({
             nome: formData.nome,
             descricao: formData.descricao || null,
+            categoria_pai_id: formData.categoria_pai_id ? parseInt(formData.categoria_pai_id) : null,
             updated_at: new Date().toISOString()
           })
           .eq('id', editingCategoria.id);
@@ -81,6 +99,7 @@ export function Categorias() {
           .insert({
             nome: formData.nome,
             descricao: formData.descricao || null,
+            categoria_pai_id: formData.categoria_pai_id ? parseInt(formData.categoria_pai_id) : null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
@@ -95,7 +114,7 @@ export function Categorias() {
 
       setDialogOpen(false);
       setEditingCategoria(null);
-      setFormData({ nome: '', descricao: '' });
+      setFormData({ nome: '', descricao: '', categoria_pai_id: '' });
       fetchCategorias();
     } catch (error) {
       console.error('Erro ao salvar categoria:', error);
@@ -111,7 +130,8 @@ export function Categorias() {
     setEditingCategoria(categoria);
     setFormData({
       nome: categoria.nome,
-      descricao: categoria.descricao || ''
+      descricao: categoria.descricao || '',
+      categoria_pai_id: categoria.categoria_pai_id?.toString() || ''
     });
     setDialogOpen(true);
   };
@@ -150,9 +170,11 @@ export function Categorias() {
 
   const openNewDialog = () => {
     setEditingCategoria(null);
-    setFormData({ nome: '', descricao: '' });
+    setFormData({ nome: '', descricao: '', categoria_pai_id: '' });
     setDialogOpen(true);
   };
+
+  const categoriasPrincipais = categorias.filter(c => !c.categoria_pai_id);
 
   if (loading) {
     return (
@@ -202,6 +224,27 @@ export function Categorias() {
                 />
               </div>
               <div>
+                <Label htmlFor="categoria_pai_id">Categoria Pai (opcional)</Label>
+                <Select 
+                  value={formData.categoria_pai_id} 
+                  onValueChange={(value) => setFormData({ ...formData, categoria_pai_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma categoria pai (se for subcategoria)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Nenhuma (categoria principal)</SelectItem>
+                    {categoriasPrincipais
+                      .filter(c => !editingCategoria || c.id !== editingCategoria.id)
+                      .map(c => (
+                        <SelectItem key={c.id} value={c.id.toString()}>
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <Label htmlFor="descricao">Descrição</Label>
                 <Textarea
                   id="descricao"
@@ -247,6 +290,7 @@ export function Categorias() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
+                  <TableHead>Categoria Pai</TableHead>
                   <TableHead>Descrição</TableHead>
                   <TableHead>Criado em</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -255,14 +299,24 @@ export function Categorias() {
               <TableBody>
                 {filteredCategorias.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8">
+                    <TableCell colSpan={5} className="text-center py-8">
                       {searchTerm ? 'Nenhuma categoria encontrada.' : 'Nenhuma categoria cadastrada.'}
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredCategorias.map((categoria) => (
                     <TableRow key={categoria.id}>
-                      <TableCell className="font-medium">{categoria.nome}</TableCell>
+                      <TableCell className="font-medium">
+                        {categoria.nome}
+                        {!categoria.categoria_pai_id && (
+                          <Badge variant="outline" className="ml-2 text-xs">Principal</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {categoria.categoria_pai_nome ? (
+                          <Badge variant="secondary">{categoria.categoria_pai_nome}</Badge>
+                        ) : '-'}
+                      </TableCell>
                       <TableCell>{categoria.descricao || '-'}</TableCell>
                       <TableCell>
                         {new Date(categoria.created_at).toLocaleDateString('pt-BR')}
