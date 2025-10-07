@@ -10,8 +10,9 @@ import { PessoasJuridicas } from "@/pages/cadastros/PessoasJuridicas";
 import { Filiais } from "@/pages/cadastros/Filiais";
 import { Cargos } from "@/pages/cadastros/Cargos";
 import { Marcas } from "@/pages/cadastros/Marcas";
-import ContasPagar from "@/pages/financeiro/ContasPagarCompleta";
-import { DetalheFornecedor } from "@/pages/fornecedores/DetalheFornecedor";
+import { ContasPagarSimple as ContasPagar } from "@/pages/financeiro/ContasPagarSimple";
+import { ContaDetalhes } from "@/pages/financeiro/ContaDetalhes";
+import { FornecedorDetalhes } from "@/pages/financeiro/FornecedorDetalhes";
 import { ContasBancarias } from "@/pages/financeiro/ContasBancarias";
 import { FechamentoCaixa } from "@/pages/financeiro/FechamentoCaixa";
 import { ContasRecorrentes } from "@/pages/financeiro/ContasRecorrentes";
@@ -19,6 +20,8 @@ import { Categorias } from "@/pages/financeiro/Categorias";
 import { VendasDiarias } from "@/pages/vendas/VendasDiarias";
 import { Metas } from "@/pages/vendas/Metas";
 import { RelatoriosVendas } from "@/pages/vendas/RelatoriosVendas";
+import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
+import { DashboardComparativo } from "@/pages/vendas/DashboardComparativo";
 import { Pedidos } from "@/pages/compras/Pedidos";
 import ImportarXML from "@/pages/compras/ImportarXMLNew";
 import { Relatorios } from "@/pages/Relatorios";
@@ -42,6 +45,8 @@ const App = () => (
             <Route path="cadastros/cargos" element={<Cargos />} />
             <Route path="cadastros/marcas" element={<Marcas />} />
             <Route path="financeiro/contas-pagar" element={<ContasPagar />} />
+            <Route path="financeiro/conta/:id" element={<ContaDetalhes />} />
+            <Route path="financeiro/fornecedor/:id" element={<FornecedorDetalhes />} />
             <Route path="financeiro/contas-bancarias" element={<ContasBancarias />} />
             <Route path="financeiro/fechamento-caixa" element={<FechamentoCaixa />} />
             <Route path="financeiro/contas-recorrentes" element={<ContasRecorrentes />} />
@@ -49,6 +54,8 @@ const App = () => (
             <Route path="vendas/vendas-diarias" element={<VendasDiarias />} />
             <Route path="vendas/metas" element={<Metas />} />
             <Route path="vendas/relatorios" element={<RelatoriosVendas />} />
+            <Route path="vendas/simulador-metas" element={<SimuladorMetas />} />
+            <Route path="vendas/dashboard-comparativo" element={<DashboardComparativo />} />
             <Route path="compras/pedidos" element={<Pedidos />} />
             <Route path="compras/importar-xml" element={<ImportarXML />} />
             <Route path="relatorios" element={<Relatorios />} />
