@@ -92,6 +92,8 @@ export function ContasPagarSimple() {
   const [filterStatus, setFilterStatus] = useState<string>('pendente');
   const [filterValorMin, setFilterValorMin] = useState('');
   const [filterValorMax, setFilterValorMax] = useState('');
+  const [filterDataVencimentoInicio, setFilterDataVencimentoInicio] = useState<Date | null>(null);
+  const [filterDataVencimentoFim, setFilterDataVencimentoFim] = useState<Date | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   // Modais
@@ -254,8 +256,24 @@ export function ContasPagarSimple() {
       if (filterCategoria !== 'all' && p.categoria_id !== parseInt(filterCategoria)) return false;
       if (filterStatus === 'pendente' && p.pago) return false;
       if (filterStatus === 'pago' && !p.pago) return false;
+      if (filterStatus === 'vencido') {
+        const hoje = new Date();
+        const dataVencimento = new Date(p.vencimento);
+        if (p.pago || dataVencimento >= hoje) return false;
+      }
       if (filterValorMin && p.valor_parcela_centavos < parseFloat(filterValorMin) * 100) return false;
       if (filterValorMax && p.valor_parcela_centavos > parseFloat(filterValorMax) * 100) return false;
+      
+      // Filtro por data de vencimento
+      if (filterDataVencimentoInicio) {
+        const dataVencimento = new Date(p.vencimento);
+        if (dataVencimento < filterDataVencimentoInicio) return false;
+      }
+      if (filterDataVencimentoFim) {
+        const dataVencimento = new Date(p.vencimento);
+        if (dataVencimento > filterDataVencimentoFim) return false;
+      }
+      
       return true;
     });
 
@@ -268,7 +286,7 @@ export function ContasPagarSimple() {
     });
 
     return filtered;
-  }, [parcelas, searchTerm, filterFornecedor, filterFilial, filterCategoria, filterStatus, filterValorMin, filterValorMax, sortField, sortDirection]);
+  }, [parcelas, searchTerm, filterFornecedor, filterFilial, filterCategoria, filterStatus, filterValorMin, filterValorMax, filterDataVencimentoInicio, filterDataVencimentoFim, sortField, sortDirection]);
 
   const handleSort = (field: keyof ParcelaCompleta) => {
     if (sortField === field) {
@@ -361,14 +379,10 @@ export function ContasPagarSimple() {
       
       for (const parcela of selectedParcelasData) {
         const payment = paymentData[parcela.id];
-        if (!payment?.data_pagamento || !payment?.conta_bancaria_id) {
-          toast({ title: 'Preencha todos os campos de pagamento', variant: 'destructive' });
-          return;
-        }
 
         await supabase.rpc('pagar_parcela', {
           parcela_id: parcela.id,
-          conta_bancaria_id: parseInt(payment.conta_bancaria_id),
+          conta_bancaria_id: payment?.conta_bancaria_id ? parseInt(payment.conta_bancaria_id) : null,
           forma_pagamento_id: parcela.forma_pagamento_id || 1,
           valor_pago_centavos: parcela.valor_parcela_centavos,
           observacao_param: paymentObservacao
@@ -420,6 +434,8 @@ export function ContasPagarSimple() {
     setFilterStatus('pendente');
     setFilterValorMin('');
     setFilterValorMax('');
+    setFilterDataVencimentoInicio(null);
+    setFilterDataVencimentoFim(null);
   };
 
   const activeFiltersCount = [
@@ -428,7 +444,9 @@ export function ContasPagarSimple() {
     filterCategoria !== 'all',
     filterStatus !== 'pendente',
     filterValorMin,
-    filterValorMax
+    filterValorMax,
+    filterDataVencimentoInicio,
+    filterDataVencimentoFim
   ].filter(Boolean).length;
 
   // Pagination logic
@@ -441,7 +459,7 @@ export function ContasPagarSimple() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterFornecedor, filterFilial, filterCategoria, filterStatus, filterValorMin, filterValorMax]);
+  }, [searchTerm, filterFornecedor, filterFilial, filterCategoria, filterStatus, filterValorMin, filterValorMax, filterDataVencimentoInicio, filterDataVencimentoFim]);
 
   if (loading) {
     return (
@@ -555,6 +573,7 @@ export function ContasPagarSimple() {
                     <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="pendente">Pendente</SelectItem>
                     <SelectItem value="pago">Pago</SelectItem>
+                    <SelectItem value="vencido">Vencidos</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -575,6 +594,44 @@ export function ContasPagarSimple() {
                   value={filterValorMax}
                   onChange={(e) => setFilterValorMax(e.target.value)}
                 />
+              </div>
+              <div>
+                <Label>Data Vencimento - De</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filterDataVencimentoInicio ? format(filterDataVencimentoInicio, 'dd/MM/yyyy') : 'Data inicial'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-background z-50">
+                    <Calendar
+                      mode="single"
+                      selected={filterDataVencimentoInicio || undefined}
+                      onSelect={(date) => setFilterDataVencimentoInicio(date || null)}
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div>
+                <Label>Data Vencimento - Até</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filterDataVencimentoFim ? format(filterDataVencimentoFim, 'dd/MM/yyyy') : 'Data final'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-background z-50">
+                    <Calendar
+                      mode="single"
+                      selected={filterDataVencimentoFim || undefined}
+                      onSelect={(date) => setFilterDataVencimentoFim(date || null)}
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           )}
@@ -876,7 +933,7 @@ export function ContasPagarSimple() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div>
-                    <Label>Data de Pagamento *</Label>
+                    <Label>Data de Pagamento</Label>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start">
@@ -884,7 +941,7 @@ export function ContasPagarSimple() {
                           {paymentData[parcela.id]?.data_pagamento ? format(paymentData[parcela.id].data_pagamento, 'dd/MM/yyyy') : 'Selecionar'}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
+                      <PopoverContent className="w-auto p-0 bg-background z-50">
                         <Calendar
                           mode="single"
                           selected={paymentData[parcela.id]?.data_pagamento || undefined}
@@ -895,7 +952,7 @@ export function ContasPagarSimple() {
                     </Popover>
                   </div>
                   <div>
-                    <Label>Banco Pagador *</Label>
+                    <Label>Banco Pagador</Label>
                     <Select 
                       value={paymentData[parcela.id]?.conta_bancaria_id || ''} 
                       onValueChange={(v) => setPaymentData({...paymentData, [parcela.id]: {data_pagamento: paymentData[parcela.id]?.data_pagamento || null, conta_bancaria_id: v, codigo_identificador: paymentData[parcela.id]?.codigo_identificador || ''}})}
@@ -903,7 +960,7 @@ export function ContasPagarSimple() {
                       <SelectTrigger>
                         <SelectValue placeholder="Banco" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-background z-50">
                         {contasBancarias.map(c => (
                           <SelectItem key={c.id} value={c.id.toString()}>
                             {c.nome_conta} - {c.banco}
