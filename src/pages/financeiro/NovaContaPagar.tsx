@@ -17,10 +17,10 @@ export default function NovaContaPagar() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form state
+  const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
   const [fornecedorId, setFornecedorId] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
   const [filialId, setFilialId] = useState("");
-  const [empresaDestinatariaId, setEmpresaDestinatariaId] = useState("");
   const [descricao, setDescricao] = useState("");
   const [valorTotalCentavos, setValorTotalCentavos] = useState(0);
   const [numParcelas, setNumParcelas] = useState(1);
@@ -29,15 +29,30 @@ export default function NovaContaPagar() {
   const [dataEmissao, setDataEmissao] = useState("");
   const [referencia, setReferencia] = useState("");
   const [dataVencimento, setDataVencimento] = useState("");
+  const [codigoBoleto, setCodigoBoleto] = useState("");
+  const [anexo, setAnexo] = useState<File | null>(null);
 
-  // Fetch fornecedores
-  const { data: fornecedores } = useQuery({
-    queryKey: ["fornecedores"],
+  // Fetch fornecedores PJ
+  const { data: fornecedoresPJ } = useQuery({
+    queryKey: ["fornecedores-pj"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("pessoas_juridicas")
         .select("id, razao_social, nome_fantasia")
         .order("razao_social");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch fornecedores PF
+  const { data: fornecedoresPF } = useQuery({
+    queryKey: ["fornecedores-pf"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pessoas_fisicas")
+        .select("id, nome_completo")
+        .order("nome_completo");
       if (error) throw error;
       return data;
     },
@@ -64,19 +79,6 @@ export default function NovaContaPagar() {
         .from("filiais")
         .select("id, nome")
         .order("nome");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Fetch empresas (para empresa destinatária)
-  const { data: empresas } = useQuery({
-    queryKey: ["empresas"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pessoas_juridicas")
-        .select("id, razao_social, nome_fantasia")
-        .order("razao_social");
       if (error) throw error;
       return data;
     },
@@ -110,7 +112,6 @@ export default function NovaContaPagar() {
           fornecedor_id: parseInt(fornecedorId),
           categoria_id: categoriaId ? parseInt(categoriaId) : null,
           filial_id: filialId ? parseInt(filialId) : null,
-          empresa_destinataria_id: empresaDestinatariaId ? parseInt(empresaDestinatariaId) : null,
           descricao,
           valor_total_centavos: valorTotalCentavos,
           num_parcelas: numParcelas,
@@ -138,7 +139,7 @@ export default function NovaContaPagar() {
 
         parcelas.push({
           conta_id: conta.id,
-          numero_parcela: i,
+          parcela_num: i,
           valor_parcela_centavos: i === numParcelas ? valorParcela + valorRestante : valorParcela,
           vencimento: vencimento.toISOString().split('T')[0],
           pago: false,
@@ -180,6 +181,41 @@ export default function NovaContaPagar() {
             <CardDescription>Preencha os campos abaixo para cadastrar uma nova conta a pagar</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Tipo de Fornecedor */}
+            <div className="grid gap-2">
+              <Label>Tipo de Fornecedor *</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="fornecedorTipo"
+                    value="pj"
+                    checked={fornecedorTipo === "pj"}
+                    onChange={(e) => {
+                      setFornecedorTipo("pj");
+                      setFornecedorId("");
+                    }}
+                    className="cursor-pointer"
+                  />
+                  <span>Pessoa Jurídica</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="fornecedorTipo"
+                    value="pf"
+                    checked={fornecedorTipo === "pf"}
+                    onChange={(e) => {
+                      setFornecedorTipo("pf");
+                      setFornecedorId("");
+                    }}
+                    className="cursor-pointer"
+                  />
+                  <span>Pessoa Física</span>
+                </label>
+              </div>
+            </div>
+
             {/* Fornecedor */}
             <div className="grid gap-2">
               <Label htmlFor="fornecedor">Fornecedor *</Label>
@@ -188,11 +224,18 @@ export default function NovaContaPagar() {
                   <SelectValue placeholder="Selecione o fornecedor" />
                 </SelectTrigger>
                 <SelectContent>
-                  {fornecedores?.map((f) => (
-                    <SelectItem key={f.id} value={f.id.toString()}>
-                      {f.nome_fantasia || f.razao_social}
-                    </SelectItem>
-                  ))}
+                  {fornecedorTipo === "pj" 
+                    ? fornecedoresPJ?.map((f) => (
+                        <SelectItem key={f.id} value={f.id.toString()}>
+                          {f.nome_fantasia || f.razao_social}
+                        </SelectItem>
+                      ))
+                    : fornecedoresPF?.map((f) => (
+                        <SelectItem key={f.id} value={f.id.toString()}>
+                          {f.nome_completo}
+                        </SelectItem>
+                      ))
+                  }
                 </SelectContent>
               </Select>
             </div>
@@ -227,24 +270,6 @@ export default function NovaContaPagar() {
                   {filiais?.map((f) => (
                     <SelectItem key={f.id} value={f.id.toString()}>
                       {f.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Empresa Destinatária */}
-            <div className="grid gap-2">
-              <Label htmlFor="empresa">Empresa Destinatária</Label>
-              <Select value={empresaDestinatariaId} onValueChange={setEmpresaDestinatariaId}>
-                <SelectTrigger id="empresa">
-                  <SelectValue placeholder="Selecione a empresa destinatária" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma</SelectItem>
-                  {empresas?.map((e) => (
-                    <SelectItem key={e.id} value={e.id.toString()}>
-                      {e.nome_fantasia || e.razao_social}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -340,6 +365,33 @@ export default function NovaContaPagar() {
                 onChange={(e) => setReferencia(e.target.value)}
                 placeholder="Referência interna"
               />
+            </div>
+
+            {/* Código do Boleto */}
+            <div className="grid gap-2">
+              <Label htmlFor="codigoBoleto">Código do Boleto</Label>
+              <Input
+                id="codigoBoleto"
+                value={codigoBoleto}
+                onChange={(e) => setCodigoBoleto(e.target.value)}
+                placeholder="Código de barras do boleto"
+              />
+            </div>
+
+            {/* Anexo */}
+            <div className="grid gap-2">
+              <Label htmlFor="anexo">Anexo (Boleto/Nota)</Label>
+              <Input
+                id="anexo"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => setAnexo(e.target.files?.[0] || null)}
+              />
+              {anexo && (
+                <p className="text-sm text-muted-foreground">
+                  Arquivo selecionado: {anexo.name}
+                </p>
+              )}
             </div>
 
             {/* Botões */}
