@@ -24,6 +24,7 @@ import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
 import { DashboardComparativo } from "@/pages/vendas/DashboardComparativo";
 import { Pedidos } from "@/pages/compras/Pedidos";
 import ImportarXML from "@/pages/compras/ImportarXMLNew";
+// import { Produtos } from "@/pages/produtos/Produtos";
 import { Relatorios } from "@/pages/Relatorios";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -58,6 +59,7 @@ const App = () => (
             <Route path="vendas/dashboard-comparativo" element={<DashboardComparativo />} />
             <Route path="compras/pedidos" element={<Pedidos />} />
             <Route path="compras/importar-xml" element={<ImportarXML />} />
+            {/* <Route path="produtos" element={<Produtos />} /> */}
             <Route path="relatorios" element={<Relatorios />} />
           </Route>
           <Route path="/old" element={<Index />} />

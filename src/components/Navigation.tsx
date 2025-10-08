@@ -7,6 +7,7 @@ import {
   ShoppingCart, 
   TrendingUp, 
   FileText,
+  Package,
   Menu,
   X
 } from 'lucide-react';
@@ -59,6 +60,11 @@ const navigationItems = [
       { title: 'Simulador de Metas', href: '/vendas/simulador-metas' },
       { title: 'Dashboard Comparativo', href: '/vendas/dashboard-comparativo' },
     ],
+  },
+  {
+    title: 'Produtos',
+    href: '/produtos',
+    icon: Package,
   },
   {
     title: 'Relatórios',
