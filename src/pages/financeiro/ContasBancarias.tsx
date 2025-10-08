@@ -23,7 +23,7 @@ interface ContaBancaria {
   saldo_atual_centavos: number;
   ativa: boolean;
   pj_id: number | null;
-  pf_id: number | null;
+  pf_id?: number | null;
   created_at: string;
   updated_at: string;
 }

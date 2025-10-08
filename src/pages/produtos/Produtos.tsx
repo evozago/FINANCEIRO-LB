@@ -107,13 +107,13 @@ export function Produtos() {
 
   const fetchProdutos = async () => {
     try {
-      const { data, error } = await supabase
-        .from('produtos')
+      const { data, error } = (await supabase
+        .from('produtos' as any)
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })) as any;
 
       if (error) throw error;
-      setProdutos(data || []);
+      setProdutos((data || []) as Produto[]);
     } catch (error) {
       console.error('Erro ao buscar produtos:', error);
       toast({
@@ -128,13 +128,13 @@ export function Produtos() {
 
   const fetchCores = async () => {
     try {
-      const { data, error } = await supabase
-        .from('cores')
+      const { data, error } = (await supabase
+        .from('cores' as any)
         .select('*')
-        .order('nome');
+        .order('nome')) as any;
 
       if (error) throw error;
-      setCores(data || []);
+      setCores((data || []) as Cor[]);
     } catch (error) {
       console.error('Erro ao buscar cores:', error);
     }
@@ -142,13 +142,13 @@ export function Produtos() {
 
   const fetchTamanhos = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tamanhos')
+      const { data, error } = (await supabase
+        .from('tamanhos' as any)
         .select('*')
-        .order('ordem', { ascending: true });
+        .order('ordem', { ascending: true })) as any;
 
       if (error) throw error;
-      setTamanhos(data || []);
+      setTamanhos((data || []) as Tamanho[]);
     } catch (error) {
       console.error('Erro ao buscar tamanhos:', error);
     }
@@ -156,17 +156,17 @@ export function Produtos() {
 
   const fetchProdutoGrades = async (produtoId: number) => {
     try {
-      const { data, error } = await supabase
-        .from('produto_grades')
+      const { data, error } = (await supabase
+        .from('produto_grades' as any)
         .select(`
           *,
           cores(id, nome, hex_code),
           tamanhos(id, nome, ordem)
         `)
-        .eq('produto_id', produtoId);
+        .eq('produto_id', produtoId)) as any;
 
       if (error) throw error;
-      setProdutoGrades(data || []);
+      setProdutoGrades((data || []) as any);
     } catch (error) {
       console.error('Erro ao buscar grades do produto:', error);
     }
@@ -177,10 +177,10 @@ export function Produtos() {
     
     try {
       if (editingProduto) {
-        const { error } = await supabase
-          .from('produtos')
+        const { error } = (await supabase
+          .from('produtos' as any)
           .update(formData)
-          .eq('id', editingProduto.id);
+          .eq('id', editingProduto.id)) as any;
 
         if (error) throw error;
 
@@ -189,9 +189,9 @@ export function Produtos() {
           description: 'Produto atualizado com sucesso.',
         });
       } else {
-        const { error } = await supabase
-          .from('produtos')
-          .insert([formData]);
+        const { error } = (await supabase
+          .from('produtos' as any)
+          .insert([formData])) as any;
 
         if (error) throw error;
 
@@ -231,9 +231,9 @@ export function Produtos() {
         estoque: gradeFormData.estoque || 0,
       };
 
-      const { error } = await supabase
-        .from('produto_grades')
-        .insert([dataToSubmit]);
+      const { error } = (await supabase
+        .from('produto_grades' as any)
+        .insert([dataToSubmit])) as any;
 
       if (error) throw error;
 
@@ -273,10 +273,10 @@ export function Produtos() {
     if (!confirm('Tem certeza que deseja excluir este produto?')) return;
 
     try {
-      const { error } = await supabase
-        .from('produtos')
+      const { error } = (await supabase
+        .from('produtos' as any)
         .delete()
-        .eq('id', id);
+        .eq('id', id)) as any;
 
       if (error) throw error;
 
@@ -305,9 +305,9 @@ export function Produtos() {
     if (!newCor.nome) return;
 
     try {
-      const { error } = await supabase
-        .from('cores')
-        .insert([newCor]);
+      const { error } = (await supabase
+        .from('cores' as any)
+        .insert([newCor])) as any;
 
       if (error) throw error;
 
@@ -332,9 +332,9 @@ export function Produtos() {
     if (!newTamanho.nome) return;
 
     try {
-      const { error } = await supabase
-        .from('tamanhos')
-        .insert([newTamanho]);
+      const { error } = (await supabase
+        .from('tamanhos' as any)
+        .insert([newTamanho])) as any;
 
       if (error) throw error;
 

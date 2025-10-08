@@ -14,7 +14,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Search, Filter, Edit, Check, Trash2, Settings2, CalendarIcon, ArrowUpDown, X } from 'lucide-react';
+import { Search, Filter, Edit, Check, Trash2, Settings2, CalendarIcon, ArrowUpDown, X, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -71,6 +71,11 @@ export function ContasPagarSimple() {
   const [parcelas, setParcelas] = useState<ParcelaCompleta[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedParcelas, setSelectedParcelas] = useState<number[]>([]);
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   
   // Dados auxiliares
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
@@ -275,17 +280,40 @@ export function ContasPagarSimple() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedParcelas.length === filteredAndSortedParcelas.length) {
+    const paginatedParcelas = paginatedData;
+    if (selectedParcelas.length === paginatedParcelas.length) {
       setSelectedParcelas([]);
     } else {
-      setSelectedParcelas(filteredAndSortedParcelas.map(p => p.id));
+      setSelectedParcelas(paginatedParcelas.map(p => p.id));
     }
+    setLastSelectedIndex(null);
   };
 
-  const toggleSelectParcela = (id: number) => {
-    setSelectedParcelas(prev =>
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-    );
+  const toggleSelectParcela = (id: number, index: number, event: React.MouseEvent) => {
+    const paginatedParcelas = paginatedData;
+    
+    if (event.shiftKey && lastSelectedIndex !== null) {
+      // Shift+Click: select range
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const rangeIds = paginatedParcelas.slice(start, end + 1).map(p => p.id);
+      
+      setSelectedParcelas(prev => {
+        const newSelection = [...prev];
+        rangeIds.forEach(rangeId => {
+          if (!newSelection.includes(rangeId)) {
+            newSelection.push(rangeId);
+          }
+        });
+        return newSelection;
+      });
+    } else {
+      // Normal click: toggle single
+      setSelectedParcelas(prev =>
+        prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+      );
+      setLastSelectedIndex(index);
+    }
   };
 
   const handleMassEdit = async () => {
@@ -403,6 +431,18 @@ export function ContasPagarSimple() {
     filterValorMax
   ].filter(Boolean).length;
 
+  // Pagination logic
+  const totalItems = filteredAndSortedParcelas.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedData = filteredAndSortedParcelas.slice(startIndex, endIndex);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterFornecedor, filterFilial, filterCategoria, filterStatus, filterValorMin, filterValorMax]);
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -416,11 +456,17 @@ export function ContasPagarSimple() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
-        <p className="text-muted-foreground">
-          {filteredAndSortedParcelas.length} parcela(s) {filterStatus === 'pendente' ? 'pendente(s)' : ''}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
+          <p className="text-muted-foreground">
+            {filteredAndSortedParcelas.length} parcela(s) {filterStatus === 'pendente' ? 'pendente(s)' : ''}
+          </p>
+        </div>
+        <Button onClick={() => navigate('/compras/importar-xml')}>
+          <Plus className="h-4 w-4 mr-2" />
+          Nova Conta a Pagar
+        </Button>
       </div>
 
       <Card>
@@ -559,7 +605,7 @@ export function ContasPagarSimple() {
                 <TableRow>
                   <TableHead className="w-12">
                     <Checkbox
-                      checked={selectedParcelas.length === filteredAndSortedParcelas.length && filteredAndSortedParcelas.length > 0}
+                      checked={paginatedData.length > 0 && paginatedData.every(p => selectedParcelas.includes(p.id))}
                       onCheckedChange={toggleSelectAll}
                     />
                   </TableHead>
@@ -601,19 +647,19 @@ export function ContasPagarSimple() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAndSortedParcelas.length === 0 ? (
+                {paginatedData.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                       Nenhuma parcela encontrada
                     </TableCell>
                   </TableRow>
                 ) : (
-                   filteredAndSortedParcelas.map((parcela) => (
+                   paginatedData.map((parcela, index) => (
                     <TableRow key={parcela.id} className="cursor-pointer hover:bg-muted/50">
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell>
                         <Checkbox
                           checked={selectedParcelas.includes(parcela.id)}
-                          onCheckedChange={() => toggleSelectParcela(parcela.id)}
+                          onClick={(e: React.MouseEvent) => toggleSelectParcela(parcela.id, index, e)}
                         />
                       </TableCell>
                       {visibleColumns.fornecedor && (
@@ -657,6 +703,69 @@ export function ContasPagarSimple() {
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between px-2 py-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                Mostrando {startIndex + 1} a {Math.min(endIndex, totalItems)} de {totalItems} parcelas
+              </span>
+              <Select value={pageSize.toString()} onValueChange={(v) => {
+                setPageSize(Number(v));
+                setCurrentPage(1);
+              }}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 linhas</SelectItem>
+                  <SelectItem value="20">20 linhas</SelectItem>
+                  <SelectItem value="50">50 linhas</SelectItem>
+                  <SelectItem value="100">100 linhas</SelectItem>
+                  <SelectItem value="200">200 linhas</SelectItem>
+                  <SelectItem value="500">500 linhas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+              >
+                Primeira
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Anterior
+              </Button>
+              <span className="text-sm">
+                Página {currentPage} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Próxima
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+              >
+                Última
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
