@@ -463,7 +463,7 @@ export function ContasPagarSimple() {
             {filteredAndSortedParcelas.length} parcela(s) {filterStatus === 'pendente' ? 'pendente(s)' : ''}
           </p>
         </div>
-        <Button onClick={() => navigate('/compras/importar-xml')}>
+        <Button onClick={() => navigate('/financeiro/contas-pagar/nova')}>
           <Plus className="h-4 w-4 mr-2" />
           Nova Conta a Pagar
         </Button>
