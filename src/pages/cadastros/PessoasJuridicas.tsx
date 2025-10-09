@@ -658,6 +658,13 @@ export function PessoasJuridicas() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => window.location.href = `/cadastros/pessoas-juridicas/${pessoa.id}`}
+                      >
+                        Ver Detalhes
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleEdit(pessoa)}
                       >
                         <Edit className="h-4 w-4" />

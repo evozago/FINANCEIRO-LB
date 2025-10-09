@@ -18,8 +18,10 @@ import { ContasBancarias } from "@/pages/financeiro/ContasBancarias";
 import { FechamentoCaixa } from "@/pages/financeiro/FechamentoCaixa";
 import { ContasRecorrentes } from "@/pages/financeiro/ContasRecorrentes";
 import { Categorias } from "@/pages/financeiro/Categorias";
-import { VendasDiarias } from "@/pages/vendas/VendasDiarias";
+import { VendasMensaisPorVendedora } from "@/pages/vendas/VendasMensaisPorVendedora";
 import { Metas } from "@/pages/vendas/Metas";
+import { PessoaFisicaDetalhes } from "@/pages/cadastros/PessoaFisicaDetalhes";
+import { PessoaJuridicaDetalhes } from "@/pages/cadastros/PessoaJuridicaDetalhes";
 import { RelatoriosVendas } from "@/pages/vendas/RelatoriosVendas";
 import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
 import { DashboardComparativo } from "@/pages/vendas/DashboardComparativo";
@@ -42,7 +44,9 @@ const App = () => (
           <Route path="/" element={<Layout />}>
             <Route index element={<Dashboard />} />
             <Route path="cadastros/pessoas-fisicas" element={<PessoasFisicas />} />
+            <Route path="cadastros/pessoas-fisicas/:id" element={<PessoaFisicaDetalhes />} />
             <Route path="cadastros/pessoas-juridicas" element={<PessoasJuridicas />} />
+            <Route path="cadastros/pessoas-juridicas/:id" element={<PessoaJuridicaDetalhes />} />
             <Route path="cadastros/filiais" element={<Filiais />} />
             <Route path="cadastros/cargos" element={<Cargos />} />
             <Route path="cadastros/marcas" element={<Marcas />} />
@@ -54,7 +58,7 @@ const App = () => (
             <Route path="financeiro/fechamento-caixa" element={<FechamentoCaixa />} />
             <Route path="financeiro/contas-recorrentes" element={<ContasRecorrentes />} />
             <Route path="financeiro/categorias" element={<Categorias />} />
-            <Route path="vendas/vendas-diarias" element={<VendasDiarias />} />
+            <Route path="vendas/vendas-diarias" element={<VendasMensaisPorVendedora />} />
             <Route path="vendas/metas" element={<Metas />} />
             <Route path="vendas/relatorios" element={<RelatoriosVendas />} />
             <Route path="vendas/simulador-metas" element={<SimuladorMetas />} />
