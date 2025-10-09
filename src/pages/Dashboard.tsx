@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatsCard } from '@/components/ui/stats-card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -14,8 +16,11 @@ import {
   Clock,
   FileText,
   Upload,
-  Plus
+  Plus,
+  BadgeDollarSign,
+  ShoppingCart
 } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -288,7 +293,24 @@ export function Dashboard() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">Carregando...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -313,155 +335,131 @@ export function Dashboard() {
       </div>
 
       {/* Resumo Financeiro - Situação Atual */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Resumo Financeiro - Situação Atual</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {/* Vencendo Hoje */}
-            <Card className="border-[hsl(var(--warning))] bg-[hsl(var(--warning))]/10">
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-[hsl(var(--warning-foreground))]">
-                      Vencendo Hoje
-                    </p>
-                    <p className="text-2xl font-bold text-[hsl(var(--warning-foreground))]">
-                      {formatCurrency(metrics.vencendo_hoje_valor)}
-                    </p>
-                    <p className="text-xs text-[hsl(var(--warning-foreground))]/70">
-                      {metrics.vencendo_hoje_qtd} títulos
-                    </p>
-                  </div>
-                  <Clock className="h-8 w-8 text-[hsl(var(--warning))]" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Pagas Hoje */}
-            <Card className="border-[hsl(var(--success))] bg-[hsl(var(--success))]/10">
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-[hsl(var(--success-foreground))]">
-                      Pagas Hoje
-                    </p>
-                    <p className="text-2xl font-bold text-[hsl(var(--success-foreground))]">
-                      {formatCurrency(metrics.pagas_hoje_valor)}
-                    </p>
-                    <p className="text-xs text-[hsl(var(--success-foreground))]/70">
-                      {metrics.pagas_hoje_qtd} títulos
-                    </p>
-                  </div>
-                  <CheckCircle2 className="h-8 w-8 text-[hsl(var(--success))]" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Vence até Fim do Mês */}
-            <Card className="border-[hsl(var(--info))] bg-[hsl(var(--info))]/10">
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-[hsl(var(--info-foreground))]">
-                      Vence até Fim do Mês
-                    </p>
-                    <p className="text-2xl font-bold text-[hsl(var(--info-foreground))]">
-                      {formatCurrency(metrics.vence_ate_fim_mes_valor)}
-                    </p>
-                    <p className="text-xs text-[hsl(var(--info-foreground))]/70">
-                      {metrics.vence_ate_fim_mes_qtd} títulos
-                    </p>
-                  </div>
-                  <Calendar className="h-8 w-8 text-[hsl(var(--info))]" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Vencidas */}
-            <Card className="border-[hsl(var(--destructive))] bg-[hsl(var(--destructive))]/10">
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-[hsl(var(--destructive-foreground))]">
-                      Vencidas
-                    </p>
-                    <p className="text-2xl font-bold text-[hsl(var(--destructive-foreground))]">
-                      {formatCurrency(metrics.vencidas_valor)}
-                    </p>
-                    <p className="text-xs text-[hsl(var(--destructive-foreground))]/70">
-                      {metrics.vencidas_qtd} títulos
-                    </p>
-                  </div>
-                  <AlertTriangle className="h-8 w-8 text-[hsl(var(--destructive))]" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Pendentes Não Recorrentes */}
-            <Card className="border-[hsl(var(--purple))] bg-[hsl(var(--purple))]/10">
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-[hsl(var(--purple-foreground))]">
-                      Pendentes Não Recorrentes
-                    </p>
-                    <p className="text-2xl font-bold text-[hsl(var(--purple-foreground))]">
-                      {formatCurrency(metrics.pendentes_nao_recorrentes_valor)}
-                    </p>
-                    <p className="text-xs text-[hsl(var(--purple-foreground))]/70">
-                      {metrics.pendentes_nao_recorrentes_qtd} títulos
-                    </p>
-                  </div>
-                  <FileText className="h-8 w-8 text-[hsl(var(--purple))]" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatsCard
+          title="Vencendo Hoje"
+          value={formatCurrency(metrics.vencendo_hoje_valor)}
+          description={`${metrics.vencendo_hoje_qtd} títulos`}
+          icon={Clock}
+          variant="warning"
+        />
+        <StatsCard
+          title="Pagas Hoje"
+          value={formatCurrency(metrics.pagas_hoje_valor)}
+          description={`${metrics.pagas_hoje_qtd} títulos`}
+          icon={CheckCircle2}
+          variant="success"
+        />
+        <StatsCard
+          title="Vence até Fim do Mês"
+          value={formatCurrency(metrics.vence_ate_fim_mes_valor)}
+          description={`${metrics.vence_ate_fim_mes_qtd} títulos`}
+          icon={Calendar}
+          variant="info"
+        />
+        <StatsCard
+          title="Vencidas"
+          value={formatCurrency(metrics.vencidas_valor)}
+          description={`${metrics.vencidas_qtd} títulos`}
+          icon={AlertTriangle}
+          variant="danger"
+        />
+        <StatsCard
+          title="Pendentes Não Recorrentes"
+          value={formatCurrency(metrics.pendentes_nao_recorrentes_valor)}
+          description={`${metrics.pendentes_nao_recorrentes_qtd} títulos`}
+          icon={FileText}
+          variant="purple"
+        />
+      </div>
 
       {/* Métricas de Vendas */}
       <div className="grid gap-4 md:grid-cols-3">
+        <StatsCard
+          title="Vendas do Mês"
+          value={metrics.total_vendas_mes.toString()}
+          description={`${formatCurrency(metrics.valor_vendas_mes)} faturado`}
+          icon={ShoppingCart}
+          variant="success"
+        />
+        <StatsCard
+          title="Ticket Médio"
+          value={formatCurrency(metrics.ticket_medio_mes)}
+          description="Média por venda"
+          icon={BadgeDollarSign}
+          variant="info"
+        />
+        <StatsCard
+          title="Total em Contas"
+          value={(metrics.vencendo_hoje_qtd + metrics.vence_ate_fim_mes_qtd + metrics.vencidas_qtd).toString()}
+          description="Parcelas em aberto"
+          icon={CreditCard}
+          variant="default"
+        />
+      </div>
+
+      {/* Gráficos de Análise */}
+      <div className="grid gap-6 md:grid-cols-2">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vendas do Mês</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle>Distribuição por Status</CardTitle>
+            <CardDescription>Visualização das contas por situação</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.total_vendas_mes}</div>
-            <p className="text-xs text-muted-foreground">
-              {formatCurrency(metrics.valor_vendas_mes)} faturado
-            </p>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={[
+                    { name: 'Vencendo Hoje', value: metrics.vencendo_hoje_qtd, color: 'hsl(var(--warning))' },
+                    { name: 'Pagas Hoje', value: metrics.pagas_hoje_qtd, color: 'hsl(var(--success))' },
+                    { name: 'Vence no Mês', value: metrics.vence_ate_fim_mes_qtd, color: 'hsl(var(--info))' },
+                    { name: 'Vencidas', value: metrics.vencidas_qtd, color: 'hsl(var(--destructive))' },
+                  ]}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {[
+                    { name: 'Vencendo Hoje', value: metrics.vencendo_hoje_qtd, color: 'hsl(38, 92%, 50%)' },
+                    { name: 'Pagas Hoje', value: metrics.pagas_hoje_qtd, color: 'hsl(142, 76%, 36%)' },
+                    { name: 'Vence no Mês', value: metrics.vence_ate_fim_mes_qtd, color: 'hsl(199, 89%, 48%)' },
+                    { name: 'Vencidas', value: metrics.vencidas_qtd, color: 'hsl(0, 72%, 51%)' },
+                  ].map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => `${value} contas`} />
+              </PieChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle>Comparativo de Valores</CardTitle>
+            <CardDescription>Valores em aberto vs. pagos</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(metrics.ticket_medio_mes)}</div>
-            <p className="text-xs text-muted-foreground">
-              Média por venda
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total em Contas</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics.vencendo_hoje_qtd + metrics.vence_ate_fim_mes_qtd + metrics.vencidas_qtd}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Parcelas em aberto
-            </p>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart
+                data={[
+                  { name: 'Vencendo Hoje', valor: metrics.vencendo_hoje_valor / 100 },
+                  { name: 'Pagas Hoje', valor: metrics.pagas_hoje_valor / 100 },
+                  { name: 'Vence no Mês', valor: metrics.vence_ate_fim_mes_valor / 100 },
+                  { name: 'Vencidas', valor: metrics.vencidas_valor / 100 },
+                ]}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip formatter={(value) => formatCurrency(Number(value) * 100)} />
+                <Bar dataKey="valor" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
