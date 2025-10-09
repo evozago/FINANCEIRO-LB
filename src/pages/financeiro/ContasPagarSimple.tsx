@@ -159,38 +159,80 @@ export function ContasPagarSimple() {
   };
 
   const fetchParcelas = async () => {
-    const { data: parcelasData, error: parcelasError } = await supabase
-      .from('contas_pagar_parcelas')
-      .select('*')
-      .order('vencimento');
+    // Buscar todas as parcelas sem limite
+    let allParcelas: any[] = [];
+    let from = 0;
+    const batchSize = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data: parcelasData, error: parcelasError } = await supabase
+        .from('contas_pagar_parcelas')
+        .select('*')
+        .order('vencimento')
+        .range(from, from + batchSize - 1);
+        
+      if (parcelasError) throw parcelasError;
       
-    if (parcelasError) throw parcelasError;
+      if (parcelasData && parcelasData.length > 0) {
+        allParcelas = [...allParcelas, ...parcelasData];
+        from += batchSize;
+        hasMore = parcelasData.length === batchSize;
+      } else {
+        hasMore = false;
+      }
+    }
     
-    const contasIds = [...new Set(parcelasData?.map(p => p.conta_id) || [])];
-    if (contasIds.length === 0) {
+    if (allParcelas.length === 0) {
       setParcelas([]);
       return;
     }
     
-    const { data: contasData, error: contasError } = await supabase
-      .from('contas_pagar')
-      .select('*')
-      .in('id', contasIds);
-      
-    if (contasError) throw contasError;
+    const contasIds = [...new Set(allParcelas?.map(p => p.conta_id) || [])];
     
-    const fornecedorIds = [...new Set(contasData?.map(c => c.fornecedor_id).filter(id => id) || [])];
-    const categoriaIds = [...new Set(contasData?.map(c => c.categoria_id).filter(id => id) || [])];
-    const filialIds = [...new Set(contasData?.map(c => c.filial_id).filter(id => id) || [])];
+    // Buscar contas em lotes para evitar limite do Supabase
+    let allContas: any[] = [];
+    for (let i = 0; i < contasIds.length; i += 1000) {
+      const batch = contasIds.slice(i, i + 1000);
+      const { data: contasData, error: contasError } = await supabase
+        .from('contas_pagar')
+        .select('*')
+        .in('id', batch);
+        
+      if (contasError) throw contasError;
+      if (contasData) allContas = [...allContas, ...contasData];
+    }
     
-    const [{ data: fornecedoresData }, { data: categoriasData }, { data: filiaisData }] = await Promise.all([
-      supabase.from('pessoas_juridicas').select('id, nome_fantasia, razao_social').in('id', fornecedorIds),
-      supabase.from('categorias_financeiras').select('id, nome').in('id', categoriaIds),
-      supabase.from('filiais').select('id, nome').in('id', filialIds)
-    ]);
+    const fornecedorIds = [...new Set(allContas?.map(c => c.fornecedor_id).filter(id => id) || [])];
+    const categoriaIds = [...new Set(allContas?.map(c => c.categoria_id).filter(id => id) || [])];
+    const filialIds = [...new Set(allContas?.map(c => c.filial_id).filter(id => id) || [])];
     
-    const parcelasCompletas = parcelasData?.map(parcela => {
-      const conta = contasData?.find(c => c.id === parcela.conta_id);
+    // Buscar fornecedores em lotes
+    let fornecedoresData: any[] = [];
+    for (let i = 0; i < fornecedorIds.length; i += 1000) {
+      const batch = fornecedorIds.slice(i, i + 1000);
+      const { data } = await supabase.from('pessoas_juridicas').select('id, nome_fantasia, razao_social').in('id', batch);
+      if (data) fornecedoresData = [...fornecedoresData, ...data];
+    }
+
+    // Buscar categorias em lotes
+    let categoriasData: any[] = [];
+    for (let i = 0; i < categoriaIds.length; i += 1000) {
+      const batch = categoriaIds.slice(i, i + 1000);
+      const { data } = await supabase.from('categorias_financeiras').select('id, nome').in('id', batch);
+      if (data) categoriasData = [...categoriasData, ...data];
+    }
+
+    // Buscar filiais em lotes
+    let filiaisData: any[] = [];
+    for (let i = 0; i < filialIds.length; i += 1000) {
+      const batch = filialIds.slice(i, i + 1000);
+      const { data } = await supabase.from('filiais').select('id, nome').in('id', batch);
+      if (data) filiaisData = [...filiaisData, ...data];
+    }
+    
+    const parcelasCompletas = allParcelas?.map(parcela => {
+      const conta = allContas?.find(c => c.id === parcela.conta_id);
       const fornecedor = fornecedoresData?.find(f => f.id === conta?.fornecedor_id);
       const categoria = categoriasData?.find(c => c.id === conta?.categoria_id);
       const filial = filiaisData?.find(f => f.id === conta?.filial_id);
