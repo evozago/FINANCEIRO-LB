@@ -54,7 +54,8 @@ const navigationItems = [
     title: 'Vendas',
     icon: TrendingUp,
     submenu: [
-      { title: 'Vendas Diárias', href: '/vendas/vendas-diarias' },
+      { title: 'Registrar Vendas', href: '/vendas/registrar' },
+      { title: 'Vendas Mensais', href: '/vendas/vendas-diarias' },
       { title: 'Metas', href: '/vendas/metas' },
       { title: 'Relatórios', href: '/vendas/relatorios' },
       { title: 'Simulador de Metas', href: '/vendas/simulador-metas' },

@@ -20,6 +20,7 @@ import { ContasRecorrentes } from "@/pages/financeiro/ContasRecorrentes";
 import { Categorias } from "@/pages/financeiro/Categorias";
 import { VendasMensaisPorVendedora } from "@/pages/vendas/VendasMensaisPorVendedora";
 import { Metas } from "@/pages/vendas/Metas";
+import RegistrarVendas from "@/pages/vendas/RegistrarVendas";
 import { PessoaFisicaDetalhes } from "@/pages/cadastros/PessoaFisicaDetalhes";
 import { PessoaJuridicaDetalhes } from "@/pages/cadastros/PessoaJuridicaDetalhes";
 import { RelatoriosVendas } from "@/pages/vendas/RelatoriosVendas";
@@ -59,6 +60,7 @@ const App = () => (
             <Route path="financeiro/contas-recorrentes" element={<ContasRecorrentes />} />
             <Route path="financeiro/categorias" element={<Categorias />} />
             <Route path="vendas/vendas-diarias" element={<VendasMensaisPorVendedora />} />
+            <Route path="vendas/registrar" element={<RegistrarVendas />} />
             <Route path="vendas/metas" element={<Metas />} />
             <Route path="vendas/relatorios" element={<RelatoriosVendas />} />
             <Route path="vendas/simulador-metas" element={<SimuladorMetas />} />
