@@ -119,6 +119,7 @@ export function ContasPagarSimple() {
     } | undefined
   }>({});
   const [paymentObservacao, setPaymentObservacao] = useState('');
+  const [replicarPrimeiro, setReplicarPrimeiro] = useState(false);
 
   // Colunas visíveis
   const [visibleColumns, setVisibleColumns] = useState({
@@ -377,8 +378,30 @@ export function ContasPagarSimple() {
     try {
       const selectedParcelasData = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id));
       
+      if (selectedParcelasData.length === 0) {
+        toast({ title: 'Nenhuma parcela selecionada', variant: 'destructive' });
+        return;
+      }
+
+      // Se replicar primeiro está ativo, pegar dados da primeira parcela
+      const primeiraParcela = selectedParcelasData[0];
+      const dadosPrimeiro = replicarPrimeiro ? paymentData[primeiraParcela.id] : null;
+      
       for (const parcela of selectedParcelasData) {
-        const payment = paymentData[parcela.id];
+        // Se replicar primeiro, usar dados do primeiro, senão usar dados individuais
+        const payment = replicarPrimeiro && dadosPrimeiro 
+          ? dadosPrimeiro 
+          : paymentData[parcela.id];
+
+        // Validação: ao menos data de pagamento deve estar preenchida
+        if (!payment?.data_pagamento) {
+          toast({ 
+            title: 'Erro: Data de pagamento obrigatória', 
+            description: `Preencha a data de pagamento para ${parcela.fornecedor}`,
+            variant: 'destructive' 
+          });
+          return;
+        }
 
         await supabase.rpc('pagar_parcela', {
           parcela_id: parcela.id,
@@ -394,9 +417,14 @@ export function ContasPagarSimple() {
       setSelectedParcelas([]);
       setPaymentData({});
       setPaymentObservacao('');
+      setReplicarPrimeiro(false);
       fetchParcelas();
-    } catch (error) {
-      toast({ title: 'Erro ao processar pagamento', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ 
+        title: 'Erro ao processar pagamento', 
+        description: error?.message || 'Erro desconhecido',
+        variant: 'destructive' 
+      });
     }
   };
 
@@ -924,6 +952,16 @@ export function ContasPagarSimple() {
             <CardDescription>{selectedParcelas.length} conta(s) selecionada(s) para pagamento</CardDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="flex items-center space-x-2 p-3 bg-muted rounded-lg">
+              <Checkbox
+                id="replicar-primeiro"
+                checked={replicarPrimeiro}
+                onCheckedChange={(checked) => setReplicarPrimeiro(!!checked)}
+              />
+              <Label htmlFor="replicar-primeiro" className="cursor-pointer">
+                Replicar dados do primeiro pagamento para todos
+              </Label>
+            </div>
             {filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).map(parcela => (
               <Card key={parcela.id}>
                 <CardHeader>
