@@ -89,7 +89,7 @@ export function ContasPagarSimple() {
   const [filterFornecedor, setFilterFornecedor] = useState<string>('all');
   const [filterFilial, setFilterFilial] = useState<string>('all');
   const [filterCategoria, setFilterCategoria] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('pendente');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterValorMin, setFilterValorMin] = useState('');
   const [filterValorMax, setFilterValorMax] = useState('');
   const [filterDataVencimentoInicio, setFilterDataVencimentoInicio] = useState<Date | null>(null);
@@ -255,13 +255,20 @@ export function ContasPagarSimple() {
       if (filterFornecedor !== 'all' && p.fornecedor_id !== parseInt(filterFornecedor)) return false;
       if (filterFilial !== 'all' && p.filial_id !== parseInt(filterFilial)) return false;
       if (filterCategoria !== 'all' && p.categoria_id !== parseInt(filterCategoria)) return false;
-      if (filterStatus === 'pendente' && p.pago) return false;
-      if (filterStatus === 'pago' && !p.pago) return false;
-      if (filterStatus === 'vencido') {
+      
+      // Filtro de status
+      if (filterStatus !== 'all') {
         const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
         const dataVencimento = new Date(p.vencimento);
-        if (p.pago || dataVencimento >= hoje) return false;
+        dataVencimento.setHours(0, 0, 0, 0);
+        
+        if (filterStatus === 'pago' && !p.pago) return false;
+        if (filterStatus === 'pendente' && p.pago) return false;
+        if (filterStatus === 'vencido' && (p.pago || dataVencimento >= hoje)) return false;
+        if (filterStatus === 'a_vencer' && (p.pago || dataVencimento < hoje)) return false;
       }
+      
       if (filterValorMin && p.valor_parcela_centavos < parseFloat(filterValorMin) * 100) return false;
       if (filterValorMax && p.valor_parcela_centavos > parseFloat(filterValorMax) * 100) return false;
       
@@ -459,7 +466,7 @@ export function ContasPagarSimple() {
     setFilterFornecedor('all');
     setFilterFilial('all');
     setFilterCategoria('all');
-    setFilterStatus('pendente');
+    setFilterStatus('all');
     setFilterValorMin('');
     setFilterValorMax('');
     setFilterDataVencimentoInicio(null);
@@ -470,7 +477,7 @@ export function ContasPagarSimple() {
     filterFornecedor !== 'all',
     filterFilial !== 'all',
     filterCategoria !== 'all',
-    filterStatus !== 'pendente',
+    filterStatus !== 'all',
     filterValorMin,
     filterValorMax,
     filterDataVencimentoInicio,
@@ -506,7 +513,7 @@ export function ContasPagarSimple() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
           <p className="text-muted-foreground">
-            {filteredAndSortedParcelas.length} parcela(s) {filterStatus === 'pendente' ? 'pendente(s)' : ''}
+            Total: {parcelas.length} parcela(s) | Exibindo: {filteredAndSortedParcelas.length}
           </p>
         </div>
         <Button onClick={() => navigate('/financeiro/contas-pagar/nova')}>
@@ -598,10 +605,10 @@ export function ContasPagarSimple() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="pendente">Pendente</SelectItem>
-                    <SelectItem value="pago">Pago</SelectItem>
-                    <SelectItem value="vencido">Vencidos</SelectItem>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="a_vencer">A Vencer</SelectItem>
+                    <SelectItem value="vencido">Vencidas</SelectItem>
+                    <SelectItem value="pago">Pagas</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
