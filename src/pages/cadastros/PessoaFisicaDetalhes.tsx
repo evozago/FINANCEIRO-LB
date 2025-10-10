@@ -114,25 +114,77 @@ export function PessoaFisicaDetalhes() {
   };
 
   const fetchParcelas = async () => {
+    if (!id) return;
+    
     try {
-      // Buscar parcelas pagas por esta pessoa
-      const { data, error } = await supabase
-        .from('contas_pagar_parcelas')
-        .select(`
-          id,
-          vencimento,
-          valor_parcela_centavos,
-          pago,
-          pago_em,
-          contas_pagar(descricao, numero_nota)
-        `)
-        .order('vencimento', { ascending: false })
-        .limit(50);
+      const pfId = parseInt(id);
+      
+      // Usando fetch direto para evitar problemas de type inference
+      const supabaseUrl = 'https://tntvymprraevwhmrcjio.supabase.co';
+      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRudHZ5bXBycmFldndobXJjamlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNDkxMTAsImV4cCI6MjA3NDcyNTExMH0.d16oYzYRw04sMfP5F0hcw0Swmy1y_9mxIcUQNYUclSw';
+      
+      // Buscar contas onde esta PF é fornecedora
+      const contasRes = await fetch(
+        `${supabaseUrl}/rest/v1/contas_pagar?fornecedor_pf_id=eq.${pfId}&select=id`,
+        {
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`
+          }
+        }
+      );
+      const contasData = await contasRes.json();
+      const contaIds = contasData.map((c: any) => c.id);
+      
+      if (contaIds.length === 0) {
+        setParcelas([]);
+        return;
+      }
 
-      if (error) throw error;
-      setParcelas(data || []);
+      // Buscar parcelas dessas contas
+      const parcelasRes = await fetch(
+        `${supabaseUrl}/rest/v1/contas_pagar_parcelas?conta_id=in.(${contaIds.join(',')})&select=id,vencimento,valor_parcela_centavos,pago,pago_em,conta_id&order=vencimento.desc&limit=50`,
+        {
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`
+          }
+        }
+      );
+      const parcelasData = await parcelasRes.json();
+
+      // Buscar info das contas
+      const contasInfoRes = await fetch(
+        `${supabaseUrl}/rest/v1/contas_pagar?id=in.(${contaIds.join(',')})&select=id,descricao,numero_nota`,
+        {
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`
+          }
+        }
+      );
+      const contasInfoData = await contasInfoRes.json();
+
+      // Mapear contas por ID
+      const contasMap: Record<number, any> = {};
+      contasInfoData.forEach((conta: any) => {
+        contasMap[conta.id] = conta;
+      });
+
+      // Combinar parcelas com info das contas
+      const parcelasFinais: Parcela[] = parcelasData.map((parcela: any) => ({
+        id: parcela.id,
+        vencimento: parcela.vencimento,
+        valor_parcela_centavos: parcela.valor_parcela_centavos,
+        pago: parcela.pago,
+        pago_em: parcela.pago_em,
+        contas_pagar: contasMap[parcela.conta_id] || { descricao: 'N/A', numero_nota: '' }
+      }));
+
+      setParcelas(parcelasFinais);
     } catch (error) {
       console.error('Erro ao buscar parcelas:', error);
+      setParcelas([]);
     }
   };
 
@@ -368,9 +420,9 @@ export function PessoaFisicaDetalhes() {
                   {parcelas.map((parcela) => (
                     <TableRow key={parcela.id}>
                       <TableCell className="font-medium">
-                        {(parcela.contas_pagar as any)?.descricao || 'Sem descrição'}
+                        {parcela.contas_pagar?.descricao || 'Sem descrição'}
                       </TableCell>
-                      <TableCell>{(parcela.contas_pagar as any)?.numero_nota || '-'}</TableCell>
+                      <TableCell>{parcela.contas_pagar?.numero_nota || '-'}</TableCell>
                       <TableCell>{formatDate(parcela.vencimento)}</TableCell>
                       <TableCell>
                         {parcela.pago_em ? formatDate(parcela.pago_em) : '-'}
