@@ -105,11 +105,12 @@ export default function NovaContaPagar() {
     setIsSubmitting(true);
 
     try {
-      // Criar conta a pagar
+      // Criar conta a pagar com fornecedor PJ ou PF
       const { data: conta, error: contaError } = await supabase
         .from("contas_pagar")
         .insert({
-          fornecedor_id: parseInt(fornecedorId),
+          fornecedor_id: fornecedorTipo === "pj" ? parseInt(fornecedorId) : null,
+          fornecedor_pf_id: fornecedorTipo === "pf" ? parseInt(fornecedorId) : null,
           categoria_id: categoriaId ? parseInt(categoriaId) : null,
           filial_id: filialId ? parseInt(filialId) : null,
           descricao,

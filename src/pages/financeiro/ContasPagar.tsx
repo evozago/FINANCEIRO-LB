@@ -103,7 +103,9 @@ export function ContasPagar() {
             id,
             descricao,
             fornecedor_id,
-            pessoas_juridicas!fornecedor_id(nome_fantasia, razao_social)
+            fornecedor_pf_id,
+            pessoas_juridicas:fornecedor_id(nome_fantasia, razao_social),
+            pessoas_fisicas:fornecedor_pf_id(nome_completo)
           )
         `)
         .eq('pago', false)
@@ -111,18 +113,26 @@ export function ContasPagar() {
 
       if (error) throw error;
       
-      const transformedData = (data || []).map(parcela => ({
-        id: parcela.id,
-        descricao: (parcela as any).contas_pagar?.descricao || 'N/A',
-        valor_total_centavos: parcela.valor_parcela_centavos,
-        num_parcelas: 1,
-        pessoas_juridicas: (parcela as any).contas_pagar?.pessoas_juridicas || { nome_fantasia: 'N/A' },
-        created_at: parcela.created_at,
-        updated_at: parcela.updated_at,
-        parcela_num: parcela.parcela_num,
-        vencimento: parcela.vencimento,
-        conta_id: parcela.conta_id
-      }));
+      const transformedData = (data || []).map(parcela => {
+        const conta = (parcela as any).contas_pagar;
+        const fornecedorNome = conta?.pessoas_juridicas?.nome_fantasia || 
+                               conta?.pessoas_juridicas?.razao_social ||
+                               conta?.pessoas_fisicas?.nome_completo ||
+                               'N/A';
+        
+        return {
+          id: parcela.id,
+          descricao: conta?.descricao || 'N/A',
+          valor_total_centavos: parcela.valor_parcela_centavos,
+          num_parcelas: 1,
+          pessoas_juridicas: { nome_fantasia: fornecedorNome },
+          created_at: parcela.created_at,
+          updated_at: parcela.updated_at,
+          parcela_num: parcela.parcela_num,
+          vencimento: parcela.vencimento,
+          conta_id: parcela.conta_id
+        };
+      });
       
       setContas(transformedData as any);
     } catch (error) {
