@@ -131,11 +131,12 @@ export default function RegistrarVendas() {
   async function onSubmit(values: VendaFormData) {
     setLoading(true);
     try {
-      // Converter mês/ano para o primeiro dia do mês
-      const data = new Date(values.ano, values.mes - 1, 1);
+      // Converter mês/ano para o primeiro dia do mês no formato correto
+      const mesFormatado = values.mes.toString().padStart(2, '0');
+      const dataString = `${values.ano}-${mesFormatado}-01`;
       
       const vendaData = {
-        data: format(data, "yyyy-MM-dd"),
+        data: dataString,
         vendedora_pf_id: parseInt(values.vendedora_pf_id),
         filial_id: parseInt(values.filial_id),
         valor_bruto_centavos: values.valor_bruto_centavos,
