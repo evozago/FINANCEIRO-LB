@@ -273,7 +273,7 @@ export function ContasPagar() {
   };
 
   const handleDelete = async (conta: ContaPagar) => {
-    const contaId = (conta as any).conta_id;
+    const contaId = (conta as any).conta_id || conta.id;
     if (!contaId) {
       toast({
         title: 'Erro',
@@ -310,7 +310,8 @@ export function ContasPagar() {
 
   const handleViewParcelas = (conta: ContaPagar) => {
     setSelectedConta(conta);
-    fetchParcelas(conta.id);
+    const contaId = (conta as any).conta_id || conta.id;
+    fetchParcelas(contaId);
     setIsParcelasDialogOpen(true);
   };
 
@@ -543,15 +544,18 @@ export function ContasPagar() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span
-                      className="text-primary hover:underline cursor-pointer"
-                      onClick={() => navigate(`/cadastros/pessoa-juridica/${(conta as any).contas_pagar?.fornecedor_id}`)}
-                    >
-                      {conta.pessoas_juridicas.nome_fantasia}
-                    </span>
+                     <span
+                       className="text-primary hover:underline cursor-pointer"
+                       onClick={() => {
+                         const fornecedorId = (conta as any)?.contas_pagar?.fornecedor_id;
+                         if (fornecedorId) navigate(`/cadastros/pessoa-juridica/${fornecedorId}`);
+                       }}
+                     >
+                       {conta.pessoas_juridicas?.nome_fantasia || '-'}
+                     </span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{conta.categorias_financeiras.nome}</Badge>
+                    <Badge variant="outline">{(conta as any)?.categorias_financeiras?.nome ?? '-'}</Badge>
                   </TableCell>
                   <TableCell>{formatCurrency(conta.valor_total_centavos)}</TableCell>
                   <TableCell>{formatCurrency(conta.valor_em_aberto || 0)}</TableCell>
