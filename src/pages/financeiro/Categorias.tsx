@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, FolderOpen, FolderTree, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,18 +8,23 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+type TipoCategoria = 'materia_prima' | 'consumo_interno' | 'revenda' | 'servico' | 'outros';
+
 interface Categoria {
   id: number;
   nome: string;
+  tipo: TipoCategoria;
   descricao?: string;
   categoria_pai_id?: number | null;
   categoria_pai_nome?: string;
   created_at: string;
   updated_at: string;
+  total_contas?: number;
 }
 
 export function Categorias() {
@@ -30,6 +35,7 @@ export function Categorias() {
   const [editingCategoria, setEditingCategoria] = useState<Categoria | null>(null);
   const [formData, setFormData] = useState({
     nome: '',
+    tipo: 'outros' as TipoCategoria,
     descricao: '',
     categoria_pai_id: ''
   });
@@ -41,6 +47,7 @@ export function Categorias() {
 
   const fetchCategorias = async () => {
     try {
+      // Buscar categorias com contagem de uso
       const { data, error } = await supabase
         .from('categorias_financeiras')
         .select(`
@@ -50,13 +57,27 @@ export function Categorias() {
             nome
           )
         `)
+        .order('tipo')
         .order('nome');
 
       if (error) throw error;
       
+      // Buscar contagem de contas por categoria
+      const { data: contasData } = await supabase
+        .from('contas_pagar')
+        .select('categoria_id');
+      
+      const contagemPorCategoria = (contasData || []).reduce((acc, conta) => {
+        if (conta.categoria_id) {
+          acc[conta.categoria_id] = (acc[conta.categoria_id] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<number, number>);
+      
       const categoriasFormatadas = (data || []).map(cat => ({
         ...cat,
-        categoria_pai_nome: cat.categoria_pai?.nome
+        categoria_pai_nome: cat.categoria_pai?.nome,
+        total_contas: contagemPorCategoria[cat.id] || 0
       }));
       
       setCategorias(categoriasFormatadas);
@@ -76,11 +97,42 @@ export function Categorias() {
     e.preventDefault();
     
     try {
+      // Validação: não permitir nomes duplicados
+      const { data: existente } = await supabase
+        .from('categorias_financeiras')
+        .select('id')
+        .eq('nome', formData.nome.trim())
+        .neq('id', editingCategoria?.id || 0)
+        .maybeSingle();
+      
+      if (existente) {
+        toast({
+          title: 'Erro',
+          description: 'Já existe uma categoria com este nome.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Validação: não permitir 3 níveis de hierarquia
+      if (formData.categoria_pai_id) {
+        const categoriaPai = categorias.find(c => c.id === parseInt(formData.categoria_pai_id));
+        if (categoriaPai?.categoria_pai_id) {
+          toast({
+            title: 'Erro',
+            description: 'Não é permitido criar mais de 2 níveis de hierarquia. Esta categoria já é uma subcategoria.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+
       if (editingCategoria) {
         const { error } = await supabase
           .from('categorias_financeiras')
           .update({
-            nome: formData.nome,
+            nome: formData.nome.trim(),
+            tipo: formData.tipo,
             descricao: formData.descricao || null,
             categoria_pai_id: formData.categoria_pai_id ? parseInt(formData.categoria_pai_id) : null,
             updated_at: new Date().toISOString()
@@ -97,7 +149,8 @@ export function Categorias() {
         const { error } = await supabase
           .from('categorias_financeiras')
           .insert({
-            nome: formData.nome,
+            nome: formData.nome.trim(),
+            tipo: formData.tipo,
             descricao: formData.descricao || null,
             categoria_pai_id: formData.categoria_pai_id ? parseInt(formData.categoria_pai_id) : null,
             created_at: new Date().toISOString(),
@@ -114,7 +167,7 @@ export function Categorias() {
 
       setDialogOpen(false);
       setEditingCategoria(null);
-      setFormData({ nome: '', descricao: '', categoria_pai_id: '' });
+      setFormData({ nome: '', tipo: 'outros', descricao: '', categoria_pai_id: '' });
       fetchCategorias();
     } catch (error) {
       console.error('Erro ao salvar categoria:', error);
@@ -130,6 +183,7 @@ export function Categorias() {
     setEditingCategoria(categoria);
     setFormData({
       nome: categoria.nome,
+      tipo: categoria.tipo || 'outros',
       descricao: categoria.descricao || '',
       categoria_pai_id: categoria.categoria_pai_id?.toString() || ''
     });
@@ -137,6 +191,29 @@ export function Categorias() {
   };
 
   const handleDelete = async (id: number) => {
+    const categoria = categorias.find(c => c.id === id);
+    
+    // Validação: não permitir excluir categoria em uso
+    if (categoria && categoria.total_contas && categoria.total_contas > 0) {
+      toast({
+        title: 'Erro',
+        description: `Esta categoria está sendo usada em ${categoria.total_contas} conta(s). Não é possível excluí-la.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validação: verificar se tem subcategorias
+    const temFilhas = categorias.some(c => c.categoria_pai_id === id);
+    if (temFilhas) {
+      toast({
+        title: 'Erro',
+        description: 'Esta categoria possui subcategorias. Exclua ou mova as subcategorias primeiro.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!confirm('Tem certeza que deseja excluir esta categoria?')) return;
 
     try {
@@ -170,11 +247,33 @@ export function Categorias() {
 
   const openNewDialog = () => {
     setEditingCategoria(null);
-    setFormData({ nome: '', descricao: '', categoria_pai_id: '' });
+    setFormData({ nome: '', tipo: 'outros', descricao: '', categoria_pai_id: '' });
     setDialogOpen(true);
   };
 
   const categoriasPrincipais = categorias.filter(c => !c.categoria_pai_id);
+
+  const getTipoLabel = (tipo: TipoCategoria) => {
+    const labels = {
+      materia_prima: 'Matéria Prima',
+      consumo_interno: 'Consumo Interno',
+      revenda: 'Revenda',
+      servico: 'Serviço',
+      outros: 'Outros'
+    };
+    return labels[tipo];
+  };
+
+  const getTipoBadgeVariant = (tipo: TipoCategoria): "default" | "secondary" | "destructive" | "outline" => {
+    const variants = {
+      materia_prima: 'default' as const,
+      consumo_interno: 'destructive' as const,
+      revenda: 'secondary' as const,
+      servico: 'outline' as const,
+      outros: 'outline' as const
+    };
+    return variants[tipo];
+  };
 
   if (loading) {
     return (
@@ -223,6 +322,47 @@ export function Categorias() {
                   required
                 />
               </div>
+
+              <div>
+                <Label>Tipo *</Label>
+                <RadioGroup 
+                  value={formData.tipo} 
+                  onValueChange={(value) => setFormData({ ...formData, tipo: value as TipoCategoria })}
+                  className="flex flex-col space-y-2 mt-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="materia_prima" id="tipo-materia-prima" />
+                    <Label htmlFor="tipo-materia-prima" className="font-normal cursor-pointer">
+                      Matéria Prima
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="consumo_interno" id="tipo-consumo-interno" />
+                    <Label htmlFor="tipo-consumo-interno" className="font-normal cursor-pointer">
+                      Consumo Interno
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="revenda" id="tipo-revenda" />
+                    <Label htmlFor="tipo-revenda" className="font-normal cursor-pointer">
+                      Revenda
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="servico" id="tipo-servico" />
+                    <Label htmlFor="tipo-servico" className="font-normal cursor-pointer">
+                      Serviço
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="outros" id="tipo-outros" />
+                    <Label htmlFor="tipo-outros" className="font-normal cursor-pointer">
+                      Outros
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
               <div>
                 <Label htmlFor="categoria_pai_id">Categoria Pai (opcional)</Label>
                 <Select 
@@ -243,7 +383,11 @@ export function Categorias() {
                       ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Máximo de 2 níveis de hierarquia permitidos
+                </p>
               </div>
+
               <div>
                 <Label htmlFor="descricao">Descrição</Label>
                 <Textarea
@@ -254,6 +398,7 @@ export function Categorias() {
                   rows={3}
                 />
               </div>
+
               <div className="flex justify-end space-x-2">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancelar
@@ -290,57 +435,86 @@ export function Categorias() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
-                  <TableHead>Categoria Pai</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Hierarquia</TableHead>
+                  <TableHead>Uso</TableHead>
                   <TableHead>Descrição</TableHead>
-                  <TableHead>Criado em</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredCategorias.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
+                    <TableCell colSpan={6} className="text-center py-8">
                       {searchTerm ? 'Nenhuma categoria encontrada.' : 'Nenhuma categoria cadastrada.'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredCategorias.map((categoria) => (
-                    <TableRow key={categoria.id}>
-                      <TableCell className="font-medium">
-                        {categoria.nome}
-                        {!categoria.categoria_pai_id && (
-                          <Badge variant="outline" className="ml-2 text-xs">Principal</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {categoria.categoria_pai_nome ? (
-                          <Badge variant="secondary">{categoria.categoria_pai_nome}</Badge>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell>{categoria.descricao || '-'}</TableCell>
-                      <TableCell>
-                        {new Date(categoria.created_at).toLocaleDateString('pt-BR')}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(categoria)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDelete(categoria.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  filteredCategorias.map((categoria) => {
+                    const isSubcategoria = !!categoria.categoria_pai_id;
+                    return (
+                      <TableRow key={categoria.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {isSubcategoria && (
+                              <span className="ml-4 text-muted-foreground">└─</span>
+                            )}
+                            {isSubcategoria ? (
+                              <FolderTree className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <FolderOpen className="h-4 w-4 text-primary" />
+                            )}
+                            {categoria.nome}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getTipoBadgeVariant(categoria.tipo)}>
+                            {getTipoLabel(categoria.tipo)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {categoria.categoria_pai_nome ? (
+                            <Badge variant="secondary" className="text-xs">
+                              {categoria.categoria_pai_nome}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs">Principal</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {categoria.total_contas && categoria.total_contas > 0 ? (
+                            <Badge variant="default" className="text-xs">
+                              {categoria.total_contas} conta(s)
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Não utilizada</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">
+                          {categoria.descricao || '-'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEdit(categoria)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDelete(categoria.id)}
+                              disabled={!!categoria.total_contas && categoria.total_contas > 0}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
