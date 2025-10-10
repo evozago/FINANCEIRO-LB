@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +47,7 @@ interface CategoriaPJ {
 }
 
 export function PessoasJuridicas() {
+  const navigate = useNavigate();
   const [pessoas, setPessoas] = useState<PessoaJuridica[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [representantes, setRepresentantes] = useState<Representante[]>([]);
@@ -636,7 +638,12 @@ export function PessoasJuridicas() {
                     <div className="flex items-center space-x-2">
                       <Building2 className="h-4 w-4 text-muted-foreground" />
                       <div>
-                        <div className="font-medium">{pessoa.nome_fantasia || pessoa.razao_social}</div>
+                        <div 
+                          className="font-medium text-primary hover:underline cursor-pointer"
+                          onClick={() => navigate(`/cadastros/pessoa-juridica/${pessoa.id}`)}
+                        >
+                          {pessoa.nome_fantasia || pessoa.razao_social}
+                        </div>
                         {pessoa.nome_fantasia && (
                           <div className="text-sm text-muted-foreground">{pessoa.razao_social}</div>
                         )}

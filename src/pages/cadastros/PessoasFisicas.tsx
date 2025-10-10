@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +39,7 @@ interface Cargo {
 }
 
 export function PessoasFisicas() {
+  const navigate = useNavigate();
   const [pessoas, setPessoas] = useState<PessoaFisica[]>([]);
   const [filiais, setFiliais] = useState<Filial[]>([]);
   const [cargos, setCargos] = useState<Cargo[]>([]);
@@ -411,7 +413,14 @@ export function PessoasFisicas() {
             <TableBody>
               {filteredPessoas.map((pessoa) => (
                 <TableRow key={pessoa.id}>
-                  <TableCell className="font-medium">{pessoa.nome_completo}</TableCell>
+                  <TableCell className="font-medium">
+                    <span
+                      className="text-primary hover:underline cursor-pointer"
+                      onClick={() => navigate(`/cadastros/pessoas-fisicas/${pessoa.id}`)}
+                    >
+                      {pessoa.nome_completo}
+                    </span>
+                  </TableCell>
                   <TableCell>{pessoa.cpf}</TableCell>
                   <TableCell>{pessoa.num_cadastro_folha}</TableCell>
                   <TableCell>

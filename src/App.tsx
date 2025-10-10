@@ -23,6 +23,7 @@ import { Metas } from "@/pages/vendas/Metas";
 import RegistrarVendas from "@/pages/vendas/RegistrarVendas";
 import { PessoaFisicaDetalhes } from "@/pages/cadastros/PessoaFisicaDetalhes";
 import { PessoaJuridicaDetalhes } from "@/pages/cadastros/PessoaJuridicaDetalhes";
+import { MarcaDetalhes } from "@/pages/cadastros/MarcaDetalhes";
 import { RelatoriosVendas } from "@/pages/vendas/RelatoriosVendas";
 import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
 import { DashboardComparativo } from "@/pages/vendas/DashboardComparativo";
@@ -48,13 +49,16 @@ const App = () => (
             <Route path="cadastros/pessoas-fisicas/:id" element={<PessoaFisicaDetalhes />} />
             <Route path="cadastros/pessoas-juridicas" element={<PessoasJuridicas />} />
             <Route path="cadastros/pessoas-juridicas/:id" element={<PessoaJuridicaDetalhes />} />
+            <Route path="cadastros/pessoa-juridica/:id" element={<PessoaJuridicaDetalhes />} />
             <Route path="cadastros/filiais" element={<Filiais />} />
             <Route path="cadastros/cargos" element={<Cargos />} />
             <Route path="cadastros/marcas" element={<Marcas />} />
+            <Route path="cadastros/marcas/:id" element={<MarcaDetalhes />} />
             <Route path="financeiro/contas-pagar" element={<ContasPagar />} />
             <Route path="financeiro/contas-pagar/nova" element={<NovaContaPagar />} />
             <Route path="financeiro/conta/:id" element={<ContaDetalhes />} />
-            <Route path="financeiro/fornecedor/:id" element={<FornecedorDetalhes />} />
+            {/* Rota fornecedor redireciona para pessoa jurídica */}
+            <Route path="financeiro/fornecedor/:id" element={<PessoaJuridicaDetalhes />} />
             <Route path="financeiro/contas-bancarias" element={<ContasBancarias />} />
             <Route path="financeiro/fechamento-caixa" element={<FechamentoCaixa />} />
             <Route path="financeiro/contas-recorrentes" element={<ContasRecorrentes />} />

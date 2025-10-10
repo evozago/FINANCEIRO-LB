@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ interface PessoaJuridica {
 }
 
 export function Marcas() {
+  const navigate = useNavigate();
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [pessoasJuridicas, setPessoasJuridicas] = useState<PessoaJuridica[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -333,13 +335,21 @@ export function Marcas() {
                   <TableCell className="font-medium">
                     <div className="flex items-center space-x-2">
                       <Tag className="h-4 w-4 text-muted-foreground" />
-                      <span>{marca.nome}</span>
+                      <span
+                        className="text-primary hover:underline cursor-pointer"
+                        onClick={() => navigate(`/cadastros/marcas/${marca.id}`)}
+                      >
+                        {marca.nome}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell>
                     {marca.pessoas_juridicas ? (
                       <div>
-                        <div className="font-medium">
+                        <div 
+                          className="font-medium text-primary hover:underline cursor-pointer"
+                          onClick={() => navigate(`/cadastros/pessoa-juridica/${marca.pj_vinculada_id}`)}
+                        >
                           {marca.pessoas_juridicas.nome_fantasia || marca.pessoas_juridicas.razao_social}
                         </div>
                         {marca.pessoas_juridicas.cnpj && (

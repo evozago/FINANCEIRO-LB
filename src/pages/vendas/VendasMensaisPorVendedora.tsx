@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Calendar, TrendingUp, Users, ShoppingCart, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,7 @@ interface ComparativoAnual {
 }
 
 export function VendasMensaisPorVendedora() {
+  const navigate = useNavigate();
   const [vendas, setVendas] = useState<VendasVendedora[]>([]);
   const [comparativo, setComparativo] = useState<ComparativoAnual[]>([]);
   const [selectedMes, setSelectedMes] = useState<number>(new Date().getMonth() + 1);
@@ -317,7 +319,14 @@ export function VendasMensaisPorVendedora() {
             <TableBody>
               {filteredVendas.map((venda) => (
                 <TableRow key={venda.vendedora_pf_id}>
-                  <TableCell className="font-medium">{venda.vendedora_nome}</TableCell>
+                  <TableCell className="font-medium">
+                    <span
+                      className="text-primary hover:underline cursor-pointer"
+                      onClick={() => navigate(`/cadastros/pessoas-fisicas/${venda.vendedora_pf_id}`)}
+                    >
+                      {venda.vendedora_nome}
+                    </span>
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">{venda.filial_nome}</Badge>
                   </TableCell>

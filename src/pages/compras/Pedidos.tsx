@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, ShoppingCart, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,6 +69,7 @@ const statusOptions = [
 ];
 
 export function Pedidos() {
+  const navigate = useNavigate();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [fornecedores, setFornecedores] = useState<PessoaJuridica[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
@@ -891,10 +893,28 @@ export function Pedidos() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {pedido.pessoas_juridicas?.nome_fantasia || 'Não informado'}
+                    {pedido.fornecedor_id ? (
+                      <span
+                        className="text-primary hover:underline cursor-pointer"
+                        onClick={() => navigate(`/cadastros/pessoa-juridica/${pedido.fornecedor_id}`)}
+                      >
+                        {pedido.pessoas_juridicas?.nome_fantasia || 'Não informado'}
+                      </span>
+                    ) : (
+                      'Não informado'
+                    )}
                   </TableCell>
                   <TableCell>
-                    {pedido.marcas?.nome || 'Não informado'}
+                    {pedido.marca_id ? (
+                      <span
+                        className="text-primary hover:underline cursor-pointer"
+                        onClick={() => navigate(`/cadastros/marcas/${pedido.marca_id}`)}
+                      >
+                        {pedido.marcas?.nome || 'Não informado'}
+                      </span>
+                    ) : (
+                      'Não informado'
+                    )}
                   </TableCell>
                   <TableCell>
                     {getStatusBadge(pedido.status)}

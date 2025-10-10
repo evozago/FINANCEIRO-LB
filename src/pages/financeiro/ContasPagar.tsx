@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, CreditCard, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,6 +59,7 @@ interface Parcela {
 }
 
 export function ContasPagar() {
+  const navigate = useNavigate();
   const [contas, setContas] = useState<ContaPagar[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -529,7 +531,14 @@ export function ContasPagar() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{conta.pessoas_juridicas.nome_fantasia}</TableCell>
+                  <TableCell>
+                    <span
+                      className="text-primary hover:underline cursor-pointer"
+                      onClick={() => navigate(`/cadastros/pessoa-juridica/${(conta as any).contas_pagar?.fornecedor_id}`)}
+                    >
+                      {conta.pessoas_juridicas.nome_fantasia}
+                    </span>
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">{conta.categorias_financeiras.nome}</Badge>
                   </TableCell>
