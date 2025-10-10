@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, CreditCard, Eye } from 'lucide-react';
+import { usePersistentState } from '@/hooks/usePersistentState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,7 +66,7 @@ export function ContasPagar() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [filiais, setFiliais] = useState<Filial[]>([]);
   const [parcelas, setParcelas] = useState<Parcela[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = usePersistentState('contas-pagar-search', '');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isParcelasDialogOpen, setIsParcelasDialogOpen] = useState(false);
   const [editingConta, setEditingConta] = useState<ContaPagar | null>(null);

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, TrendingUp, Users, ShoppingCart, ArrowUpDown } from 'lucide-react';
+import { usePersistentState } from '@/hooks/usePersistentState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,9 +37,9 @@ export function VendasMensaisPorVendedora() {
   const navigate = useNavigate();
   const [vendas, setVendas] = useState<VendasVendedora[]>([]);
   const [comparativo, setComparativo] = useState<ComparativoAnual[]>([]);
-  const [selectedMes, setSelectedMes] = useState<number>(new Date().getMonth() + 1);
-  const [selectedAno, setSelectedAno] = useState<number>(new Date().getFullYear());
-  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedMes, setSelectedMes] = usePersistentState<number>('vendas-mensais-mes', new Date().getMonth() + 1);
+  const [selectedAno, setSelectedAno] = usePersistentState<number>('vendas-mensais-ano', new Date().getFullYear());
+  const [searchTerm, setSearchTerm] = usePersistentState('vendas-mensais-search', '');
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 

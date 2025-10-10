@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, ShoppingCart, Eye } from 'lucide-react';
+import { usePersistentState } from '@/hooks/usePersistentState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
@@ -74,7 +75,7 @@ export function Pedidos() {
   const [fornecedores, setFornecedores] = useState<PessoaJuridica[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [representantes, setRepresentantes] = useState<PessoaFisica[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = usePersistentState('pedidos-search', '');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPedido, setEditingPedido] = useState<Pedido | null>(null);
   const [loading, setLoading] = useState(true);
