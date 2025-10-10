@@ -267,29 +267,29 @@ export function ContasPagar() {
   };
 
   const handleEdit = (conta: ContaPagar) => {
-    setEditingConta(conta);
-    setFormData({
-      fornecedor_id: '', // Será preenchido quando tivermos os dados completos
-      categoria_id: '',
-      filial_id: '',
-      descricao: conta.descricao,
-      numero_nota: conta.numero_nota || '',
-      chave_nfe: conta.chave_nfe || '',
-      valor_total_centavos: (conta.valor_total_centavos / 100).toString(),
-      num_parcelas: conta.num_parcelas.toString(),
-      referencia: conta.referencia || '',
-    });
-    setIsDialogOpen(true);
+    // Navegar para a página de detalhes onde pode editar
+    const contaId = (conta as any).conta_id || conta.id;
+    navigate(`/financeiro/conta/${contaId}`);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir esta conta a pagar?')) return;
+  const handleDelete = async (conta: ContaPagar) => {
+    const contaId = (conta as any).conta_id;
+    if (!contaId) {
+      toast({
+        title: 'Erro',
+        description: 'ID da conta não encontrado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!confirm('Tem certeza que deseja excluir esta conta a pagar e todas suas parcelas?')) return;
 
     try {
       const { error } = await supabase
         .from('contas_pagar')
         .delete()
-        .eq('id', id);
+        .eq('id', contaId);
 
       if (error) throw error;
 
@@ -582,7 +582,7 @@ export function ContasPagar() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDelete(conta.id)}
+                        onClick={() => handleDelete(conta)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
