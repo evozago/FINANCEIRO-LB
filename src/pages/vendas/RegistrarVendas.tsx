@@ -19,7 +19,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportadorVendas } from "@/components/vendas/ImportadorVendas";
 
 const vendaSchema = z.object({
-  data: z.date({ required_error: "Data é obrigatória" }),
+  mes: z.number().min(1).max(12, "Mês inválido"),
+  ano: z.number().min(2020).max(2100, "Ano inválido"),
   vendedora_pf_id: z.string().min(1, "Selecione uma vendedora"),
   filial_id: z.string().min(1, "Selecione uma filial"),
   valor_bruto_centavos: z.number().min(0, "Valor deve ser positivo"),
@@ -63,7 +64,8 @@ export default function RegistrarVendas() {
   const form = useForm<VendaFormData>({
     resolver: zodResolver(vendaSchema),
     defaultValues: {
-      data: new Date(),
+      mes: new Date().getMonth() + 1,
+      ano: new Date().getFullYear(),
       vendedora_pf_id: "",
       filial_id: "",
       valor_bruto_centavos: 0,
@@ -129,8 +131,11 @@ export default function RegistrarVendas() {
   async function onSubmit(values: VendaFormData) {
     setLoading(true);
     try {
+      // Converter mês/ano para o primeiro dia do mês
+      const data = new Date(values.ano, values.mes - 1, 1);
+      
       const vendaData = {
-        data: format(values.data, "yyyy-MM-dd"),
+        data: format(data, "yyyy-MM-dd"),
         vendedora_pf_id: parseInt(values.vendedora_pf_id),
         filial_id: parseInt(values.filial_id),
         valor_bruto_centavos: values.valor_bruto_centavos,
@@ -157,7 +162,8 @@ export default function RegistrarVendas() {
       });
 
       form.reset({
-        data: new Date(),
+        mes: new Date().getMonth() + 1,
+        ano: new Date().getFullYear(),
         vendedora_pf_id: "",
         filial_id: "",
         valor_bruto_centavos: 0,
@@ -179,8 +185,10 @@ export default function RegistrarVendas() {
 
   function editVenda(venda: Venda) {
     setEditingId(venda.id);
+    const vendaData = new Date(venda.data);
     form.reset({
-      data: new Date(venda.data),
+      mes: vendaData.getMonth() + 1,
+      ano: vendaData.getFullYear(),
       vendedora_pf_id: venda.vendedora_pf_id.toString(),
       filial_id: venda.filial_id.toString(),
       valor_bruto_centavos: venda.valor_bruto_centavos,
@@ -238,9 +246,9 @@ export default function RegistrarVendas() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Registrar Vendas</h1>
+        <h1 className="text-3xl font-bold">Registrar Vendas Mensais</h1>
         <p className="text-muted-foreground">
-          Cadastre vendas manualmente ou importe via CSV/Excel
+          Cadastre vendas do mês por vendedora ou importe via CSV/Excel
         </p>
       </div>
 
@@ -259,9 +267,9 @@ export default function RegistrarVendas() {
         <TabsContent value="manual">
           <Card>
             <CardHeader>
-              <CardTitle>{editingId ? "Editar Venda" : "Nova Venda"}</CardTitle>
+              <CardTitle>{editingId ? "Editar Venda Mensal" : "Nova Venda Mensal"}</CardTitle>
               <CardDescription>
-                Preencha os dados da venda para registrar no sistema
+                Registre as vendas totais do mês para cada vendedora
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -270,15 +278,55 @@ export default function RegistrarVendas() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <FormField
                       control={form.control}
-                      name="data"
+                      name="mes"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Data</FormLabel>
+                          <FormLabel>Mês</FormLabel>
+                          <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value?.toString()}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o mês" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {[
+                                { value: 1, label: "Janeiro" },
+                                { value: 2, label: "Fevereiro" },
+                                { value: 3, label: "Março" },
+                                { value: 4, label: "Abril" },
+                                { value: 5, label: "Maio" },
+                                { value: 6, label: "Junho" },
+                                { value: 7, label: "Julho" },
+                                { value: 8, label: "Agosto" },
+                                { value: 9, label: "Setembro" },
+                                { value: 10, label: "Outubro" },
+                                { value: 11, label: "Novembro" },
+                                { value: 12, label: "Dezembro" },
+                              ].map((m) => (
+                                <SelectItem key={m.value} value={m.value.toString()}>
+                                  {m.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="ano"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Ano</FormLabel>
                           <FormControl>
-                            <DatePicker
-                              date={field.value}
-                              onSelect={field.onChange}
-                              placeholder="Selecione a data"
+                            <Input
+                              type="number"
+                              min="2020"
+                              max="2100"
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value) || new Date().getFullYear())}
                             />
                           </FormControl>
                           <FormMessage />
@@ -394,7 +442,7 @@ export default function RegistrarVendas() {
 
                   <div className="bg-muted p-4 rounded-lg">
                     <p className="text-sm font-medium">
-                      Valor Líquido: <span className="text-lg">{formatCurrency(valorLiquido)}</span>
+                      Valor Líquido do Mês: <span className="text-lg">{formatCurrency(valorLiquido)}</span>
                     </p>
                   </div>
 
@@ -440,8 +488,8 @@ export default function RegistrarVendas() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Vendas Registradas</CardTitle>
-              <CardDescription>Últimas 50 vendas cadastradas</CardDescription>
+              <CardTitle>Vendas Mensais Registradas</CardTitle>
+              <CardDescription>Últimas 50 vendas mensais cadastradas</CardDescription>
             </div>
             <Button onClick={exportToCSV} variant="outline">
               <Download className="mr-2 h-4 w-4" />
@@ -453,7 +501,7 @@ export default function RegistrarVendas() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Data</TableHead>
+                <TableHead>Mês/Ano</TableHead>
                 <TableHead>Vendedora</TableHead>
                 <TableHead>Filial</TableHead>
                 <TableHead className="text-right">Valor Bruto</TableHead>
@@ -464,11 +512,14 @@ export default function RegistrarVendas() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {vendas.map((venda) => (
-                <TableRow key={venda.id}>
-                  <TableCell>
-                    {format(new Date(venda.data), "dd/MM/yyyy", { locale: ptBR })}
-                  </TableCell>
+              {vendas.map((venda) => {
+                const vendaDate = new Date(venda.data);
+                const mesNome = format(vendaDate, "MMMM/yyyy", { locale: ptBR });
+                return (
+                  <TableRow key={venda.id}>
+                    <TableCell className="capitalize">
+                      {mesNome}
+                    </TableCell>
                   <TableCell>{venda.pessoas_fisicas?.nome_completo}</TableCell>
                   <TableCell>{venda.filiais?.nome}</TableCell>
                   <TableCell className="text-right">
@@ -500,7 +551,8 @@ export default function RegistrarVendas() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
