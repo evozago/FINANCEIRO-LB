@@ -31,7 +31,7 @@ const TIPOS: Array<{ value: Categoria["tipo"]; label: string }> = [
   { value: "transferencia", label: "Transferência" },
 ];
 
-export default function Categorias() {
+function Categorias() {
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -63,9 +63,11 @@ export default function Categorias() {
     });
   };
 
+  // ===== FETCH com fallback para ausência de "ordem" =====
   const fetchCategorias = async () => {
     setLoading(true);
     try {
+      // Tenta ordenar por ordem e nome
       const { data, error } = await supabase
         .from("categorias_financeiras")
         .select("*")
@@ -73,10 +75,41 @@ export default function Categorias() {
         .order("nome", { ascending: true });
 
       if (error) throw error;
+
       setCategorias((data || []) as Categoria[]);
-    } catch (err) {
-      console.error(err);
-      toast({ title: "Erro", description: "Não foi possível carregar categorias.", variant: "destructive" });
+    } catch (err: any) {
+      // Se a coluna "ordem" não existir (42703) ou der 400, faz fallback para ordenar por nome apenas
+      const isColMissing =
+        err?.code === "42703" ||
+        (typeof err?.message === "string" &&
+          err.message.toLowerCase().includes("column") &&
+          err.message.includes("ordem"));
+
+      if (isColMissing) {
+        try {
+          const { data, error } = await supabase
+            .from("categorias_financeiras")
+            .select("*")
+            .order("nome", { ascending: true });
+          if (error) throw error;
+
+          setCategorias((data || []) as Categoria[]);
+        } catch (inner) {
+          console.error(inner);
+          toast({
+            title: "Erro",
+            description: "Não foi possível carregar categorias.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        console.error(err);
+        toast({
+          title: "Erro",
+          description: "Não foi possível carregar categorias.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -86,7 +119,7 @@ export default function Categorias() {
     fetchCategorias();
   }, []);
 
-  // Monta árvore simples
+  // Monta árvore
   const tree = useMemo<TreeNode[]>(() => {
     const map = new Map<number, TreeNode>();
     const roots: TreeNode[] = [];
@@ -99,7 +132,6 @@ export default function Categorias() {
         roots.push(node);
       }
     });
-    // ordena filhos por ordem/nome
     const sortNodes = (nodes: TreeNode[]) => {
       nodes.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.nome.localeCompare(b.nome));
       nodes.forEach((n) => sortNodes(n.children));
@@ -108,12 +140,11 @@ export default function Categorias() {
     return roots;
   }, [categorias]);
 
-  // Filtro simples por nome
+  // Filtro simples
   const filteredTree = useMemo<TreeNode[]>(() => {
     const term = search.trim().toLowerCase();
     if (!term && showArchived) return tree;
     if (!term && !showArchived) {
-      // remove arquivadas
       const filterArchived = (nodes: TreeNode[]): TreeNode[] =>
         nodes
           .filter((n) => !n.archived)
@@ -126,7 +157,6 @@ export default function Categorias() {
         .map((n) => ({ ...n, children: recurse(n.children) }))
         .filter((n) => {
           if (match(n)) return true;
-          // mantém ancestrais se algum filho bate no termo
           const anyChild = (x: TreeNode): boolean => x.children.some((c) => match(c) || anyChild(c));
           return anyChild(n);
         });
@@ -200,11 +230,12 @@ export default function Categorias() {
   };
 
   const canDelete = async (id: number) => {
-    // Preferência: usar a function can_delete_categoria (migration acima)
-    const { data, error } = await supabase.rpc("can_delete_categoria", { p_id: id });
-    if (!error && typeof data === "boolean") return data;
-
-    // fallback: checar filhos/uso manualmente
+    // Se existir a function can_delete_categoria, usa:
+    try {
+      const { data, error } = await supabase.rpc("can_delete_categoria", { p_id: id });
+      if (!error && typeof data === "boolean") return data;
+    } catch {}
+    // Fallback manual:
     const [{ count: filhos }, { count: uso }] = await Promise.all([
       supabase.from("categorias_financeiras").select("*", { count: "exact", head: true }).eq("parent_id", id),
       supabase.from("contas_pagar").select("*", { count: "exact", head: true }).eq("categoria_id", id),
@@ -430,7 +461,7 @@ export default function Categorias() {
                     <SelectItem
                       key={c.id}
                       value={String(c.id)}
-                      disabled={editing?.id === c.id} // evita pai = próprio
+                      disabled={editing?.id === c.id}
                     >
                       {c.nome}
                     </SelectItem>
@@ -464,3 +495,6 @@ export default function Categorias() {
     </div>
   );
 }
+
+export { Categorias }; // named export (compatível com imports atuais)
+export default Categorias;
