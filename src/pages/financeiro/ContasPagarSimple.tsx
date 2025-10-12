@@ -28,6 +28,14 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
   Filter,
@@ -38,22 +46,26 @@ import {
   Trash2,
   Eye,
   ArrowUpDown,
+  CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 
 type ParcelaRow = {
-  id: number;              // contas_pagar_parcelas.id
+  id: number; // contas_pagar_parcelas.id
   conta_id: number;
   parcela_num: number;
   valor_parcela_centavos: number;
-  vencimento: string;      // ISO date
+  vencimento: string; // ISO date
   pago: boolean;
+  data_pagamento?: string | null;
+  forma_pagamento_id?: number | null;
+
   fornecedor?: string;
   descricao?: string;
   categoria?: string;
   filial?: string;
   created_at?: string;
   updated_at?: string;
-  forma_pagamento_id?: number | null;
 };
 
 type Fornecedor = { id: number; nome_fantasia: string | null; razao_social: string | null };
@@ -105,7 +117,7 @@ const VISIBLE_DEFAULT: Record<string, boolean> = {
 
 const LS_COLS_KEY = "cp_simple_columns_v1";
 
-export function ContasPagarSimple() {
+export default function ContasPagarSimple() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -132,12 +144,13 @@ export function ContasPagarSimple() {
   const [filterDataVencimentoInicio, setFilterDataVencimentoInicio] = useState<string | null>(null);
   const [filterDataVencimentoFim, setFilterDataVencimentoFim] = useState<string | null>(null);
 
-  // Paginação simples
+  // Paginação
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize] = useState<number>(20);
 
   // Seleção
   const [selectedParcelas, setSelectedParcelas] = useState<number[]>([]);
+  const [selectPage, setSelectPage] = useState<boolean>(false);
 
   // Ordenação
   const [sortKey, setSortKey] = useState<SortKey>("vencimento");
@@ -148,6 +161,11 @@ export function ContasPagarSimple() {
     const raw = typeof window !== "undefined" ? localStorage.getItem(LS_COLS_KEY) : null;
     return raw ? JSON.parse(raw) : VISIBLE_DEFAULT;
   });
+
+  // Dialog Marcar Pago
+  const [payDialogOpen, setPayDialogOpen] = useState(false);
+  const [payDate, setPayDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(LS_COLS_KEY, JSON.stringify(visibleCols));
@@ -176,10 +194,10 @@ export function ContasPagarSimple() {
   const fetchParcelas = async () => {
     setLoading(true);
     try {
+      // Busca parcelas (ajuste os filtros aqui conforme sua necessidade)
       const { data: parcelasData, error: parcelasError } = await supabase
         .from("contas_pagar_parcelas")
         .select("*")
-        .eq("pago", false)
         .order("vencimento");
 
       if (parcelasError) throw parcelasError;
@@ -261,6 +279,9 @@ export function ContasPagarSimple() {
             valor_parcela_centavos: p.valor_parcela_centavos ?? p.valor_centavos ?? 0,
             vencimento: p.vencimento,
             pago: !!p.pago,
+            data_pagamento: p.data_pagamento ?? null,
+            forma_pagamento_id: p.forma_pagamento_id ?? null,
+
             fornecedor:
               forn?.nome_fantasia || forn?.razao_social || (conta?.fornecedor_id ? `#${conta.fornecedor_id}` : "N/A"),
             descricao: conta?.descricao || "—",
@@ -268,7 +289,6 @@ export function ContasPagarSimple() {
             filial: fil?.nome,
             created_at: p.created_at,
             updated_at: p.updated_at,
-            forma_pagamento_id: p.forma_pagamento_id ?? null,
           };
         }) || [];
 
@@ -307,7 +327,7 @@ export function ContasPagarSimple() {
     fetchAuxiliares();
   }, []);
 
-  // ===== Ordenação / Filtros =====
+  // ===== Filtros/Ordenação =====
   const sortBy = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -447,9 +467,20 @@ export function ContasPagarSimple() {
     setFilterDataVencimentoFim(null);
   };
 
-  // ===== Ações =====
+  // ===== Ações de massa =====
 
-  // Exclusão em massa de PARCELAS selecionadas
+  // Selecionar todos da página
+  const toggleSelectPage = (checked: boolean) => {
+    setSelectPage(checked);
+    const pageIds = paginatedData.map((p) => p.id);
+    if (checked) {
+      setSelectedParcelas((prev) => Array.from(new Set([...prev, ...pageIds])));
+    } else {
+      setSelectedParcelas((prev) => prev.filter((id) => !pageIds.includes(id)));
+    }
+  };
+
+  // Excluir em massa
   const handleBulkDelete = async () => {
     if (selectedParcelas.length === 0 || deleting) return;
 
@@ -493,7 +524,96 @@ export function ContasPagarSimple() {
     }
   };
 
-  // Render
+  // Abrir dialog de pagamento em massa
+  const openPayDialog = () => {
+    if (selectedParcelas.length === 0) {
+      toast({ title: "Selecione ao menos 1 parcela", description: "", variant: "destructive" });
+      return;
+    }
+    setPayDialogOpen(true);
+  };
+
+  // Marcar pago em massa
+  const handleBulkMarkPaid = async () => {
+    if (selectedParcelas.length === 0 || paying) return;
+    try {
+      setPaying(true);
+      const { error } = await supabase
+        .from("contas_pagar_parcelas")
+        .update({
+          pago: true,
+          data_pagamento: payDate, // ajuste se sua coluna for outro nome/formato
+        })
+        .in("id", selectedParcelas);
+      if (error) throw error;
+
+      toast({
+        title: "Sucesso",
+        description:
+          selectedParcelas.length === 1
+            ? "Parcela marcada como paga."
+            : `${selectedParcelas.length} parcelas marcadas como pagas.`,
+      });
+
+      setPayDialogOpen(false);
+      await fetchParcelas();
+      setSelectedParcelas([]);
+    } catch (err: any) {
+      console.error("Erro ao marcar como pago:", err);
+      toast({
+        title: "Erro",
+        description:
+          err?.message ||
+          "Não foi possível marcar como pago. Verifique o schema/colunas (ex.: data_pagamento) e as políticas RLS.",
+        variant: "destructive",
+      });
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  // Desfazer pagamento em massa
+  const handleBulkUnmarkPaid = async () => {
+    if (selectedParcelas.length === 0 || paying) return;
+    if (!confirm("Remover o status de pago das parcelas selecionadas?")) return;
+
+    try {
+      setPaying(true);
+      const { error } = await supabase
+        .from("contas_pagar_parcelas")
+        .update({
+          pago: false,
+          data_pagamento: null,
+          // valor_pago_centavos: null, // habilite se existir
+        })
+        .in("id", selectedParcelas);
+      if (error) throw error;
+
+      toast({
+        title: "Sucesso",
+        description:
+          selectedParcelas.length === 1
+            ? "Parcela marcada como não paga."
+            : `${selectedParcelas.length} parcelas marcadas como não pagas.`,
+      });
+
+      await fetchParcelas();
+      setSelectedParcelas([]);
+    } catch (err: any) {
+      console.error("Erro ao desfazer pago:", err);
+      toast({
+        title: "Erro",
+        description:
+          err?.message ||
+          "Não foi possível desfazer o pago. Verifique o schema/colunas e as políticas RLS.",
+        variant: "destructive",
+      });
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  // ===== Render =====
   if (loading) {
     return (
       <div className="space-y-6">
@@ -533,6 +653,8 @@ export function ContasPagarSimple() {
     );
   };
 
+  const pageAllChecked = paginatedData.every((p) => selectedParcelas.includes(p.id)) && paginatedData.length > 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -561,12 +683,10 @@ export function ContasPagarSimple() {
                   className="pl-10"
                 />
               </div>
-
               <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
                 <Filter className="h-4 w-4 mr-2" />
                 Filtros {activeFiltersCount > 0 && `(${activeFiltersCount})`}
               </Button>
-
               {activeFiltersCount > 0 && (
                 <Button variant="ghost" size="sm" onClick={clearFilters}>
                   <X className="h-4 w-4 mr-2" />
@@ -600,7 +720,7 @@ export function ContasPagarSimple() {
           </div>
 
           {/* Barra de ações em massa */}
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-4 flex items-center gap-2 flex-wrap">
             <Button
               size="sm"
               variant="destructive"
@@ -610,6 +730,28 @@ export function ContasPagarSimple() {
             >
               <Trash2 className="h-4 w-4 mr-2" />
               {deleting ? "Excluindo..." : "Excluir Selecionados"}
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={openPayDialog}
+              disabled={selectedParcelas.length === 0}
+              title="Marcar como Pago (em massa)"
+            >
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Marcar como Pago
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBulkUnmarkPaid}
+              disabled={selectedParcelas.length === 0}
+              title="Desfazer Pago (em massa)"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Desfazer Pago
             </Button>
           </div>
 
@@ -696,7 +838,17 @@ export function ContasPagarSimple() {
           <Table>
             <TableHeader>
               <TableRow>
-                {visibleCols.select && <TableHead style={{ width: 44 }}></TableHead>}
+                {visibleCols.select && (
+                  <TableHead style={{ width: 44 }}>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={pageAllChecked}
+                      onChange={(e) => toggleSelectPage(e.target.checked)}
+                      title={pageAllChecked ? "Desmarcar página" : "Selecionar página"}
+                    />
+                  </TableHead>
+                )}
                 {renderTh("id", "ID")}
                 {renderTh("conta_id", "Conta")}
                 {visibleCols.fornecedor && (
@@ -789,7 +941,7 @@ export function ContasPagarSimple() {
 
                   {visibleCols.acoes && (
                     <TableCell className="text-right">
-                      {/* ações por linha, se quiser incluir exclusão unitária futuramente */}
+                      {/* ações por linha (poderíamos incluir pagto unitário futuramente) */}
                     </TableCell>
                   )}
                 </TableRow>
@@ -831,8 +983,41 @@ export function ContasPagarSimple() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Dialog Marcar Pago */}
+      <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Marcar como Pago (em massa)</DialogTitle>
+            <DialogDescription>
+              Você selecionou {selectedParcelas.length} parcela(s). Defina a data de pagamento.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium">Data de Pagamento</label>
+              <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+            </div>
+            {/* Campos opcionais (descomente se seu schema tiver):
+            <div>
+              <label className="text-sm font-medium">Forma de Pagamento (ID)</label>
+              <Input type="number" placeholder="ex.: 1" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Valor Pago (R$)</label>
+              <Input inputMode="decimal" placeholder="opcional" />
+            </div> */}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleBulkMarkPaid} disabled={paying}>
+              {paying ? "Marcando..." : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
-export default ContasPagarSimple;
