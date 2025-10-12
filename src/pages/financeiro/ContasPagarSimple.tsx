@@ -22,6 +22,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import {
   Filter,
@@ -31,14 +37,15 @@ import {
   X,
   Trash2,
   Eye,
+  ArrowUpDown,
 } from "lucide-react";
 
 type ParcelaRow = {
-  id: number; // id da parcela (contas_pagar_parcelas.id)
+  id: number;              // contas_pagar_parcelas.id
   conta_id: number;
   parcela_num: number;
   valor_parcela_centavos: number;
-  vencimento: string; // ISO date
+  vencimento: string;      // ISO date
   pago: boolean;
   fornecedor?: string;
   descricao?: string;
@@ -46,7 +53,6 @@ type ParcelaRow = {
   filial?: string;
   created_at?: string;
   updated_at?: string;
-  // campos opcionais usados em pagamentos/bulk UI
   forma_pagamento_id?: number | null;
 };
 
@@ -54,6 +60,50 @@ type Fornecedor = { id: number; nome_fantasia: string | null; razao_social: stri
 type Categoria = { id: number; nome: string };
 type Filial = { id: number; nome: string };
 type ContaBancaria = { id: number; banco: string; conta: string };
+
+type SortKey =
+  | "id"
+  | "conta_id"
+  | "fornecedor"
+  | "descricao"
+  | "categoria"
+  | "filial"
+  | "parcela_num"
+  | "vencimento"
+  | "valor_parcela_centavos"
+  | "status";
+
+const COLS = [
+  { key: "select", label: "", fixed: true },
+  { key: "id", label: "ID" },
+  { key: "conta_id", label: "Conta" },
+  { key: "fornecedor", label: "Fornecedor" },
+  { key: "descricao", label: "Descrição" },
+  { key: "categoria", label: "Categoria" },
+  { key: "filial", label: "Filial" },
+  { key: "parcela_num", label: "Parcela" },
+  { key: "vencimento", label: "Vencimento" },
+  { key: "valor_parcela_centavos", label: "Valor" },
+  { key: "status", label: "Status" },
+  { key: "acoes", label: "Ações" },
+] as const;
+
+const VISIBLE_DEFAULT: Record<string, boolean> = {
+  select: true,
+  id: true,
+  conta_id: true,
+  fornecedor: true,
+  descricao: true,
+  categoria: true,
+  filial: true,
+  parcela_num: true,
+  vencimento: true,
+  valor_parcela_centavos: true,
+  status: true,
+  acoes: true,
+};
+
+const LS_COLS_KEY = "cp_simple_columns_v1";
 
 export function ContasPagarSimple() {
   const navigate = useNavigate();
@@ -89,6 +139,20 @@ export function ContasPagarSimple() {
   // Seleção
   const [selectedParcelas, setSelectedParcelas] = useState<number[]>([]);
 
+  // Ordenação
+  const [sortKey, setSortKey] = useState<SortKey>("vencimento");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Visibilidade de colunas
+  const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>(() => {
+    const raw = typeof window !== "undefined" ? localStorage.getItem(LS_COLS_KEY) : null;
+    return raw ? JSON.parse(raw) : VISIBLE_DEFAULT;
+  });
+
+  useEffect(() => {
+    localStorage.setItem(LS_COLS_KEY, JSON.stringify(visibleCols));
+  }, [visibleCols]);
+
   // ===== Helpers =====
   const formatCurrency = (centavos: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
@@ -112,7 +176,6 @@ export function ContasPagarSimple() {
   const fetchParcelas = async () => {
     setLoading(true);
     try {
-      // Busca parcelas em aberto (ajuste conforme seu schema)
       const { data: parcelasData, error: parcelasError } = await supabase
         .from("contas_pagar_parcelas")
         .select("*")
@@ -244,7 +307,16 @@ export function ContasPagarSimple() {
     fetchAuxiliares();
   }, []);
 
-  // ===== Filtros/Ordenação =====
+  // ===== Ordenação / Filtros =====
+  const sortBy = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
   const filteredAndSortedParcelas = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
 
@@ -256,9 +328,16 @@ export function ContasPagarSimple() {
         String(p.id).includes(term) ||
         String(p.conta_id).includes(term);
 
-      const matchFornecedor = filterFornecedor === "all" || String(p.fornecedor || "").includes(filterFornecedor);
-      const matchFilial = filterFilial === "all" || (p.filial === filterFilial);
-      const matchCategoria = filterCategoria === "all" || (p.categoria === filterCategoria);
+      const matchFornecedor =
+        filterFornecedor === "all" ||
+        (p.fornecedor || "").toLowerCase().includes(filterFornecedor.toLowerCase());
+
+      const matchFilial =
+        filterFilial === "all" || (p.filial || "").toLowerCase() === filterFilial.toLowerCase();
+
+      const matchCategoria =
+        filterCategoria === "all" ||
+        (p.categoria || "").toLowerCase() === filterCategoria.toLowerCase();
 
       const matchStatus =
         filterStatus === "all" ||
@@ -266,12 +345,14 @@ export function ContasPagarSimple() {
         (filterStatus === "aberto" && !p.pago);
 
       const valor = p.valor_parcela_centavos / 100;
-      const matchValorMin = !filterValorMin || valor >= parseFloat(filterValorMin);
-      const matchValorMax = !filterValorMax || valor <= parseFloat(filterValorMax);
+      const matchValorMin = !filterValorMin || valor >= Number(filterValorMin.replace(",", "."));
+      const matchValorMax = !filterValorMax || valor <= Number(filterValorMax.replace(",", "."));
 
       const venc = new Date(p.vencimento).getTime();
-      const matchDataIni = !filterDataVencimentoInicio || venc >= new Date(filterDataVencimentoInicio).getTime();
-      const matchDataFim = !filterDataVencimentoFim || venc <= new Date(filterDataVencimentoFim).getTime();
+      const matchDataIni =
+        !filterDataVencimentoInicio || venc >= new Date(filterDataVencimentoInicio).getTime();
+      const matchDataFim =
+        !filterDataVencimentoFim || venc <= new Date(filterDataVencimentoFim).getTime();
 
       return (
         matchTerm &&
@@ -286,8 +367,37 @@ export function ContasPagarSimple() {
       );
     });
 
-    // Ordenação padrão por vencimento asc
-    data.sort((a, b) => new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime());
+    // Ordenação
+    const dir = sortDir === "asc" ? 1 : -1;
+    data.sort((a, b) => {
+      const get = (k: SortKey) => {
+        switch (k) {
+          case "status":
+            return a.pago ? 1 : 0;
+          case "vencimento":
+            return new Date(a.vencimento).getTime();
+          default:
+            // @ts-ignore
+            return a[k] ?? "";
+        }
+      };
+      const va = get(sortKey);
+      const vb = ((): any => {
+        switch (sortKey) {
+          case "status":
+            return b.pago ? 1 : 0;
+          case "vencimento":
+            return new Date(b.vencimento).getTime();
+          default:
+            // @ts-ignore
+            return b[sortKey] ?? "";
+        }
+      })();
+
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+
     return data;
   }, [
     parcelas,
@@ -300,6 +410,8 @@ export function ContasPagarSimple() {
     filterValorMax,
     filterDataVencimentoInicio,
     filterDataVencimentoFim,
+    sortKey,
+    sortDir,
   ]);
 
   // Paginação
@@ -381,7 +493,7 @@ export function ContasPagarSimple() {
     }
   };
 
-  // ===== Render =====
+  // Render
   if (loading) {
     return (
       <div className="space-y-6">
@@ -403,6 +515,23 @@ export function ContasPagarSimple() {
     filterDataVencimentoInicio,
     filterDataVencimentoFim,
   ].filter(Boolean).length;
+
+  const renderTh = (key: SortKey, label: string) => {
+    if (!visibleCols[key]) return null;
+    const active = sortKey === key;
+    return (
+      <TableHead
+        onClick={() => sortBy(key)}
+        className="cursor-pointer select-none"
+        title={`Ordenar por ${label}`}
+      >
+        <div className="inline-flex items-center gap-1">
+          {label}
+          <ArrowUpDown className={`h-3.5 w-3.5 ${active ? "opacity-100" : "opacity-40"}`} />
+        </div>
+      </TableHead>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -432,10 +561,12 @@ export function ContasPagarSimple() {
                   className="pl-10"
                 />
               </div>
+
               <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
                 <Filter className="h-4 w-4 mr-2" />
                 Filtros {activeFiltersCount > 0 && `(${activeFiltersCount})`}
               </Button>
+
               {activeFiltersCount > 0 && (
                 <Button variant="ghost" size="sm" onClick={clearFilters}>
                   <X className="h-4 w-4 mr-2" />
@@ -444,11 +575,28 @@ export function ContasPagarSimple() {
               )}
             </div>
 
-            {/* Personalizar colunas (mantido mesmo sem implementação aqui) */}
-            <Button variant="outline" onClick={() => {}}>
-              <Settings2 className="h-4 w-4 mr-2" />
-              Personalizar Colunas
-            </Button>
+            {/* Personalizar colunas (com persistência) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Settings2 className="h-4 w-4 mr-2" />
+                  Personalizar Colunas
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-h-72 overflow-auto">
+                {COLS.filter((c) => !c.fixed).map((col) => (
+                  <DropdownMenuCheckboxItem
+                    key={col.key}
+                    checked={!!visibleCols[col.key]}
+                    onCheckedChange={(checked) =>
+                      setVisibleCols((prev) => ({ ...prev, [col.key]: !!checked }))
+                    }
+                  >
+                    {col.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {/* Barra de ações em massa */}
@@ -464,73 +612,192 @@ export function ContasPagarSimple() {
               {deleting ? "Excluindo..." : "Excluir Selecionados"}
             </Button>
           </div>
+
+          {/* Filtros avançados */}
+          {showFilters && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <Select value={filterFornecedor} onValueChange={setFilterFornecedor}>
+                <SelectTrigger><SelectValue placeholder="Fornecedor" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos fornecedores</SelectItem>
+                  {fornecedores.map((f) => (
+                    <SelectItem
+                      key={f.id}
+                      value={(f.nome_fantasia || f.razao_social || `#${f.id}`).toLowerCase()}
+                    >
+                      {f.nome_fantasia || f.razao_social || `#${f.id}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={filterFilial} onValueChange={setFilterFilial}>
+                <SelectTrigger><SelectValue placeholder="Filial" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas filiais</SelectItem>
+                  {filiais.map((fi) => (
+                    <SelectItem key={fi.id} value={(fi.nome || "").toLowerCase()}>
+                      {fi.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={filterCategoria} onValueChange={setFilterCategoria}>
+                <SelectTrigger><SelectValue placeholder="Categoria" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas categorias</SelectItem>
+                  {categorias.map((c) => (
+                    <SelectItem key={c.id} value={(c.nome || "").toLowerCase()}>
+                      {c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos status</SelectItem>
+                  <SelectItem value="aberto">Em aberto</SelectItem>
+                  <SelectItem value="pago">Pago</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Input
+                placeholder="Valor mín (R$)"
+                inputMode="decimal"
+                value={filterValorMin}
+                onChange={(e) => setFilterValorMin(e.target.value)}
+              />
+              <Input
+                placeholder="Valor máx (R$)"
+                inputMode="decimal"
+                value={filterValorMax}
+                onChange={(e) => setFilterValorMax(e.target.value)}
+              />
+              <Input
+                type="date"
+                placeholder="Vencimento de"
+                value={filterDataVencimentoInicio || ""}
+                onChange={(e) => setFilterDataVencimentoInicio(e.target.value || null)}
+              />
+              <Input
+                type="date"
+                placeholder="Vencimento até"
+                value={filterDataVencimentoFim || ""}
+                onChange={(e) => setFilterDataVencimentoFim(e.target.value || null)}
+              />
+            </div>
+          )}
         </CardHeader>
 
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead style={{ width: 44 }}></TableHead>
-                <TableHead>ID</TableHead>
-                <TableHead>Conta</TableHead>
-                <TableHead>Fornecedor</TableHead>
-                <TableHead>Descrição</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Filial</TableHead>
-                <TableHead>Parcela</TableHead>
-                <TableHead>Vencimento</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                {visibleCols.select && <TableHead style={{ width: 44 }}></TableHead>}
+                {renderTh("id", "ID")}
+                {renderTh("conta_id", "Conta")}
+                {visibleCols.fornecedor && (
+                  <TableHead onClick={() => sortBy("fornecedor")} className="cursor-pointer select-none" title="Ordenar por Fornecedor">
+                    <div className="inline-flex items-center gap-1">
+                      Fornecedor
+                      <ArrowUpDown className={`h-3.5 w-3.5 ${sortKey === "fornecedor" ? "opacity-100" : "opacity-40"}`} />
+                    </div>
+                  </TableHead>
+                )}
+                {visibleCols.descricao && (
+                  <TableHead onClick={() => sortBy("descricao")} className="cursor-pointer select-none" title="Ordenar por Descrição">
+                    <div className="inline-flex items-center gap-1">
+                      Descrição
+                      <ArrowUpDown className={`h-3.5 w-3.5 ${sortKey === "descricao" ? "opacity-100" : "opacity-40"}`} />
+                    </div>
+                  </TableHead>
+                )}
+                {visibleCols.categoria && (
+                  <TableHead onClick={() => sortBy("categoria")} className="cursor-pointer select-none" title="Ordenar por Categoria">
+                    <div className="inline-flex items-center gap-1">
+                      Categoria
+                      <ArrowUpDown className={`h-3.5 w-3.5 ${sortKey === "categoria" ? "opacity-100" : "opacity-40"}`} />
+                    </div>
+                  </TableHead>
+                )}
+                {visibleCols.filial && (
+                  <TableHead onClick={() => sortBy("filial")} className="cursor-pointer select-none" title="Ordenar por Filial">
+                    <div className="inline-flex items-center gap-1">
+                      Filial
+                      <ArrowUpDown className={`h-3.5 w-3.5 ${sortKey === "filial" ? "opacity-100" : "opacity-40"}`} />
+                    </div>
+                  </TableHead>
+                )}
+                {renderTh("parcela_num", "Parcela")}
+                {renderTh("vencimento", "Vencimento")}
+                {renderTh("valor_parcela_centavos", "Valor")}
+                {renderTh("status", "Status")}
+                {visibleCols.acoes && <TableHead className="text-right">Ações</TableHead>}
               </TableRow>
             </TableHeader>
+
             <TableBody>
               {paginatedData.map((p) => (
                 <TableRow key={p.id}>
-                  <TableCell>
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={selectedParcelas.includes(p.id)}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setSelectedParcelas((prev) =>
-                          checked ? [...prev, p.id] : prev.filter((id) => id !== p.id)
-                        );
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>{p.id}</TableCell>
-                  <TableCell>{p.conta_id}</TableCell>
-                  <TableCell>{p.fornecedor || "-"}</TableCell>
-                  <TableCell className="max-w-[280px]">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Abrir conta"
-                        onClick={() => navigate(`/financeiro/conta/${p.conta_id}`)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <span className="line-clamp-2">{p.descricao || "-"}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{p.categoria || "-"}</TableCell>
-                  <TableCell>{p.filial || "-"}</TableCell>
-                  <TableCell>{p.parcela_num}</TableCell>
-                  <TableCell>{formatDate(p.vencimento)}</TableCell>
-                  <TableCell>{formatCurrency(p.valor_parcela_centavos)}</TableCell>
-                  <TableCell>{getStatusBadge(p.vencimento, p.pago)}</TableCell>
-                  <TableCell className="text-right">
-                    {/* ações linha, se precisar (excluir parcela única, etc.) */}
-                  </TableCell>
+                  {visibleCols.select && (
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={selectedParcelas.includes(p.id)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSelectedParcelas((prev) =>
+                            checked ? [...prev, p.id] : prev.filter((id) => id !== p.id)
+                          );
+                        }}
+                      />
+                    </TableCell>
+                  )}
+
+                  {visibleCols.id && <TableCell>{p.id}</TableCell>}
+                  {visibleCols.conta_id && <TableCell>{p.conta_id}</TableCell>}
+                  {visibleCols.fornecedor && <TableCell>{p.fornecedor || "-"}</TableCell>}
+                  {visibleCols.descricao && (
+                    <TableCell className="max-w-[280px]">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Abrir conta"
+                          onClick={() => navigate(`/financeiro/conta/${p.conta_id}`)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <span className="line-clamp-2">{p.descricao || "-"}</span>
+                      </div>
+                    </TableCell>
+                  )}
+                  {visibleCols.categoria && <TableCell>{p.categoria || "-"}</TableCell>}
+                  {visibleCols.filial && <TableCell>{p.filial || "-"}</TableCell>}
+                  {visibleCols.parcela_num && <TableCell>{p.parcela_num}</TableCell>}
+                  {visibleCols.vencimento && <TableCell>{formatDate(p.vencimento)}</TableCell>}
+                  {visibleCols.valor_parcela_centavos && (
+                    <TableCell>{formatCurrency(p.valor_parcela_centavos)}</TableCell>
+                  )}
+                  {visibleCols.status && (
+                    <TableCell>{getStatusBadge(p.vencimento, p.pago)}</TableCell>
+                  )}
+
+                  {visibleCols.acoes && (
+                    <TableCell className="text-right">
+                      {/* ações por linha, se quiser incluir exclusão unitária futuramente */}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
 
               {paginatedData.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-muted-foreground">
+                  <TableCell colSpan={COLS.filter(c => visibleCols[c.key] || c.fixed).length} className="text-center text-muted-foreground">
                     Nenhuma parcela encontrada com os filtros atuais.
                   </TableCell>
                 </TableRow>
