@@ -12,7 +12,7 @@ import { Cargos } from "@/pages/cadastros/Cargos";
 import { Marcas } from "@/pages/cadastros/Marcas";
 import { ContasPagarSimple as ContasPagar } from "@/pages/financeiro/ContasPagarSimple";
 import NovaContaPagar from "@/pages/financeiro/NovaContaPagar";
-import { ContaDetalhes } from "@/pages/financeiro/ContaDetalhes";
+import ContaDetalhes from "@/pages/financeiro/ContaDetalhes";
 import { FornecedorDetalhes } from "@/pages/financeiro/FornecedorDetalhes";
 import { ContasBancarias } from "@/pages/financeiro/ContasBancarias";
 import { FechamentoCaixa } from "@/pages/financeiro/FechamentoCaixa";
