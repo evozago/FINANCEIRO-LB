@@ -1,8 +1,6 @@
 -- Seed de Categorias Financeiras (idempotente via slug)
--- Requer: colunas parent_id, ordem, archived, slug, cor e UNIQUE INDEX em slug
--- (criadas na migration de refactor que enviei).
+-- Requer: coluna 'slug' única (migration de refactor)
 
--- 1) CATEGORIAS RAIZ (pais)
 INSERT INTO public.categorias_financeiras (nome, tipo, parent_id, ordem, archived, slug, cor)
 VALUES
   ('Despesas Operacionais',  'despesa',       NULL, 10, false, 'despesas-operacionais',  '#FDE68A'),
@@ -15,13 +13,8 @@ VALUES
   ('Receitas',               'receita',       NULL, 80, false, 'receitas',                '#BBF7D0'),
   ('Transferências',         'transferencia', NULL, 90, false, 'transferencias',          '#F3F4F6')
 ON CONFLICT (slug) DO UPDATE SET
-  nome = EXCLUDED.nome,
-  tipo = EXCLUDED.tipo,
-  ordem = EXCLUDED.ordem,
-  archived = EXCLUDED.archived,
-  cor = EXCLUDED.cor;
+  nome = EXCLUDED.nome, tipo = EXCLUDED.tipo, ordem = EXCLUDED.ordem, archived = EXCLUDED.archived, cor = EXCLUDED.cor;
 
--- 2) SUBCATEGORIAS: DESPESAS OPERACIONAIS
 INSERT INTO public.categorias_financeiras (nome, tipo, parent_id, ordem, archived, slug, cor)
 SELECT x.nome, 'despesa', p.id, x.ordem, false, x.slug, x.cor
 FROM (
@@ -40,7 +33,6 @@ JOIN public.categorias_financeiras p ON p.slug = 'despesas-operacionais'
 ON CONFLICT (slug) DO UPDATE SET
   nome = EXCLUDED.nome, ordem = EXCLUDED.ordem, archived = EXCLUDED.archived, cor = EXCLUDED.cor, parent_id = EXCLUDED.parent_id;
 
--- 3) SUBCATEGORIAS: FORNECEDORES (exemplos reais da sua operação)
 INSERT INTO public.categorias_financeiras (nome, tipo, parent_id, ordem, archived, slug, cor)
 SELECT x.nome, 'despesa', p.id, x.ordem, false, x.slug, '#FCA5A5'
 FROM (
@@ -55,7 +47,6 @@ JOIN public.categorias_financeiras p ON p.slug = 'fornecedores'
 ON CONFLICT (slug) DO UPDATE SET
   nome = EXCLUDED.nome, ordem = EXCLUDED.ordem, archived = EXCLUDED.archived, parent_id = EXCLUDED.parent_id;
 
--- 4) SUBCATEGORIAS: IMPOSTOS
 INSERT INTO public.categorias_financeiras (nome, tipo, parent_id, ordem, archived, slug, cor)
 SELECT x.nome, 'despesa', p.id, x.ordem, false, x.slug, '#F5D0FE'
 FROM (
@@ -70,7 +61,6 @@ JOIN public.categorias_financeiras p ON p.slug = 'impostos'
 ON CONFLICT (slug) DO UPDATE SET
   nome = EXCLUDED.nome, ordem = EXCLUDED.ordem, archived = EXCLUDED.archived, parent_id = EXCLUDED.parent_id;
 
--- 5) SUBCATEGORIAS: FOLHA DE PAGAMENTO
 INSERT INTO public.categorias_financeiras (nome, tipo, parent_id, ordem, archived, slug, cor)
 SELECT x.nome, 'despesa', p.id, x.ordem, false, x.slug, '#BFDBFE'
 FROM (
@@ -85,7 +75,6 @@ JOIN public.categorias_financeiras p ON p.slug = 'folha-pagamento'
 ON CONFLICT (slug) DO UPDATE SET
   nome = EXCLUDED.nome, ordem = EXCLUDED.ordem, archived = EXCLUDED.archived, parent_id = EXCLUDED.parent_id;
 
--- 6) SUBCATEGORIAS: MARKETING
 INSERT INTO public.categorias_financeiras (nome, tipo, parent_id, ordem, archived, slug, cor)
 SELECT x.nome, 'despesa', p.id, x.ordem, false, x.slug, '#D1FAE5'
 FROM (
@@ -99,7 +88,6 @@ JOIN public.categorias_financeiras p ON p.slug = 'marketing'
 ON CONFLICT (slug) DO UPDATE SET
   nome = EXCLUDED.nome, ordem = EXCLUDED.ordem, archived = EXCLUDED.archived, parent_id = EXCLUDED.parent_id;
 
--- 7) SUBCATEGORIAS: SISTEMAS E FERRAMENTAS
 INSERT INTO public.categorias_financeiras (nome, tipo, parent_id, ordem, archived, slug, cor)
 SELECT x.nome, 'despesa', p.id, x.ordem, false, x.slug, '#E5E7EB'
 FROM (
@@ -115,7 +103,6 @@ JOIN public.categorias_financeiras p ON p.slug = 'sistemas-ferramentas'
 ON CONFLICT (slug) DO UPDATE SET
   nome = EXCLUDED.nome, ordem = EXCLUDED.ordem, archived = EXCLUDED.archived, parent_id = EXCLUDED.parent_id;
 
--- 8) SUBCATEGORIAS: LOGÍSTICA & FRETES
 INSERT INTO public.categorias_financeiras (nome, tipo, parent_id, ordem, archived, slug, cor)
 SELECT x.nome, 'despesa', p.id, x.ordem, false, x.slug, '#E9D5FF'
 FROM (
@@ -130,21 +117,19 @@ JOIN public.categorias_financeiras p ON p.slug = 'logistica-fretes'
 ON CONFLICT (slug) DO UPDATE SET
   nome = EXCLUDED.nome, ordem = EXCLUDED.ordem, archived = EXCLUDED.archived, parent_id = EXCLUDED.parent_id;
 
--- 9) RECEITAS
 INSERT INTO public.categorias_financeiras (nome, tipo, parent_id, ordem, archived, slug, cor)
 SELECT x.nome, 'receita', p.id, x.ordem, false, x.slug, '#BBF7D0'
 FROM (
   VALUES
-    ('Vendas Loja Física',    10, 'rec-vendas-loja-fisica'),
-    ('Vendas Loja Online',    20, 'rec-vendas-shopify'),
-    ('Frete Cobrado do Cliente', 30, 'rec-frete-cobrado'),
-    ('Outras Receitas',       90, 'rec-outras')
+    ('Vendas Loja Física',        10, 'rec-vendas-loja-fisica'),
+    ('Vendas Loja Online',        20, 'rec-vendas-shopify'),
+    ('Frete Cobrado do Cliente',  30, 'rec-frete-cobrado'),
+    ('Outras Receitas',           90, 'rec-outras')
 ) AS x(nome, ordem, slug)
 JOIN public.categorias_financeiras p ON p.slug = 'receitas'
 ON CONFLICT (slug) DO UPDATE SET
   nome = EXCLUDED.nome, ordem = EXCLUDED.ordem, archived = EXCLUDED.archived, parent_id = EXCLUDED.parent_id;
 
--- 10) TRANSFERÊNCIAS
 INSERT INTO public.categorias_financeiras (nome, tipo, parent_id, ordem, archived, slug, cor)
 SELECT x.nome, 'transferencia', p.id, x.ordem, false, x.slug, '#F3F4F6'
 FROM (
