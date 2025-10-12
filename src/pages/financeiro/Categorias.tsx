@@ -37,6 +37,16 @@ const TIPOS: Array<{ value: Categoria["tipo"]; label: string }> = [
   { value: "transferencia", label: "Transferência" },
 ];
 
+function isArchivedSchemaError(err: any) {
+  const msg = String(err?.message || "").toLowerCase();
+  return err?.code === "PGRST204" || msg.includes("archived") && msg.includes("schema");
+}
+
+function isOrdemMissing(err: any) {
+  const msg = String(err?.message || "").toLowerCase();
+  return err?.code === "42703" || (msg.includes("column") && msg.includes("ordem"));
+}
+
 function Categorias() {
   const { toast } = useToast();
 
@@ -55,7 +65,7 @@ function Categorias() {
     nome: "", tipo: "despesa", parent_id: null, ordem: 0, archived: false, cor: "#E2E8F0",
   });
 
-  // mover (dialog rápido para trocar pai)
+  // mover (dialog)
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveNode, setMoveNode] = useState<Categoria | null>(null);
   const [moveParentId, setMoveParentId] = useState<string>("null");
@@ -91,12 +101,7 @@ function Categorias() {
       if (error) throw error;
       setCategorias((data || []) as Categoria[]);
     } catch (err: any) {
-      const isColMissing =
-        err?.code === "42703" ||
-        (typeof err?.message === "string" &&
-          err.message.toLowerCase().includes("column") &&
-          err.message.includes("ordem"));
-      if (isColMissing) {
+      if (isOrdemMissing(err)) {
         try {
           const { data, error } = await supabase
             .from("categorias_financeiras")
@@ -157,44 +162,79 @@ function Categorias() {
     return recurse(tree);
   }, [tree, search, showArchived]);
 
-  // ===== salvar / editar / excluir / arquivar =====
+  // ===== salvar / editar =====
   const handleSave = async () => {
     if (!form.nome || !form.tipo) {
       toast({ title: "Atenção", description: "Preencha ao menos Nome e Tipo.", variant: "destructive" });
       return;
     }
+
+    // monta payload completo
+    const payloadFull = {
+      nome: form.nome,
+      tipo: form.tipo,
+      parent_id: form.parent_id ?? null,
+      ordem: form.ordem ?? 0,
+      archived: !!form.archived,
+      cor: form.cor ?? "#E2E8F0",
+    };
+
+    // versão sem o campo 'archived' (fallback p/ cache desatualizado)
+    const { archived, ...payloadNoArchived } = payloadFull as any;
+
     try {
       if (editing) {
         const { error } = await supabase.from("categorias_financeiras")
-          .update({
-            nome: form.nome,
-            tipo: form.tipo,
-            parent_id: form.parent_id ?? null,
-            ordem: form.ordem ?? 0,
-            archived: !!form.archived,
-            cor: form.cor ?? "#E2E8F0",
-          })
-          .eq("id", editing.id);
+          .update(payloadFull).eq("id", editing.id);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria atualizada." });
       } else {
         const { error } = await supabase.from("categorias_financeiras")
-          .insert([{
-            nome: form.nome,
-            tipo: form.tipo,
-            parent_id: form.parent_id ?? null,
-            ordem: form.ordem ?? 0,
-            archived: !!form.archived,
-            cor: form.cor ?? "#E2E8F0",
-          }]);
+          .insert([payloadFull]);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria criada." });
       }
       await fetchCategorias();
       resetForm();
     } catch (err: any) {
-      console.error(err);
-      toast({ title: "Erro ao salvar", description: err?.message || "Falha ao salvar categoria.", variant: "destructive" });
+      // Se o PostgREST não conhece ainda a coluna 'archived', tenta sem ela
+      if (isArchivedSchemaError(err)) {
+        try {
+          if (editing) {
+            const { error } = await supabase.from("categorias_financeiras")
+              .update(payloadNoArchived).eq("id", editing.id);
+            if (error) throw error;
+            toast({
+              title: "Atualizada (com fallback)",
+              description: "O schema do PostgREST ainda não enxergava 'archived'. Tentei sem o campo.",
+            });
+          } else {
+            const { error } = await supabase.from("categorias_financeiras")
+              .insert([payloadNoArchived]);
+            if (error) throw error;
+            toast({
+              title: "Criada (com fallback)",
+              description: "O schema do PostgREST ainda não enxergava 'archived'. Tentei sem o campo.",
+            });
+          }
+          await fetchCategorias();
+          resetForm();
+        } catch (inner: any) {
+          console.error(inner);
+          toast({
+            title: "Erro ao salvar",
+            description: inner?.message || "Falha ao salvar categoria.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        console.error(err);
+        toast({
+          title: "Erro ao salvar",
+          description: err?.message || "Falha ao salvar categoria.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -212,6 +252,7 @@ function Categorias() {
 
   const handleNewRoot = () => { resetForm(); };
 
+  // ===== excluir / arquivar =====
   const canDelete = async (id: number) => {
     try {
       const { data, error } = await supabase.rpc("can_delete_categoria", { p_id: id });
@@ -251,8 +292,16 @@ function Categorias() {
       toast({ title: c.archived ? "Ativada" : "Arquivada", description: `"${c.nome}" ${c.archived ? "reativada" : "arquivada"}.` });
       fetchCategorias();
     } catch (err: any) {
-      console.error(err);
-      toast({ title: "Erro", description: err?.message || "Falha ao alterar status.", variant: "destructive" });
+      if (isArchivedSchemaError(err)) {
+        toast({
+          title: "Precisamos atualizar o schema",
+          description: "O PostgREST ainda não enxerga a coluna 'archived'. Rode a migration/NOTIFY abaixo (hotfix).",
+          variant: "destructive",
+        });
+      } else {
+        console.error(err);
+        toast({ title: "Erro", description: err?.message || "Falha ao alterar status.", variant: "destructive" });
+      }
     }
   };
 
@@ -294,7 +343,6 @@ function Categorias() {
       setMoveNode(null);
       await fetchCategorias();
       if (editing && editing.id === moveNode.id) {
-        // mantém o form coerente
         setForm((f) => ({ ...f, parent_id: newParentId }));
       }
     } catch (err: any) {
@@ -479,7 +527,7 @@ function Categorias() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Para <strong>editar o “Categoria Pai”</strong>, basta escolher aqui um novo pai e clicar em <em>{editing ? "Salvar alterações" : "Criar categoria"}</em>.
+                  Para <strong>editar o “Categoria Pai”</strong>, escolha aqui um novo pai e clique em <em>{editing ? "Salvar alterações" : "Criar categoria"}</em>.
                 </p>
               </div>
 
@@ -521,7 +569,7 @@ function Categorias() {
                   <SelectItem
                     key={c.id}
                     value={String(c.id)}
-                    disabled={c.id === moveNode?.id} // não pode ser o próprio
+                    disabled={c.id === moveNode?.id}
                   >
                     {c.nome}
                   </SelectItem>
@@ -545,5 +593,5 @@ function Categorias() {
   );
 }
 
-export { Categorias }; // para compatibilizar com imports existentes
+export { Categorias }; // compatível com import { Categorias }
 export default Categorias;
