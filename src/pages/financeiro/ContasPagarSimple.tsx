@@ -15,8 +15,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Search, Filter, Edit, Check, Trash2, Settings2,
-  CalendarIcon, ArrowUpDown, X, Plus, RotateCcw
+  Search, Filter, Edit, Check, Trash2, Settings2, CalendarIcon,
+  ArrowUpDown, X, Plus, RotateCcw
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -49,24 +49,23 @@ interface FormaPagamento { id: number; nome: string; }
 export function ContasPagarSimple() {
   const { toast } = useToast();
   const navigate = useNavigate();
-
   const [parcelas, setParcelas] = useState<ParcelaCompleta[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedParcelas, setSelectedParcelas] = useState<number[]>([]);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
 
-  // Paginação
+  // paginação
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
-  // Dados auxiliares
+  // dados auxiliares
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [filiais, setFiliais] = useState<Filial[]>([]);
   const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([]);
   const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([]);
 
-  // Filtros
+  // filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [filterFornecedor, setFilterFornecedor] = useState<string>('all');
   const [filterFilial, setFilterFilial] = useState<string>('all');
@@ -78,12 +77,12 @@ export function ContasPagarSimple() {
   const [filterDataVencimentoFim, setFilterDataVencimentoFim] = useState<Date | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Modais
+  // modais
   const [showEditMassModal, setShowEditMassModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showColumnsModal, setShowColumnsModal] = useState(false);
 
-  // Edição em massa
+  // edição em massa
   const [massEditData, setMassEditData] = useState({
     categoria_id: '',
     filial_id: '',
@@ -92,32 +91,24 @@ export function ContasPagarSimple() {
     observacao: ''
   });
 
-  // Pagamento em lote
+  // pagamento em lote
   const [paymentData, setPaymentData] = useState<{
     [key: number]: { data_pagamento: Date | null; conta_bancaria_id: string; codigo_identificador: string } | undefined
   }>({});
   const [paymentObservacao, setPaymentObservacao] = useState('');
   const [replicarPrimeiro, setReplicarPrimeiro] = useState(false);
 
-  // Colunas visíveis
+  // visibilidade colunas
   const [visibleColumns, setVisibleColumns] = useState({
-    fornecedor: true,
-    descricao: true,
-    numero_nota: true,
-    categoria: true,
-    filial: true,
-    valor_parcela: true,
-    parcela: true,
-    vencimento: true,
-    status: true
+    fornecedor: true, descricao: true, numero_nota: true, categoria: true, filial: true,
+    valor_parcela: true, parcela: true, vencimento: true, status: true
   });
 
-  // Ordenação
+  // ordenação
   const [sortField, setSortField] = useState<keyof ParcelaCompleta>('vencimento');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => { fetchAllData(); }, []);
-
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -133,37 +124,32 @@ export function ContasPagarSimple() {
   };
 
   const fetchParcelas = async () => {
-    // paginação interna p/ coletar tudo
     let allParcelas: any[] = [];
     let from = 0;
     const batchSize = 1000;
     let hasMore = true;
 
     while (hasMore) {
-      const { data, error } = await supabase
+      const { data: parcelasData, error: parcelasError } = await supabase
         .from('contas_pagar_parcelas')
         .select('*')
         .order('vencimento')
         .range(from, from + batchSize - 1);
-      if (error) throw error;
-      if (data && data.length > 0) {
-        allParcelas = [...allParcelas, ...data];
-        from += batchSize;
-        hasMore = data.length === batchSize;
-      } else { hasMore = false; }
+      if (parcelasError) throw parcelasError;
+      if (parcelasData?.length) { allParcelas = [...allParcelas, ...parcelasData]; from += batchSize; hasMore = parcelasData.length === batchSize; }
+      else { hasMore = false; }
     }
 
-    if (allParcelas.length === 0) { setParcelas([]); return; }
+    if (!allParcelas.length) { setParcelas([]); return; }
 
     const contasIds = [...new Set(allParcelas.map(p => p.conta_id))];
 
-    // contas
     let allContas: any[] = [];
     for (let i = 0; i < contasIds.length; i += 1000) {
       const batch = contasIds.slice(i, i + 1000);
-      const { data, error } = await supabase.from('contas_pagar').select('*').in('id', batch);
-      if (error) throw error;
-      if (data) allContas = [...allContas, ...data];
+      const { data: contasData, error: contasError } = await supabase.from('contas_pagar').select('*').in('id', batch);
+      if (contasError) throw contasError;
+      if (contasData) allContas = [...allContas, ...contasData];
     }
 
     const fornecedorIds = [...new Set(allContas.map(c => c.fornecedor_id).filter(Boolean))];
@@ -191,11 +177,11 @@ export function ContasPagarSimple() {
       if (data) filiaisData = [...filiaisData, ...data];
     }
 
-    const rows: ParcelaCompleta[] = allParcelas.map(parcela => {
+    const parcelasCompletas = allParcelas.map(parcela => {
       const conta = allContas.find(c => c.id === parcela.conta_id);
       const fornecedor = fornecedoresData.find((f: any) => f.id === conta?.fornecedor_id);
-      const categoria  = categoriasData.find((c: any) => c.id === conta?.categoria_id);
-      const filial     = filiaisData.find((f: any) => f.id === conta?.filial_id);
+      const categoria = categoriasData.find((c: any) => c.id === conta?.categoria_id);
+      const filial = filiaisData.find((f: any) => f.id === conta?.filial_id);
       return {
         id: parcela.id,
         conta_id: parcela.conta_id,
@@ -217,7 +203,7 @@ export function ContasPagarSimple() {
       };
     });
 
-    setParcelas(rows);
+    setParcelas(parcelasCompletas);
   };
 
   const fetchFornecedores = async () => {
@@ -241,82 +227,90 @@ export function ContasPagarSimple() {
     setFormasPagamento(data || []);
   };
 
-  // Filtros/ordenação
+  // filtros + ordenação
   const filteredAndSortedParcelas = React.useMemo(() => {
     let filtered = parcelas.filter(p => {
-      if (searchTerm
-          && !p.fornecedor.toLowerCase().includes(searchTerm.toLowerCase())
-          && !p.descricao.toLowerCase().includes(searchTerm.toLowerCase())
-          && !p.numero_nota.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-
+      if (searchTerm &&
+          !p.fornecedor.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !p.descricao.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !p.numero_nota.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       if (filterFornecedor !== 'all' && p.fornecedor_id !== parseInt(filterFornecedor)) return false;
       if (filterFilial !== 'all' && p.filial_id !== parseInt(filterFilial)) return false;
       if (filterCategoria !== 'all' && p.categoria_id !== parseInt(filterCategoria)) return false;
 
       if (filterStatus !== 'all') {
         const hoje = new Date(); hoje.setHours(0,0,0,0);
-        const dv = new Date(p.vencimento); dv.setHours(0,0,0,0);
+        const dataVencimento = new Date(p.vencimento); dataVencimento.setHours(0,0,0,0);
         if (filterStatus === 'pago' && !p.pago) return false;
         if (filterStatus === 'pendente' && p.pago) return false;
-        if (filterStatus === 'vencido' && (p.pago || dv >= hoje)) return false;
-        if (filterStatus === 'a_vencer' && (p.pago || dv < hoje)) return false;
+        if (filterStatus === 'vencido' && (p.pago || dataVencimento >= hoje)) return false;
+        if (filterStatus === 'a_vencer' && (p.pago || dataVencimento < hoje)) return false;
       }
 
       if (filterValorMin && p.valor_parcela_centavos < parseFloat(filterValorMin) * 100) return false;
       if (filterValorMax && p.valor_parcela_centavos > parseFloat(filterValorMax) * 100) return false;
 
       if (filterDataVencimentoInicio) {
-        const dv = new Date(p.vencimento);
-        if (dv < filterDataVencimentoInicio) return false;
+        const dataVenc = new Date(p.vencimento);
+        if (dataVenc < filterDataVencimentoInicio) return false;
       }
       if (filterDataVencimentoFim) {
-        const dv = new Date(p.vencimento);
-        if (dv > filterDataVencimentoFim) return false;
+        const dataVenc = new Date(p.vencimento);
+        if (dataVenc > filterDataVencimentoFim) return false;
       }
-
       return true;
     });
 
     filtered.sort((a, b) => {
-      const aVal = a[sortField]; const bVal = b[sortField];
+      const aVal = a[sortField] as any;
+      const bVal = b[sortField] as any;
       if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
+
     return filtered;
   }, [
     parcelas, searchTerm, filterFornecedor, filterFilial, filterCategoria,
-    filterStatus, filterValorMin, filterValorMax, filterDataVencimentoInicio,
-    filterDataVencimentoFim, sortField, sortDirection
+    filterStatus, filterValorMin, filterValorMax,
+    filterDataVencimentoInicio, filterDataVencimentoFim, sortField, sortDirection
   ]);
 
-  // Paginação corrente
+  const handleSort = (field: keyof ParcelaCompleta) => {
+    if (sortField === field) setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDirection('asc'); }
+  };
+
+  // seleção
+  const paginatedData = React.useMemo(() => {
+    const totalItems = filteredAndSortedParcelas.length;
+    const totalPages = Math.ceil(totalItems / pageSize);
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredAndSortedParcelas.slice(startIndex, endIndex);
+  }, [filteredAndSortedParcelas, currentPage, pageSize]);
+
   const totalItems = filteredAndSortedParcelas.length;
   const totalPages = Math.ceil(totalItems / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
-  const paginatedData = filteredAndSortedParcelas.slice(startIndex, endIndex);
 
   useEffect(() => { setCurrentPage(1); }, [
-    searchTerm, filterFornecedor, filterFilial, filterCategoria,
-    filterStatus, filterValorMin, filterValorMax,
-    filterDataVencimentoInicio, filterDataVencimentoFim
+    searchTerm, filterFornecedor, filterFilial, filterCategoria, filterStatus,
+    filterValorMin, filterValorMax, filterDataVencimentoInicio, filterDataVencimentoFim
   ]);
 
-  // Seleção
   const toggleSelectAll = () => {
-    const page = paginatedData;
-    if (selectedParcelas.length === page.length) setSelectedParcelas([]);
-    else setSelectedParcelas(page.map(p => p.id));
+    if (selectedParcelas.length === paginatedData.length) setSelectedParcelas([]);
+    else setSelectedParcelas(paginatedData.map(p => p.id));
     setLastSelectedIndex(null);
   };
 
   const toggleSelectParcela = (id: number, index: number, event: React.MouseEvent) => {
-    const page = paginatedData;
     if (event.shiftKey && lastSelectedIndex !== null) {
       const start = Math.min(lastSelectedIndex, index);
       const end = Math.max(lastSelectedIndex, index);
-      const rangeIds = page.slice(start, end + 1).map(p => p.id);
+      const rangeIds = paginatedData.slice(start, end + 1).map(p => p.id);
       setSelectedParcelas(prev => Array.from(new Set([...prev, ...rangeIds])));
     } else {
       setSelectedParcelas(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
@@ -324,125 +318,13 @@ export function ContasPagarSimple() {
     }
   };
 
-  // -------- AÇÕES EM MASSA --------
-
-  // Edição em massa (mantido do seu original)
-  const handleMassEdit = async () => {
-    try {
-      const updates: any = {};
-      if (massEditData.categoria_id) updates.categoria_id = parseInt(massEditData.categoria_id);
-      if (massEditData.filial_id) updates.filial_id = parseInt(massEditData.filial_id);
-      if (massEditData.forma_pagamento_id) updates.forma_pagamento_id = parseInt(massEditData.forma_pagamento_id);
-      if (massEditData.vencimento) updates.vencimento = format(massEditData.vencimento, 'yyyy-MM-dd');
-      if (massEditData.observacao) updates.observacao = massEditData.observacao;
-
-      const contasIds = [...new Set(filteredAndSortedParcelas
-        .filter(p => selectedParcelas.includes(p.id))
-        .map(p => p.conta_id))];
-
-      // atualiza contas (categoria/filial)
-      if (updates.categoria_id || updates.filial_id) {
-        const contaUpdates: any = {};
-        if (updates.categoria_id) contaUpdates.categoria_id = updates.categoria_id;
-        if (updates.filial_id) contaUpdates.filial_id = updates.filial_id;
-        await supabase.from('contas_pagar').update(contaUpdates).in('id', contasIds);
-      }
-
-      // atualiza parcelas (vencimento/forma/observação)
-      const parcelaUpdates: any = {};
-      if (updates.vencimento) parcelaUpdates.vencimento = updates.vencimento;
-      if (updates.forma_pagamento_id) parcelaUpdates.forma_pagamento_id = updates.forma_pagamento_id;
-      if (updates.observacao) parcelaUpdates.observacao = updates.observacao;
-      if (Object.keys(parcelaUpdates).length > 0) {
-        await supabase.from('contas_pagar_parcelas').update(parcelaUpdates).in('id', selectedParcelas);
-      }
-
-      toast({ title: `${selectedParcelas.length} parcela(s) atualizada(s) com sucesso` });
-      setShowEditMassModal(false);
-      setSelectedParcelas([]);
-      setMassEditData({ categoria_id: '', filial_id: '', forma_pagamento_id: '', vencimento: null, observacao: '' });
-      fetchParcelas();
-    } catch (error: any) {
-      toast({ title: 'Erro ao atualizar parcelas', description: error?.message, variant: 'destructive' });
-    }
-  };
-
-  // Pagamento em lote (mantido do seu original: RPC pagar_parcela)
-  const handleMassPayment = async () => {
-    try {
-      const selecionadas = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id));
-      if (selecionadas.length === 0) {
-        toast({ title: 'Nenhuma parcela selecionada', variant: 'destructive' });
-        return;
-      }
-
-      const primeira = selecionadas[0];
-      const dadosPrimeiro = replicarPrimeiro ? paymentData[primeira.id] : null;
-
-      for (const parcela of selecionadas) {
-        const payment = replicarPrimeiro && dadosPrimeiro ? dadosPrimeiro : paymentData[parcela.id];
-        if (!payment?.data_pagamento) {
-          toast({
-            title: 'Data de pagamento obrigatória',
-            description: `Preencha a data de pagamento para ${parcela.fornecedor}`,
-            variant: 'destructive'
-          });
-          return;
-        }
-
-        await supabase.rpc('pagar_parcela', {
-          parcela_id: parcela.id,
-          conta_bancaria_id: payment?.conta_bancaria_id ? parseInt(payment.conta_bancaria_id) : null,
-          forma_pagamento_id: parcela.forma_pagamento_id || 1,
-          valor_pago_centavos: parcela.valor_parcela_centavos,
-          observacao_param: paymentObservacao
-        });
-      }
-
-      toast({ title: `${selecionadas.length} parcela(s) paga(s) com sucesso` });
-      setShowPaymentModal(false);
-      setSelectedParcelas([]);
-      setPaymentData({});
-      setPaymentObservacao('');
-      setReplicarPrimeiro(false);
-      fetchParcelas();
-    } catch (error: any) {
-      toast({ title: 'Erro ao processar pagamento', description: error?.message || 'Erro desconhecido', variant: 'destructive' });
-    }
-  };
-
-  // Desfazer pago em massa (NOVO)
-  const handleBulkUnmarkPaid = async () => {
-    if (selectedParcelas.length === 0) {
-      toast({ title: 'Selecione ao menos 1 parcela', variant: 'destructive' });
-      return;
-    }
-    if (!confirm('Remover o status de pago das parcelas selecionadas?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('contas_pagar_parcelas')
-        .update({ pago: false, data_pagamento: null })
-        .in('id', selectedParcelas);
-      if (error) throw error;
-
-      toast({ title: `${selectedParcelas.length} parcela(s) marcadas como NÃO pagas` });
-      setSelectedParcelas([]);
-      fetchParcelas();
-    } catch (err: any) {
-      toast({ title: 'Erro ao desfazer pago', description: err?.message, variant: 'destructive' });
-    }
-  };
-
-  // Excluir em massa (NOVO — botão estava sem ação)
+  // ==== NOVO: Excluir Selecionados (em massa) ====
   const handleBulkDelete = async () => {
-    if (selectedParcelas.length === 0) {
+    if (!selectedParcelas.length) {
       toast({ title: 'Selecione ao menos 1 parcela', variant: 'destructive' });
       return;
     }
-    const msg = selectedParcelas.length === 1
-      ? 'Tem certeza que deseja excluir esta parcela?'
-      : `Tem certeza que deseja excluir ${selectedParcelas.length} parcelas?`;
+    const msg = selectedParcelas.length === 1 ? 'Excluir esta parcela?' : `Excluir ${selectedParcelas.length} parcelas?`;
     if (!confirm(msg)) return;
 
     try {
@@ -455,41 +337,124 @@ export function ContasPagarSimple() {
       toast({ title: `${selectedParcelas.length} parcela(s) excluída(s)` });
       setSelectedParcelas([]);
       fetchParcelas();
-    } catch (err: any) {
-      toast({
-        title: 'Erro ao excluir',
-        description: err?.message || 'Verifique as políticas RLS/Permissões no Supabase.',
-        variant: 'destructive'
-      });
+    } catch (error: any) {
+      toast({ title: 'Erro ao excluir', description: error?.message || '', variant: 'destructive' });
     }
   };
 
-  // Helpers de UI
+  const handleMassEdit = async () => {
+    try {
+      const updates: any = {};
+      if (massEditData.categoria_id) updates.categoria_id = parseInt(massEditData.categoria_id);
+      if (massEditData.filial_id) updates.filial_id = parseInt(massEditData.filial_id);
+      if (massEditData.forma_pagamento_id) updates.forma_pagamento_id = parseInt(massEditData.forma_pagamento_id);
+      if (massEditData.vencimento) updates.vencimento = format(massEditData.vencimento, 'yyyy-MM-dd');
+      if (massEditData.observacao) updates.observacao = massEditData.observacao;
+
+      const contasIds = [...new Set(filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).map(p => p.conta_id))];
+      if (updates.categoria_id || updates.filial_id) {
+        const contaUpdates: any = {};
+        if (updates.categoria_id) contaUpdates.categoria_id = updates.categoria_id;
+        if (updates.filial_id) contaUpdates.filial_id = updates.filial_id;
+        await supabase.from('contas_pagar').update(contaUpdates).in('id', contasIds);
+      }
+
+      const parcelaUpdates: any = {};
+      if (updates.vencimento) parcelaUpdates.vencimento = updates.vencimento;
+      if (updates.forma_pagamento_id) parcelaUpdates.forma_pagamento_id = updates.forma_pagamento_id;
+      if (updates.observacao) parcelaUpdates.observacao = updates.observacao;
+
+      if (Object.keys(parcelaUpdates).length) {
+        await supabase.from('contas_pagar_parcelas').update(parcelaUpdates).in('id', selectedParcelas);
+      }
+
+      toast({ title: `${selectedParcelas.length} parcela(s) atualizada(s)` });
+      setShowEditMassModal(false);
+      setSelectedParcelas([]);
+      setMassEditData({ categoria_id: '', filial_id: '', forma_pagamento_id: '', vencimento: null, observacao: '' });
+      fetchParcelas();
+    } catch (error) {
+      toast({ title: 'Erro ao atualizar parcelas', variant: 'destructive' });
+    }
+  };
+
+  const handleMassPayment = async () => {
+    try {
+      const selecionadas = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id));
+      if (!selecionadas.length) {
+        toast({ title: 'Nenhuma parcela selecionada', variant: 'destructive' });
+        return;
+      }
+      const primeira = selecionadas[0];
+      const dadosPrimeiro = replicarPrimeiro ? paymentData[primeira.id] : null;
+
+      for (const parcela of selecionadas) {
+        const payment = replicarPrimeiro && dadosPrimeiro ? dadosPrimeiro : paymentData[parcela.id];
+        if (!payment?.data_pagamento) {
+          toast({ title: 'Data de pagamento obrigatória', description: `Preencha a data de ${parcela.fornecedor}`, variant: 'destructive' });
+          return;
+        }
+        await supabase.rpc('pagar_parcela', {
+          parcela_id: parcela.id,
+          conta_bancaria_id: payment?.conta_bancaria_id ? parseInt(payment.conta_bancaria_id) : null,
+          forma_pagamento_id: parcela.forma_pagamento_id || 1,
+          valor_pago_centavos: parcela.valor_parcela_centavos,
+          observacao_param: paymentObservacao
+        });
+      }
+      toast({ title: `${selectedParcelas.length} parcela(s) paga(s)` });
+      setShowPaymentModal(false);
+      setSelectedParcelas([]);
+      setPaymentData({});
+      setPaymentObservacao('');
+      setReplicarPrimeiro(false);
+      fetchParcelas();
+    } catch (error: any) {
+      toast({ title: 'Erro ao processar pagamento', description: error?.message || 'Erro desconhecido', variant: 'destructive' });
+    }
+  };
+
+  // ==== NOVO: Desfazer Pago (em massa) ====
+  const handleBulkUnmarkPaid = async () => {
+    if (!selectedParcelas.length) {
+      toast({ title: 'Selecione ao menos 1 parcela', variant: 'destructive' });
+      return;
+    }
+    if (!confirm('Remover o status de pago das parcelas selecionadas?')) return;
+    try {
+      const { error } = await supabase
+        .from('contas_pagar_parcelas')
+        .update({ pago: false, data_pagamento: null })
+        .in('id', selectedParcelas);
+      if (error) throw error;
+      toast({ title: `${selectedParcelas.length} parcela(s) marcadas como NÃO pagas` });
+      setSelectedParcelas([]);
+      fetchParcelas();
+    } catch (error: any) {
+      toast({ title: 'Erro ao desfazer pago', description: error?.message || '', variant: 'destructive' });
+    }
+  };
+
   const formatCurrency = (centavos: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(centavos / 100);
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pt-BR');
   const getStatusBadge = (vencimento: string, pago: boolean) => {
     if (pago) return <Badge className="bg-green-500">Pago</Badge>;
-    const hoje = new Date();
-    const dataVenc = new Date(vencimento);
-    if (dataVenc < hoje) return <Badge variant="destructive">Vencido</Badge>;
-    if (dataVenc <= new Date(hoje.getTime() + 7 * 24 * 60 * 60 * 1000)) return <Badge variant="outline">Vence em 7 dias</Badge>;
+    const hoje = new Date(); const dv = new Date(vencimento);
+    if (dv < hoje) return <Badge variant="destructive">Vencido</Badge>;
+    if (dv <= new Date(hoje.getTime() + 7 * 24 * 60 * 60 * 1000)) return <Badge variant="outline">Vence em 7 dias</Badge>;
     return <Badge variant="default">Pendente</Badge>;
   };
 
   const clearFilters = () => {
-    setSearchTerm(''); setFilterFornecedor('all'); setFilterFilial('all'); setFilterCategoria('all');
-    setFilterStatus('all'); setFilterValorMin(''); setFilterValorMax('');
-    setFilterDataVencimentoInicio(null); setFilterDataVencimentoFim(null);
+    setSearchTerm(''); setFilterFornecedor('all'); setFilterFilial('all'); setFilterCategoria('all'); setFilterStatus('all');
+    setFilterValorMin(''); setFilterValorMax(''); setFilterDataVencimentoInicio(null); setFilterDataVencimentoFim(null);
   };
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
-          <p className="text-muted-foreground">Carregando...</p>
-        </div>
+        <div><h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1><p className="text-muted-foreground">Carregando...</p></div>
       </div>
     );
   }
@@ -499,9 +464,7 @@ export function ContasPagarSimple() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
-          <p className="text-muted-foreground">
-            Total: {parcelas.length} parcela(s) | Exibindo: {filteredAndSortedParcelas.length}
-          </p>
+          <p className="text-muted-foreground">Total: {parcelas.length} parcela(s) | Exibindo: {filteredAndSortedParcelas.length}</p>
         </div>
         <Button onClick={() => navigate('/financeiro/contas-pagar/nova')}>
           <Plus className="h-4 w-4 mr-2" />
@@ -515,31 +478,21 @@ export function ContasPagarSimple() {
             <div className="flex-1 flex items-center gap-4">
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por fornecedor, descrição ou ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+                <Input placeholder="Buscar por fornecedor, descrição ou ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
               </div>
               <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
                 <Filter className="h-4 w-4 mr-2" />
                 Filtros {[
-                  filterFornecedor!=='all', filterFilial!=='all', filterCategoria!=='all',
-                  filterStatus!=='all', filterValorMin, filterValorMax,
-                  filterDataVencimentoInicio, filterDataVencimentoFim
+                  filterFornecedor !== 'all', filterFilial !== 'all', filterCategoria !== 'all', filterStatus !== 'all',
+                  filterValorMin, filterValorMax, filterDataVencimentoInicio, filterDataVencimentoFim
                 ].filter(Boolean).length > 0 && `(${
-                  [
-                    filterFornecedor!=='all', filterFilial!=='all', filterCategoria!=='all',
-                    filterStatus!=='all', filterValorMin, filterValorMax,
-                    filterDataVencimentoInicio, filterDataVencimentoFim
-                  ].filter(Boolean).length
+                  [filterFornecedor !== 'all', filterFilial !== 'all', filterCategoria !== 'all', filterStatus !== 'all',
+                   filterValorMin, filterValorMax, filterDataVencimentoInicio, filterDataVencimentoFim].filter(Boolean).length
                 })`}
               </Button>
               {(
-                filterFornecedor!=='all' || filterFilial!=='all' || filterCategoria!=='all' ||
-                filterStatus!=='all' || filterValorMin || filterValorMax ||
-                filterDataVencimentoInicio || filterDataVencimentoFim
+                filterFornecedor !== 'all' || filterFilial !== 'all' || filterCategoria !== 'all' || filterStatus !== 'all' ||
+                filterValorMin || filterValorMax || filterDataVencimentoInicio || filterDataVencimentoFim
               ) && (
                 <Button variant="ghost" size="sm" onClick={clearFilters}>
                   <X className="h-4 w-4 mr-2" />
@@ -598,7 +551,6 @@ export function ContasPagarSimple() {
                     <SelectItem value="a_vencer">A Vencer</SelectItem>
                     <SelectItem value="vencido">Vencidas</SelectItem>
                     <SelectItem value="pago">Pagas</SelectItem>
-                    <SelectItem value="pendente">Pendentes</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -620,12 +572,7 @@ export function ContasPagarSimple() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 bg-background z-50">
-                    <Calendar
-                      mode="single"
-                      selected={filterDataVencimentoInicio || undefined}
-                      onSelect={(date) => setFilterDataVencimentoInicio(date || null)}
-                      className="pointer-events-auto"
-                    />
+                    <Calendar mode="single" selected={filterDataVencimentoInicio || undefined} onSelect={(date) => setFilterDataVencimentoInicio(date || null)} className="pointer-events-auto" />
                   </PopoverContent>
                 </Popover>
               </div>
@@ -639,12 +586,7 @@ export function ContasPagarSimple() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 bg-background z-50">
-                    <Calendar
-                      mode="single"
-                      selected={filterDataVencimentoFim || undefined}
-                      onSelect={(date) => setFilterDataVencimentoFim(date || null)}
-                      className="pointer-events-auto"
-                    />
+                    <Calendar mode="single" selected={filterDataVencimentoFim || undefined} onSelect={(date) => setFilterDataVencimentoFim(date || null)} className="pointer-events-auto" />
                   </PopoverContent>
                 </Popover>
               </div>
@@ -658,16 +600,20 @@ export function ContasPagarSimple() {
               <span className="text-sm font-medium">{selectedParcelas.length} itens selecionados</span>
               <div className="flex-1" />
               <Button size="sm" variant="outline" onClick={() => setShowEditMassModal(true)}>
-                <Edit className="h-4 w-4 mr-2" /> Editar em Massa ({selectedParcelas.length})
+                <Edit className="h-4 w-4 mr-2" />
+                Editar em Massa ({selectedParcelas.length})
               </Button>
               <Button size="sm" onClick={() => setShowPaymentModal(true)}>
-                <Check className="h-4 w-4 mr-2" /> Marcar como Pago
+                <Check className="h-4 w-4 mr-2" />
+                Marcar como Pago
               </Button>
               <Button size="sm" variant="outline" onClick={handleBulkUnmarkPaid}>
-                <RotateCcw className="h-4 w-4 mr-2" /> Desfazer Pago
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Desfazer Pago
               </Button>
               <Button size="sm" variant="destructive" onClick={handleBulkDelete}>
-                <Trash2 className="h-4 w-4 mr-2" /> Excluir Selecionados
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir Selecionados
               </Button>
             </div>
           )}
@@ -683,16 +629,12 @@ export function ContasPagarSimple() {
                     />
                   </TableHead>
                   {visibleColumns.fornecedor && (
-                    <TableHead onClick={() => {
-                      setSortField('fornecedor'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-                    }} className="cursor-pointer">
+                    <TableHead onClick={() => handleSort('fornecedor')} className="cursor-pointer">
                       Fornecedor <ArrowUpDown className="inline h-4 w-4" />
                     </TableHead>
                   )}
                   {visibleColumns.descricao && (
-                    <TableHead onClick={() => {
-                      setSortField('descricao'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-                    }} className="cursor-pointer">
+                    <TableHead onClick={() => handleSort('descricao')} className="cursor-pointer">
                       Descrição <ArrowUpDown className="inline h-4 w-4" />
                     </TableHead>
                   )}
@@ -700,17 +642,13 @@ export function ContasPagarSimple() {
                   {visibleColumns.categoria && <TableHead>Categoria</TableHead>}
                   {visibleColumns.filial && <TableHead>Filial</TableHead>}
                   {visibleColumns.valor_parcela && (
-                    <TableHead onClick={() => {
-                      setSortField('valor_parcela_centavos'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-                    }} className="cursor-pointer">
+                    <TableHead onClick={() => handleSort('valor_parcela_centavos')} className="cursor-pointer">
                       Valor <ArrowUpDown className="inline h-4 w-4" />
                     </TableHead>
                   )}
                   {visibleColumns.parcela && <TableHead>Parcela</TableHead>}
                   {visibleColumns.vencimento && (
-                    <TableHead onClick={() => {
-                      setSortField('vencimento'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-                    }} className="cursor-pointer">
+                    <TableHead onClick={() => handleSort('vencimento')} className="cursor-pointer">
                       Vencimento <ArrowUpDown className="inline h-4 w-4" />
                     </TableHead>
                   )}
@@ -774,7 +712,6 @@ export function ContasPagarSimple() {
             </Table>
           </div>
 
-          {/* Controles de paginação */}
           <div className="flex items-center justify-between px-2 py-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
@@ -792,6 +729,7 @@ export function ContasPagarSimple() {
                 </SelectContent>
               </Select>
             </div>
+
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>Primeira</Button>
               <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Anterior</Button>
@@ -813,29 +751,23 @@ export function ContasPagarSimple() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Categoria</Label>
-              <Select value={massEditData.categoria_id} onValueChange={(v) => setMassEditData({...massEditData, categoria_id: v})}>
+              <Select value={massEditData.categoria_id} onValueChange={(v) => setMassEditData({ ...massEditData, categoria_id: v })}>
                 <SelectTrigger><SelectValue placeholder="Selecionar categoria" /></SelectTrigger>
-                <SelectContent>
-                  {categorias.map(c => (<SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>))}
-                </SelectContent>
+                <SelectContent>{categorias.map(c => (<SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>))}</SelectContent>
               </Select>
             </div>
             <div>
               <Label>Filial</Label>
-              <Select value={massEditData.filial_id} onValueChange={(v) => setMassEditData({...massEditData, filial_id: v})}>
+              <Select value={massEditData.filial_id} onValueChange={(v) => setMassEditData({ ...massEditData, filial_id: v })}>
                 <SelectTrigger><SelectValue placeholder="Selecionar filial" /></SelectTrigger>
-                <SelectContent>
-                  {filiais.map(f => (<SelectItem key={f.id} value={f.id.toString()}>{f.nome}</SelectItem>))}
-                </SelectContent>
+                <SelectContent>{filiais.map(f => (<SelectItem key={f.id} value={f.id.toString()}>{f.nome}</SelectItem>))}</SelectContent>
               </Select>
             </div>
             <div>
               <Label>Forma de Pagamento</Label>
-              <Select value={massEditData.forma_pagamento_id} onValueChange={(v) => setMassEditData({...massEditData, forma_pagamento_id: v})}>
+              <Select value={massEditData.forma_pagamento_id} onValueChange={(v) => setMassEditData({ ...massEditData, forma_pagamento_id: v })}>
                 <SelectTrigger><SelectValue placeholder="Selecionar forma de pagamento" /></SelectTrigger>
-                <SelectContent>
-                  {formasPagamento.map(f => (<SelectItem key={f.id} value={f.id.toString()}>{f.nome}</SelectItem>))}
-                </SelectContent>
+                <SelectContent>{formasPagamento.map(f => (<SelectItem key={f.id} value={f.id.toString()}>{f.nome}</SelectItem>))}</SelectContent>
               </Select>
             </div>
             <div>
@@ -848,31 +780,20 @@ export function ContasPagarSimple() {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={massEditData.vencimento || undefined}
-                    onSelect={(date) => setMassEditData({...massEditData, vencimento: date || null})}
-                    className="pointer-events-auto"
-                  />
+                  <Calendar mode="single" selected={massEditData.vencimento || undefined} onSelect={(date) => setMassEditData({ ...massEditData, vencimento: date || null })} className="pointer-events-auto" />
                 </PopoverContent>
               </Popover>
             </div>
             <div className="col-span-2">
               <Label>Observações</Label>
-              <Textarea
-                placeholder="Observações adicionais"
-                value={massEditData.observacao}
-                onChange={(e) => setMassEditData({...massEditData, observacao: e.target.value})}
-              />
+              <Textarea placeholder="Observações adicionais" value={massEditData.observacao} onChange={(e) => setMassEditData({ ...massEditData, observacao: e.target.value })} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setShowEditMassModal(false);
               setMassEditData({ categoria_id: '', filial_id: '', forma_pagamento_id: '', vencimento: null, observacao: '' });
-            }}>
-              Cancelar
-            </Button>
+            }}>Cancelar</Button>
             <Button onClick={handleMassEdit}>Atualizar {selectedParcelas.length} Parcela(s)</Button>
           </DialogFooter>
         </DialogContent>
@@ -887,16 +808,9 @@ export function ContasPagarSimple() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex items-center space-x-2 p-3 bg-muted rounded-lg">
-              <Checkbox
-                id="replicar-primeiro"
-                checked={replicarPrimeiro}
-                onCheckedChange={(checked) => setReplicarPrimeiro(!!checked)}
-              />
-              <Label htmlFor="replicar-primeiro" className="cursor-pointer">
-                Replicar dados do primeiro pagamento para todos
-              </Label>
+              <Checkbox id="replicar-primeiro" checked={replicarPrimeiro} onCheckedChange={(checked) => setReplicarPrimeiro(!!checked)} />
+              <Label htmlFor="replicar-primeiro" className="cursor-pointer">Replicar dados do primeiro pagamento para todos</Label>
             </div>
-
             {filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).map(parcela => (
               <Card key={parcela.id}>
                 <CardHeader>
@@ -911,7 +825,7 @@ export function ContasPagarSimple() {
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start">
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {paymentData[parcela.id]?.data_pagamento ? format(paymentData[parcela.id].data_pagamento, 'dd/MM/yyyy') : 'Selecionar'}
+                          {paymentData[parcela.id]?.data_pagamento ? format(paymentData[parcela.id].data_pagamento as Date, 'dd/MM/yyyy') : 'Selecionar'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0 bg-background z-50">
@@ -926,3 +840,107 @@ export function ContasPagarSimple() {
                               codigo_identificador: paymentData[parcela.id]?.codigo_identificador || ''
                             }
                           })}
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div>
+                    <Label>Banco Pagador</Label>
+                    <Select
+                      value={paymentData[parcela.id]?.conta_bancaria_id || ''}
+                      onValueChange={(v) => setPaymentData({
+                        ...paymentData,
+                        [parcela.id]: {
+                          data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
+                          conta_bancaria_id: v,
+                          codigo_identificador: paymentData[parcela.id]?.codigo_identificador || ''
+                        }
+                      })}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Banco" /></SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        {contasBancarias.map(c => (<SelectItem key={c.id} value={c.id.toString()}>{c.nome_conta} - {c.banco}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Código Identificador</Label>
+                    <Input
+                      placeholder="Ex: TED123"
+                      value={paymentData[parcela.id]?.codigo_identificador || ''}
+                      onChange={(e) => setPaymentData({
+                        ...paymentData,
+                        [parcela.id]: {
+                          data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
+                          conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
+                          codigo_identificador: e.target.value
+                        }
+                      })}
+                    />
+                  </div>
+                  <div className="col-span-3 flex justify-between items-center pt-2 border-t">
+                    <span className="text-sm text-muted-foreground">Original</span>
+                    <span className="font-bold">{formatCurrency(parcela.valor_parcela_centavos)}</span>
+                    <span className="text-sm text-muted-foreground">Pago</span>
+                    <span className="font-bold text-green-600">{formatCurrency(parcela.valor_parcela_centavos)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            <div>
+              <Label>Observações</Label>
+              <Textarea placeholder="Ex: Pagamento via PIX, desconto por antecipação, juros por atraso, etc."
+                        value={paymentObservacao} onChange={(e) => setPaymentObservacao(e.target.value)} />
+            </div>
+            <div className="flex justify-between items-center p-4 bg-muted rounded-lg">
+              <div>
+                <span className="text-sm text-muted-foreground">Total Original:</span>
+                <span className="ml-2 font-bold">
+                  {formatCurrency(filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + p.valor_parcela_centavos, 0))}
+                </span>
+              </div>
+              <div>
+                <span className="text-sm text-muted-foreground">Total a Pagar:</span>
+                <span className="ml-2 font-bold text-green-600">
+                  {formatCurrency(filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + p.valor_parcela_centavos, 0))}
+                </span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPaymentModal(false)}>Cancelar</Button>
+            <Button onClick={handleMassPayment}>Confirmar Pagamento ({selectedParcelas.length})</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Personalizar Colunas */}
+      <Dialog open={showColumnsModal} onOpenChange={setShowColumnsModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Personalizar Colunas</DialogTitle>
+            <CardDescription>Marque/desmarque para mostrar/ocultar colunas.</CardDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {Object.entries(visibleColumns).map(([key, value]) => (
+              <div key={key} className="flex items-center space-x-2">
+                <Checkbox checked={value} onCheckedChange={(checked) => setVisibleColumns({ ...visibleColumns, [key]: !!checked })} />
+                <Label className="capitalize">{key.replace('_', ' ')}</Label>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVisibleColumns({
+              fornecedor: true, descricao: true, numero_nota: true, categoria: true,
+              filial: true, valor_parcela: true, parcela: true, vencimento: true, status: true
+            })}>Restaurar Padrão</Button>
+            <Button onClick={() => setShowColumnsModal(false)}>Aplicar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export default ContasPagarSimple;
