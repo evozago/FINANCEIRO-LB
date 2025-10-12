@@ -37,34 +37,22 @@ const TIPOS: Array<{ value: Categoria["tipo"]; label: string }> = [
   { value: "transferencia", label: "Transferência" },
 ];
 
-// helpers de erro (fallbacks)
-function isArchivedSchemaError(err: any) {
+const SWATCHES = ["#E2E8F0","#FDE68A","#FCA5A5","#BFDBFE","#D1FAE5","#F5D0FE","#E9D5FF","#F3F4F6","#FCD34D","#86EFAC"];
+
+// ===== helpers de erro (fallbacks)
+function hasSchemaCacheErrFor(field: string, err: any) {
   const msg = String(err?.message || "").toLowerCase();
-  return err?.code === "PGRST204" || (msg.includes("archived") && msg.includes("schema"));
+  return err?.code === "PGRST204" || (msg.includes(field) && msg.includes("schema"));
 }
 function isOrdemMissing(err: any) {
   const msg = String(err?.message || "").toLowerCase();
   return err?.code === "42703" || (msg.includes("column") && msg.includes("ordem"));
 }
 
-// paleta rápida (swatches)
-const SWATCHES = [
-  "#E2E8F0", // cinza claro
-  "#FDE68A", // amarelo
-  "#FCA5A5", // vermelho claro
-  "#BFDBFE", // azul claro
-  "#D1FAE5", // verde claro
-  "#F5D0FE", // lilás
-  "#E9D5FF", // roxo claro
-  "#F3F4F6", // cinza neutro
-  "#FCD34D", // amarelo forte
-  "#86EFAC", // verde
-];
-
 function Categorias() {
   const { toast } = useToast();
 
-  // dados principais
+  // dados
   const [loading, setLoading] = useState(true);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
 
@@ -73,7 +61,7 @@ function Categorias() {
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState("");
 
-  // formulário
+  // form
   const [editing, setEditing] = useState<Categoria | null>(null);
   const [form, setForm] = useState<Partial<Categoria>>({
     nome: "",
@@ -84,7 +72,7 @@ function Categorias() {
     cor: "#E2E8F0",
   });
 
-  // mover (dialog)
+  // mover
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveNode, setMoveNode] = useState<Categoria | null>(null);
   const [moveParentId, setMoveParentId] = useState<string>("null");
@@ -92,7 +80,7 @@ function Categorias() {
 
   const toggleExpand = (id: number) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
 
-  // fetch com fallback (ordem pode não existir ainda)
+  // ===== fetch com fallback (ordem pode não existir)
   const fetchCategorias = async () => {
     setLoading(true);
     try {
@@ -120,13 +108,11 @@ function Categorias() {
         console.error(err);
         toast({ title: "Erro", description: "Não foi possível carregar categorias.", variant: "destructive" });
       }
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
   useEffect(() => { fetchCategorias(); }, []);
 
-  // monta árvore
+  // ===== monta árvore
   const tree = useMemo<TreeNode[]>(() => {
     const map = new Map<number, TreeNode>();
     const roots: TreeNode[] = [];
@@ -144,7 +130,7 @@ function Categorias() {
     return roots;
   }, [categorias]);
 
-  // filtro visual
+  // ===== filtro visual
   const filteredTree = useMemo<TreeNode[]>(() => {
     const term = search.trim().toLowerCase();
     const showNode = (n: TreeNode) => (showArchived || !n.archived);
@@ -164,7 +150,7 @@ function Categorias() {
     return recurse(tree);
   }, [tree, search, showArchived]);
 
-  // salvar/editar com fallback para archived ausente no schema cache
+  // ===== salvar/editar com fallback para 'archived' e 'cor'
   const handleSave = async () => {
     if (!form.nome || !form.tipo) {
       toast({ title: "Atenção", description: "Preencha ao menos Nome e Tipo.", variant: "destructive" });
@@ -179,37 +165,96 @@ function Categorias() {
       archived: !!form.archived,
       cor: form.cor ?? "#E2E8F0",
     };
-    const { archived, ...payloadNoArchived } = payloadFull as any;
 
-    try {
+    // variações de payload sem campos (para fallback de schema)
+    const { archived, ...payloadNoArchived } = payloadFull as any;
+    const { cor, ...payloadNoCor } = payloadFull as any;
+    const { cor: _c, archived: _a, ...payloadSemCorSemArchived } = payloadFull as any;
+
+    const trySave = async (body: any) => {
       if (editing) {
-        const { error } = await supabase.from("categorias_financeiras").update(payloadFull).eq("id", editing.id);
+        const { error } = await supabase.from("categorias_financeiras").update(body).eq("id", editing.id);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria atualizada." });
       } else {
-        const { error } = await supabase.from("categorias_financeiras").insert([payloadFull]);
+        const { error } = await supabase.from("categorias_financeiras").insert([body]);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria criada." });
       }
       await fetchCategorias();
       resetForm();
+    };
+
+    try {
+      await trySave(payloadFull);
     } catch (err: any) {
-      if (isArchivedSchemaError(err)) {
+      // 1º fallback: remover apenas 'cor'
+      if (hasSchemaCacheErrFor("cor", err)) {
         try {
-          if (editing) {
-            const { error } = await supabase.from("categorias_financeiras").update(payloadNoArchived).eq("id", editing.id);
-            if (error) throw error;
-            toast({ title: "Atualizada (fallback)", description: "Schema ainda não enxergava 'archived'." });
+          await trySave(payloadNoCor);
+          toast({ title: "Gravado sem 'cor' (fallback)", description: "Atualize o schema e salve novamente para gravar a cor." });
+          return;
+        } catch (inner1: any) {
+          // 2º fallback: remover apenas 'archived'
+          if (hasSchemaCacheErrFor("archived", inner1)) {
+            try {
+              await trySave(payloadNoArchived);
+              toast({ title: "Gravado sem 'archived' (fallback)", description: "Schema ainda não enxergava a coluna." });
+              return;
+            } catch (inner2: any) {
+              // 3º fallback: remover ambos
+              if (hasSchemaCacheErrFor("cor", inner2) || hasSchemaCacheErrFor("archived", inner2)) {
+                try {
+                  await trySave(payloadSemCorSemArchived);
+                  toast({ title: "Gravado (fallback máximo)", description: "Salvou sem 'cor' e 'archived' por cache de schema." });
+                  return;
+                } catch (inner3: any) {
+                  console.error(inner3);
+                  toast({ title: "Erro ao salvar", description: inner3?.message || "Falha ao salvar.", variant: "destructive" });
+                }
+              } else {
+                console.error(inner2);
+                toast({ title: "Erro ao salvar", description: inner2?.message || "Falha ao salvar.", variant: "destructive" });
+              }
+            }
           } else {
-            const { error } = await supabase.from("categorias_financeiras").insert([payloadNoArchived]);
-            if (error) throw error;
-            toast({ title: "Criada (fallback)", description: "Schema ainda não enxergava 'archived'." });
+            console.error(inner1);
+            toast({ title: "Erro ao salvar", description: inner1?.message || "Falha ao salvar.", variant: "destructive" });
           }
-          await fetchCategorias();
-          resetForm();
-        } catch (inner: any) {
-          console.error(inner);
-          toast({ title: "Erro ao salvar", description: inner?.message || "Falha ao salvar.", variant: "destructive" });
+        }
+      } else if (hasSchemaCacheErrFor("archived", err)) {
+        // 1º fallback: remover 'archived'
+        try {
+          await trySave(payloadNoArchived);
+          toast({ title: "Gravado sem 'archived' (fallback)", description: "Schema ainda não enxergava a coluna." });
+          return;
+        } catch (inner1b: any) {
+          // 2º fallback: remover 'cor'
+          if (hasSchemaCacheErrFor("cor", inner1b)) {
+            try {
+              await trySave(payloadNoCor);
+              toast({ title: "Gravado sem 'cor' (fallback)", description: "Atualize o schema para usar o campo de cor." });
+              return;
+            } catch (inner2b: any) {
+              // 3º fallback: remover ambos
+              if (hasSchemaCacheErrFor("cor", inner2b) || hasSchemaCacheErrFor("archived", inner2b)) {
+                try {
+                  await trySave(payloadSemCorSemArchived);
+                  toast({ title: "Gravado (fallback máximo)", description: "Sem 'cor' e 'archived' por cache de schema." });
+                  return;
+                } catch (inner3b: any) {
+                  console.error(inner3b);
+                  toast({ title: "Erro ao salvar", description: inner3b?.message || "Falha ao salvar.", variant: "destructive" });
+                }
+              } else {
+                console.error(inner2b);
+                toast({ title: "Erro ao salvar", description: inner2b?.message || "Falha ao salvar.", variant: "destructive" });
+              }
+            }
+          } else {
+            console.error(inner1b);
+            toast({ title: "Erro ao salvar", description: inner1b?.message || "Falha ao salvar.", variant: "destructive" });
+          }
         }
       } else {
         console.error(err);
@@ -235,6 +280,7 @@ function Categorias() {
   };
   const handleNewRoot = () => resetForm();
 
+  // ===== exclusão / arquivar
   const canDelete = async (id: number) => {
     try {
       const { data, error } = await supabase.rpc("can_delete_categoria", { p_id: id });
@@ -273,7 +319,7 @@ function Categorias() {
       toast({ title: c.archived ? "Ativada" : "Arquivada", description: `"${c.nome}" ${c.archived ? "reativada" : "arquivada"}.` });
       fetchCategorias();
     } catch (err: any) {
-      if (isArchivedSchemaError(err)) {
+      if (hasSchemaCacheErrFor("archived", err)) {
         toast({ title: "Atualize o schema", description: "Rode a migration/notify para 'archived'.", variant: "destructive" });
       } else {
         console.error(err);
@@ -282,7 +328,7 @@ function Categorias() {
     }
   };
 
-  // mover (dialog)
+  // ===== mover (dialog)
   const openMove = (c: Categoria) => {
     setMoveNode(c);
     setMoveParentId(c.parent_id == null ? "null" : String(c.parent_id));
@@ -299,8 +345,6 @@ function Categorias() {
   const confirmMove = async () => {
     if (!moveNode) return;
     const newParentId = moveParentId === "null" ? null : parseInt(moveParentId, 10);
-
-    // valida árvore
     const map = new Map<number, TreeNode>();
     (categorias || []).forEach((c) => map.set(c.id, { ...(c as any), children: [] }));
     (categorias || []).forEach((c) => {
@@ -315,7 +359,6 @@ function Categorias() {
       toast({ title: "Não é possível mover", description: "Não mova para um descendente da própria categoria.", variant: "destructive" });
       return;
     }
-
     try {
       setSavingMove(true);
       const { error } = await supabase.from("categorias_financeiras").update({ parent_id: newParentId }).eq("id", moveNode.id);
@@ -324,18 +367,14 @@ function Categorias() {
       setMoveOpen(false);
       setMoveNode(null);
       await fetchCategorias();
-      if (editing && editing.id === moveNode.id) {
-        setForm((f) => ({ ...f, parent_id: newParentId }));
-      }
+      if (editing && editing.id === moveNode.id) setForm((f) => ({ ...f, parent_id: newParentId }));
     } catch (err: any) {
       console.error(err);
       toast({ title: "Erro ao mover", description: err?.message || "Falha ao mover.", variant: "destructive" });
-    } finally {
-      setSavingMove(false);
-    }
+    } finally { setSavingMove(false); }
   };
 
-  // UI
+  // ===== UI
   if (loading) {
     return (
       <div className="container mx-auto p-6">
@@ -353,7 +392,7 @@ function Categorias() {
           <p className="text-muted-foreground">Organize suas categorias em árvore de forma simples.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={handleNewRoot}>
+          <Button onClick={() => { setEditing(null); setForm({ nome:"",tipo:"despesa",parent_id:null,ordem:0,archived:false,cor:"#E2E8F0" }); }}>
             <Plus className="h-4 w-4 mr-2" />
             Nova (raiz)
           </Button>
@@ -363,26 +402,18 @@ function Categorias() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Árvore */}
         <Card>
-          <CardHeader>
-            <CardTitle>Estrutura</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Estrutura</CardTitle></CardHeader>
           <CardContent>
             <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
               <div className="relative flex-1 max-w-md">
-                <Input
-                  placeholder="Buscar por nome..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
+                <Input placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="showArchived" checked={showArchived} onCheckedChange={(v) => setShowArchived(!!v)} />
                 <Label htmlFor="showArchived">Mostrar arquivadas</Label>
               </div>
             </div>
-
             <Separator className="mb-3" />
-
             {filteredTree.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada.</p>
             ) : (
@@ -395,7 +426,7 @@ function Categorias() {
                     handleEdit={handleEdit}
                     toggleArchive={toggleArchive}
                     handleDelete={handleDelete}
-                    openMove={openMove}
+                    openMove={(c) => { setMoveNode(c); setMoveParentId(c.parent_id == null ? "null" : String(c.parent_id)); setMoveOpen(true); }}
                   />
                 ))}
               </div>
@@ -403,50 +434,31 @@ function Categorias() {
           </CardContent>
         </Card>
 
-        {/* Formulário */}
+        {/* Form */}
         <Card>
-          <CardHeader>
-            <CardTitle>{editing ? `Editar: ${editing.nome}` : "Nova Categoria"}</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>{editing ? `Editar: ${editing.nome}` : "Nova Categoria"}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-3">
               <div>
                 <Label>Nome</Label>
-                <Input
-                  value={form.nome || ""}
-                  onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
-                  placeholder="Ex.: Despesas Operacionais"
-                />
+                <Input value={form.nome || ""} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} placeholder="Ex.: Despesas Operacionais" />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <Label>Tipo</Label>
-                  <Select
-                    value={(form.tipo as string) || "despesa"}
-                    onValueChange={(v) => setForm((f) => ({ ...f, tipo: v as Categoria["tipo"] }))}
-                  >
+                  <Select value={(form.tipo as string) || "despesa"} onValueChange={(v) => setForm((f) => ({ ...f, tipo: v as Categoria["tipo"] }))}>
                     <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
-                    <SelectContent>
-                      {TIPOS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                    </SelectContent>
+                    <SelectContent>{TIPOS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-
                 <div>
                   <Label>Ordem</Label>
-                  <Input
-                    type="number"
-                    value={String(form.ordem ?? 0)}
-                    onChange={(e) => setForm((f) => ({ ...f, ordem: parseInt(e.target.value || "0", 10) }))}
-                  />
+                  <Input type="number" value={String(form.ordem ?? 0)} onChange={(e) => setForm((f) => ({ ...f, ordem: parseInt(e.target.value || "0", 10) }))} />
                 </div>
-
-                {/* >>>>>>> Color Picker remodelado <<<<<<< */}
                 <div>
                   <Label>Cor</Label>
                   <div className="flex items-center gap-3">
-                    {/* Picker nativo */}
                     <input
                       type="color"
                       value={form.cor || "#E2E8F0"}
@@ -454,24 +466,11 @@ function Categorias() {
                       className="h-10 w-14 rounded-md border cursor-pointer"
                       aria-label="Selecionar cor"
                     />
-                    {/* Badge preview */}
-                    <div
-                      className="h-10 w-10 rounded-md border"
-                      style={{ backgroundColor: form.cor || "#E2E8F0" }}
-                      title={form.cor || "#E2E8F0"}
-                    />
+                    <div className="h-10 w-10 rounded-md border" style={{ backgroundColor: form.cor || "#E2E8F0" }} title={form.cor || "#E2E8F0"} />
                   </div>
-                  {/* Swatches rápidas */}
                   <div className="flex flex-wrap gap-2 mt-2">
                     {SWATCHES.map((hex) => (
-                      <button
-                        key={hex}
-                        type="button"
-                        className="h-6 w-6 rounded-md border hover:scale-105 transition"
-                        style={{ backgroundColor: hex }}
-                        onClick={() => setForm((f) => ({ ...f, cor: hex }))}
-                        title={hex}
-                      />
+                      <button key={hex} type="button" className="h-6 w-6 rounded-md border hover:scale-105 transition" style={{ backgroundColor: hex }} onClick={() => setForm((f) => ({ ...f, cor: hex }))} title={hex} />
                     ))}
                   </div>
                 </div>
@@ -487,9 +486,7 @@ function Categorias() {
                   <SelectContent>
                     <SelectItem value="null">(raiz)</SelectItem>
                     {categorias.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)} disabled={editing?.id === c.id}>
-                        {c.nome}
-                      </SelectItem>
+                      <SelectItem key={c.id} value={String(c.id)} disabled={editing?.id === c.id}>{c.nome}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -504,7 +501,7 @@ function Categorias() {
               </div>
 
               <div className="flex justify-end gap-2">
-                {editing && <Button variant="outline" onClick={resetForm}>Cancelar</Button>}
+                {editing && <Button variant="outline" onClick={() => { setEditing(null); setForm({ nome:"",tipo:"despesa",parent_id:null,ordem:0,archived:false,cor:"#E2E8F0" }); }}>Cancelar</Button>}
                 <Button onClick={handleSave}>{editing ? "Salvar alterações" : "Criar categoria"}</Button>
               </div>
             </div>
@@ -519,7 +516,6 @@ function Categorias() {
             <DialogTitle>Mover categoria</DialogTitle>
             <DialogDescription>Selecione um novo “Categoria Pai” para <strong>{moveNode?.nome}</strong>.</DialogDescription>
           </DialogHeader>
-
           <div className="space-y-2">
             <Label>Novo pai</Label>
             <Select value={moveParentId} onValueChange={setMoveParentId}>
@@ -527,18 +523,40 @@ function Categorias() {
               <SelectContent>
                 <SelectItem value="null">(raiz)</SelectItem>
                 {categorias.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)} disabled={c.id === moveNode?.id}>
-                    {c.nome}
-                  </SelectItem>
+                  <SelectItem key={c.id} value={String(c.id)} disabled={c.id === moveNode?.id}>{c.nome}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">Dica: não é permitido mover para dentro de si mesma ou de um descendente.</p>
+            <p className="text-xs text-muted-foreground">Dica: não é permitido mover para si mesma ou para um descendente.</p>
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setMoveOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmMove} disabled={savingMove}>{savingMove ? "Movendo..." : "Confirmar"}</Button>
+            <Button onClick={async () => {
+              if (!moveNode) return;
+              const newParentId = moveParentId === "null" ? null : parseInt(moveParentId, 10);
+              // valida similar ao handle
+              const map = new Map<number, TreeNode>();
+              (categorias || []).forEach((c) => map.set(c.id, { ...(c as any), children: [] }));
+              (categorias || []).forEach((c) => { const node = map.get(c.id)!; if (c.parent_id && map.has(c.parent_id)) map.get(c.parent_id)!.children.push(node); });
+              const isDesc = (aId: number, bId: number): boolean => {
+                const b = map.get(bId); if (!b) return false;
+                const parent = b.parent_id; if (parent == null) return false;
+                if (parent === aId) return true;
+                return isDesc(aId, parent);
+              };
+              if (newParentId === moveNode.id) { alert("Categoria pai não pode ser ela mesma."); return; }
+              if (newParentId != null && isDesc(moveNode.id, newParentId)) { alert("Não mova para um descendente."); return; }
+              setSavingMove(true);
+              try {
+                const { error } = await supabase.from("categorias_financeiras").update({ parent_id: newParentId }).eq("id", moveNode.id);
+                if (error) throw error;
+                toast({ title: "Movida", description: `"${moveNode.nome}" foi movida.` });
+                setMoveOpen(false); setMoveNode(null); await fetchCategorias();
+              } catch (e:any) {
+                console.error(e);
+                toast({ title:"Erro ao mover", description: e?.message || "Falha ao mover.", variant:"destructive" });
+              } finally { setSavingMove(false); }
+            }} disabled={savingMove}>{savingMove ? "Movendo..." : "Confirmar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -546,7 +564,6 @@ function Categorias() {
   );
 }
 
-// componente de linha (quebra para manter código principal limpo)
 const NodeRow: React.FC<{
   n: TreeNode;
   level: number;
@@ -573,38 +590,23 @@ const NodeRow: React.FC<{
           <span className={`font-medium ${n.archived ? "line-through text-muted-foreground" : ""}`}>{n.nome}</span>
           <Badge variant="outline" className="ml-2">{n.tipo}</Badge>
         </div>
-
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => openMove(n)} title="Mover (trocar categoria pai)">
-            <ArrowRightLeft className="h-4 w-4 mr-1" /> Mover
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleEdit(n)} title="Editar">
-            <SquarePen className="h-4 w-4 mr-1" /> Editar
-          </Button>
+          <Button variant="outline" size="sm" onClick={() => openMove(n)} title="Mover"><ArrowRightLeft className="h-4 w-4 mr-1" /> Mover</Button>
+          <Button variant="outline" size="sm" onClick={() => handleEdit(n)} title="Editar"><SquarePen className="h-4 w-4 mr-1" /> Editar</Button>
           <Button variant="outline" size="sm" onClick={() => toggleArchive(n)} title={n.archived ? "Ativar" : "Arquivar"}>
             {n.archived ? <ArchiveRestore className="h-4 w-4 mr-1" /> : <Archive className="h-4 w-4 mr-1" />}
             {n.archived ? "Ativar" : "Arquivar"}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => handleDelete(n)} title="Excluir">
-            <Trash2 className="h-4 w-4 mr-1" /> Excluir
-          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleDelete(n)} title="Excluir"><Trash2 className="h-4 w-4 mr-1" /> Excluir</Button>
         </div>
       </div>
-
       {hasChildren && open && (
         <div className="mt-1">
           {n.children.map((c) => (
-            <NodeRow
-              key={c.id}
-              n={c}
-              level={level + 1}
-              NodeRow={NodeRow}
-              expanded={expanded}
-              toggleExpand={toggleExpand}
-              handleEdit={handleEdit}
-              toggleArchive={toggleArchive}
-              handleDelete={handleDelete}
-              openMove={openMove}
+            <NodeRow key={c.id} n={c} level={level + 1}
+              NodeRow={NodeRow} expanded={expanded} toggleExpand={toggleExpand}
+              handleEdit={handleEdit} toggleArchive={toggleArchive}
+              handleDelete={handleDelete} openMove={openMove}
             />
           ))}
         </div>
@@ -613,5 +615,5 @@ const NodeRow: React.FC<{
   );
 };
 
-export { Categorias }; // compatível com import { Categorias }
+export { Categorias };
 export default Categorias;
