@@ -251,4 +251,321 @@ export function ContasPagarSimple() {
     let data = parcelas.filter((p) => {
       const matchTerm =
         !term ||
-        (p.fornecedor || "").toL
+        (p.fornecedor || "").toLowerCase().includes(term) ||
+        (p.descricao || "").toLowerCase().includes(term) ||
+        String(p.id).includes(term) ||
+        String(p.conta_id).includes(term);
+
+      const matchFornecedor = filterFornecedor === "all" || String(p.fornecedor || "").includes(filterFornecedor);
+      const matchFilial = filterFilial === "all" || (p.filial === filterFilial);
+      const matchCategoria = filterCategoria === "all" || (p.categoria === filterCategoria);
+
+      const matchStatus =
+        filterStatus === "all" ||
+        (filterStatus === "pago" && p.pago) ||
+        (filterStatus === "aberto" && !p.pago);
+
+      const valor = p.valor_parcela_centavos / 100;
+      const matchValorMin = !filterValorMin || valor >= parseFloat(filterValorMin);
+      const matchValorMax = !filterValorMax || valor <= parseFloat(filterValorMax);
+
+      const venc = new Date(p.vencimento).getTime();
+      const matchDataIni = !filterDataVencimentoInicio || venc >= new Date(filterDataVencimentoInicio).getTime();
+      const matchDataFim = !filterDataVencimentoFim || venc <= new Date(filterDataVencimentoFim).getTime();
+
+      return (
+        matchTerm &&
+        matchFornecedor &&
+        matchFilial &&
+        matchCategoria &&
+        matchStatus &&
+        matchValorMin &&
+        matchValorMax &&
+        matchDataIni &&
+        matchDataFim
+      );
+    });
+
+    // Ordenação padrão por vencimento asc
+    data.sort((a, b) => new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime());
+    return data;
+  }, [
+    parcelas,
+    searchTerm,
+    filterFornecedor,
+    filterFilial,
+    filterCategoria,
+    filterStatus,
+    filterValorMin,
+    filterValorMax,
+    filterDataVencimentoInicio,
+    filterDataVencimentoFim,
+  ]);
+
+  // Paginação
+  const totalItems = filteredAndSortedParcelas.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedData = filteredAndSortedParcelas.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchTerm,
+    filterFornecedor,
+    filterFilial,
+    filterCategoria,
+    filterStatus,
+    filterValorMin,
+    filterValorMax,
+    filterDataVencimentoInicio,
+    filterDataVencimentoFim,
+  ]);
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setFilterFornecedor("all");
+    setFilterFilial("all");
+    setFilterCategoria("all");
+    setFilterStatus("all");
+    setFilterValorMin("");
+    setFilterValorMax("");
+    setFilterDataVencimentoInicio(null);
+    setFilterDataVencimentoFim(null);
+  };
+
+  // ===== Ações =====
+
+  // Exclusão em massa de PARCELAS selecionadas
+  const handleBulkDelete = async () => {
+    if (selectedParcelas.length === 0 || deleting) return;
+
+    const msg =
+      selectedParcelas.length === 1
+        ? "Tem certeza que deseja excluir esta parcela?"
+        : `Tem certeza que deseja excluir ${selectedParcelas.length} parcelas?`;
+
+    if (!confirm(msg)) return;
+
+    try {
+      setDeleting(true);
+
+      const { error } = await supabase
+        .from("contas_pagar_parcelas")
+        .delete()
+        .in("id", selectedParcelas);
+
+      if (error) throw error;
+
+      toast({
+        title: "Sucesso",
+        description:
+          selectedParcelas.length === 1
+            ? "Parcela excluída com sucesso."
+            : `${selectedParcelas.length} parcelas excluídas com sucesso.`,
+      });
+
+      await fetchParcelas();
+      setSelectedParcelas([]);
+    } catch (err: any) {
+      console.error("Erro ao excluir parcelas:", err);
+      toast({
+        title: "Erro ao excluir",
+        description:
+          err?.message || "Não foi possível excluir as parcelas. Verifique as políticas/RLS no Supabase.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // ===== Render =====
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
+          <p className="text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const activeFiltersCount = [
+    filterFornecedor !== "all",
+    filterFilial !== "all",
+    filterCategoria !== "all",
+    filterStatus !== "all",
+    filterValorMin,
+    filterValorMax,
+    filterDataVencimentoInicio,
+    filterDataVencimentoFim,
+  ].filter(Boolean).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
+          <p className="text-muted-foreground">
+            Total: {parcelas.length} parcela(s) | Exibindo: {filteredAndSortedParcelas.length}
+          </p>
+        </div>
+        <Button onClick={() => navigate("/financeiro/contas-pagar/nova")}>
+          <Plus className="h-4 w-4 mr-2" />
+          Nova Conta a Pagar
+        </Button>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex-1 flex items-center gap-4">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por fornecedor, descrição, ID ou conta..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
+                <Filter className="h-4 w-4 mr-2" />
+                Filtros {activeFiltersCount > 0 && `(${activeFiltersCount})`}
+              </Button>
+              {activeFiltersCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  <X className="h-4 w-4 mr-2" />
+                  Limpar Filtros
+                </Button>
+              )}
+            </div>
+
+            {/* Personalizar colunas (mantido mesmo sem implementação aqui) */}
+            <Button variant="outline" onClick={() => {}}>
+              <Settings2 className="h-4 w-4 mr-2" />
+              Personalizar Colunas
+            </Button>
+          </div>
+
+          {/* Barra de ações em massa */}
+          <div className="mt-4 flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={deleting || selectedParcelas.length === 0}
+              title={deleting ? "Excluindo..." : "Excluir Selecionados"}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {deleting ? "Excluindo..." : "Excluir Selecionados"}
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead style={{ width: 44 }}></TableHead>
+                <TableHead>ID</TableHead>
+                <TableHead>Conta</TableHead>
+                <TableHead>Fornecedor</TableHead>
+                <TableHead>Descrição</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead>Filial</TableHead>
+                <TableHead>Parcela</TableHead>
+                <TableHead>Vencimento</TableHead>
+                <TableHead>Valor</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedData.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={selectedParcelas.includes(p.id)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setSelectedParcelas((prev) =>
+                          checked ? [...prev, p.id] : prev.filter((id) => id !== p.id)
+                        );
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>{p.id}</TableCell>
+                  <TableCell>{p.conta_id}</TableCell>
+                  <TableCell>{p.fornecedor || "-"}</TableCell>
+                  <TableCell className="max-w-[280px]">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Abrir conta"
+                        onClick={() => navigate(`/financeiro/conta/${p.conta_id}`)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <span className="line-clamp-2">{p.descricao || "-"}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>{p.categoria || "-"}</TableCell>
+                  <TableCell>{p.filial || "-"}</TableCell>
+                  <TableCell>{p.parcela_num}</TableCell>
+                  <TableCell>{formatDate(p.vencimento)}</TableCell>
+                  <TableCell>{formatCurrency(p.valor_parcela_centavos)}</TableCell>
+                  <TableCell>{getStatusBadge(p.vencimento, p.pago)}</TableCell>
+                  <TableCell className="text-right">
+                    {/* ações linha, se precisar (excluir parcela única, etc.) */}
+                  </TableCell>
+                </TableRow>
+              ))}
+
+              {paginatedData.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={12} className="text-center text-muted-foreground">
+                    Nenhuma parcela encontrada com os filtros atuais.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          {/* Paginação simples */}
+          <div className="flex items-center justify-between mt-4">
+            <span className="text-sm text-muted-foreground">
+              Página {currentPage} de {totalPages || 1}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Próxima
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default ContasPagarSimple;
