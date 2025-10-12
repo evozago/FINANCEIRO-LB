@@ -1,7 +1,5 @@
--- Habilita utilitários
 CREATE EXTENSION IF NOT EXISTS unaccent;
 
--- Função utilitária para slug
 CREATE OR REPLACE FUNCTION public.to_slug(txt text)
 RETURNS text
 LANGUAGE sql
@@ -10,7 +8,6 @@ AS $$
   SELECT lower(regexp_replace(regexp_replace(unaccent(coalesce(txt,'')),'[^a-zA-Z0-9]+','-','g'),'-{2,}','-','g'))::text;
 $$;
 
--- Adiciona colunas se não existirem
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -48,7 +45,6 @@ BEGIN
     CREATE UNIQUE INDEX IF NOT EXISTS ux_categorias_slug ON public.categorias_financeiras(slug);
   END IF;
 
-  -- Se já existir 'tipo', mantém; se não, cria com valores simples
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_name='categorias_financeiras' AND column_name='tipo'
@@ -83,7 +79,6 @@ BEGIN
   END IF;
 END $$;
 
--- Trigger de updated_at
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -99,7 +94,6 @@ CREATE TRIGGER tg_categorias_updated_at
 BEFORE UPDATE ON public.categorias_financeiras
 FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
--- Trigger de slug (gera se vier nulo)
 CREATE OR REPLACE FUNCTION public.set_categoria_slug()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -117,7 +111,6 @@ CREATE TRIGGER tg_categorias_slug
 BEFORE INSERT OR UPDATE OF nome, slug ON public.categorias_financeiras
 FOR EACH ROW EXECUTE FUNCTION public.set_categoria_slug();
 
--- View recursiva para árvore (depth e path)
 CREATE OR REPLACE VIEW public.vw_categorias_tree AS
 WITH RECURSIVE t AS (
   SELECT
@@ -149,7 +142,6 @@ WITH RECURSIVE t AS (
 SELECT * FROM t
 ORDER BY path;
 
--- Função simples para checar se pode excluir (sem filhos e sem uso)
 CREATE OR REPLACE FUNCTION public.can_delete_categoria(p_id int)
 RETURNS boolean
 LANGUAGE plpgsql
