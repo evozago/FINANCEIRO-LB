@@ -1,673 +1,288 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, CreditCard, Eye } from 'lucide-react';
-import { usePersistentState } from '@/hooks/usePersistentState';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import React, { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, Save, Trash2 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 
-interface ContaPagar {
+type ContaPagar = {
   id: number;
   descricao: string;
-  numero_nota?: string;
-  chave_nfe?: string;
+  numero_nota?: string | null;
+  chave_nfe?: string | null;
   valor_total_centavos: number;
   num_parcelas: number;
-  referencia?: string;
-  created_at: string;
-  pessoas_juridicas: { nome_fantasia: string };
-  categorias_financeiras: { nome: string };
-  filiais: { nome: string };
-  parcelas_abertas?: number;
-  valor_em_aberto?: number;
-  proximo_vencimento?: string;
-  status_pagamento?: string;
-}
+  referencia?: string | null;
+  fornecedor_id?: number | null;
+  categoria_id?: number | null;
+  observacoes?: string | null;
+};
 
-interface Fornecedor {
-  id: number;
-  nome_fantasia: string;
-}
-
-interface Categoria {
-  id: number;
-  nome: string;
-}
-
-interface Filial {
-  id: number;
-  nome: string;
-}
-
-interface Parcela {
-  id: number;
-  parcela_num: number;
-  valor_parcela_centavos: number;
-  vencimento: string;
-  pago: boolean;
-  pago_em?: string;
-  valor_pago_centavos?: number;
-  observacao?: string;
-}
-
-export function ContasPagar() {
-  const navigate = useNavigate();
-  const [contas, setContas] = useState<ContaPagar[]>([]);
-  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [filiais, setFiliais] = useState<Filial[]>([]);
-  const [parcelas, setParcelas] = useState<Parcela[]>([]);
-  const [searchTerm, setSearchTerm] = usePersistentState('contas-pagar-search', '');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isParcelasDialogOpen, setIsParcelasDialogOpen] = useState(false);
-  const [editingConta, setEditingConta] = useState<ContaPagar | null>(null);
-  const [selectedConta, setSelectedConta] = useState<ContaPagar | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function ContaDetalhes() {
+  const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
-  const [formData, setFormData] = useState({
-    fornecedor_id: '',
-    categoria_id: '',
-    filial_id: '',
-    descricao: '',
-    numero_nota: '',
-    chave_nfe: '',
-    valor_total_centavos: '',
-    num_parcelas: '1',
-    referencia: '',
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [form, setForm] = useState({
+    descricao: "",
+    numero_nota: "",
+    chave_nfe: "",
+    valor_total: "",
+    num_parcelas: "1",
+    referencia: "",
+    fornecedor_id: "",
+    categoria_id: "",
+    observacoes: "",
   });
 
-  useEffect(() => {
-    fetchContas();
-    fetchFornecedores();
-    fetchCategorias();
-    fetchFiliais();
-  }, []);
+  const contaId = Number(id);
 
-  const fetchContas = async () => {
+  const formatCurrencyToInput = (centavos: number | null | undefined) =>
+    centavos ? (centavos / 100).toString().replace(".", ",") : "";
+
+  const parseCurrencyToCentavos = (valor: string) => {
+    const normalized = valor.replace(/\./g, "").replace(",", ".");
+    const num = Number(normalized);
+    if (Number.isNaN(num)) return 0;
+    return Math.round(num * 100);
+    };
+
+  const fetchConta = async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('contas_pagar_parcelas')
-        .select(`
-          *,
-          contas_pagar!inner(
-            id,
-            descricao,
-            fornecedor_id,
-            fornecedor_pf_id,
-            pessoas_juridicas:fornecedor_id(nome_fantasia, razao_social),
-            pessoas_fisicas:fornecedor_pf_id(nome_completo)
-          )
-        `)
-        .eq('pago', false)
-        .order('vencimento');
+        .from("contas_pagar")
+        .select("*")
+        .eq("id", contaId)
+        .single();
 
       if (error) throw error;
-      
-      const transformedData = (data || []).map(parcela => {
-        const conta = (parcela as any).contas_pagar;
-        const fornecedorNome = conta?.pessoas_juridicas?.nome_fantasia || 
-                               conta?.pessoas_juridicas?.razao_social ||
-                               conta?.pessoas_fisicas?.nome_completo ||
-                               'N/A';
-        
-        return {
-          id: parcela.id,
-          descricao: conta?.descricao || 'N/A',
-          valor_total_centavos: parcela.valor_parcela_centavos,
-          num_parcelas: 1,
-          pessoas_juridicas: { nome_fantasia: fornecedorNome },
-          created_at: parcela.created_at,
-          updated_at: parcela.updated_at,
-          parcela_num: parcela.parcela_num,
-          vencimento: parcela.vencimento,
-          conta_id: parcela.conta_id
-        };
+
+      const c = data as unknown as ContaPagar;
+      setForm({
+        descricao: c.descricao ?? "",
+        numero_nota: c.numero_nota ?? "",
+        chave_nfe: c.chave_nfe ?? "",
+        valor_total: formatCurrencyToInput(c.valor_total_centavos),
+        num_parcelas: String(c.num_parcelas ?? 1),
+        referencia: c.referencia ?? "",
+        fornecedor_id: c.fornecedor_id ? String(c.fornecedor_id) : "",
+        categoria_id: c.categoria_id ? String(c.categoria_id) : "",
+        observacoes: c.observacoes ?? "",
       });
-      
-      setContas(transformedData as any);
     } catch (error) {
-      console.error('Erro ao buscar contas a pagar:', error);
+      console.error("Erro ao carregar conta:", error);
       toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar as contas a pagar.',
-        variant: 'destructive',
+        title: "Erro",
+        description: "Não foi possível carregar a conta.",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchFornecedores = async () => {
+  const handleSave = async () => {
+    setSaving(true);
     try {
-      const { data, error } = await supabase
-        .from('pessoas_juridicas')
-        .select('id, nome_fantasia')
-        .order('nome_fantasia');
-
-      if (error) throw error;
-      setFornecedores(data || []);
-    } catch (error) {
-      console.error('Erro ao buscar fornecedores:', error);
-    }
-  };
-
-  const fetchCategorias = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('categorias_financeiras')
-        .select('id, nome')
-        .order('nome');
-
-      if (error) throw error;
-      setCategorias(data || []);
-    } catch (error) {
-      console.error('Erro ao buscar categorias:', error);
-    }
-  };
-
-  const fetchFiliais = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('filiais')
-        .select('id, nome')
-        .order('nome');
-
-      if (error) throw error;
-      setFiliais(data || []);
-    } catch (error) {
-      console.error('Erro ao buscar filiais:', error);
-    }
-  };
-
-  const fetchParcelas = async (contaId: number) => {
-    try {
-      const { data, error } = await supabase
-        .from('contas_pagar_parcelas')
-        .select('*')
-        .eq('conta_id', contaId)
-        .order('parcela_num');
-
-      if (error) throw error;
-      setParcelas(data || []);
-    } catch (error) {
-      console.error('Erro ao buscar parcelas:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar as parcelas.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      const dataToSubmit = {
-        ...formData,
-        fornecedor_id: parseInt(formData.fornecedor_id),
-        categoria_id: parseInt(formData.categoria_id),
-        filial_id: parseInt(formData.filial_id),
-        valor_total_centavos: Math.round(parseFloat(formData.valor_total_centavos) * 100),
-        num_parcelas: parseInt(formData.num_parcelas),
+      const payload = {
+        descricao: form.descricao,
+        numero_nota: form.numero_nota || null,
+        chave_nfe: form.chave_nfe || null,
+        valor_total_centavos: parseCurrencyToCentavos(form.valor_total),
+        num_parcelas: parseInt(form.num_parcelas || "1", 10),
+        referencia: form.referencia || null,
+        fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id, 10) : null,
+        categoria_id: form.categoria_id ? parseInt(form.categoria_id, 10) : null,
+        observacoes: form.observacoes || null,
       };
 
-      if (editingConta) {
-        const { error } = await supabase
-          .from('contas_pagar')
-          .update(dataToSubmit)
-          .eq('id', editingConta.id);
-
-        if (error) throw error;
-
-        toast({
-          title: 'Sucesso',
-          description: 'Conta a pagar atualizada com sucesso.',
-        });
-      } else {
-        const { data: contaData, error: contaError } = await supabase
-          .from('contas_pagar')
-          .insert([dataToSubmit])
-          .select()
-          .single();
-
-        if (contaError) throw contaError;
-
-        // Note: Automatic parcel generation will be implemented later
-        // For now, parcels need to be created manually
-
-        toast({
-          title: 'Sucesso',
-          description: 'Conta a pagar cadastrada com sucesso.',
-        });
-      }
-
-      setIsDialogOpen(false);
-      setEditingConta(null);
-      resetForm();
-      fetchContas();
-    } catch (error) {
-      console.error('Erro ao salvar conta a pagar:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível salvar a conta a pagar.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleEdit = (conta: ContaPagar) => {
-    // Navegar para a página de detalhes onde pode editar
-    const contaId = (conta as any).conta_id || conta.id;
-    navigate(`/financeiro/conta/${contaId}`);
-  };
-
-  const handleDelete = async (conta: ContaPagar) => {
-    const contaId = (conta as any).conta_id || conta.id;
-    if (!contaId) {
-      toast({
-        title: 'Erro',
-        description: 'ID da conta não encontrado.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!confirm('Tem certeza que deseja excluir esta conta a pagar e todas suas parcelas?')) return;
-
-    try {
       const { error } = await supabase
-        .from('contas_pagar')
-        .delete()
-        .eq('id', contaId);
+        .from("contas_pagar")
+        .update(payload)
+        .eq("id", contaId);
 
       if (error) throw error;
 
       toast({
-        title: 'Sucesso',
-        description: 'Conta a pagar excluída com sucesso.',
+        title: "Sucesso",
+        description: "Conta a pagar atualizada com sucesso.",
       });
-      fetchContas();
+      navigate("/financeiro/contas-pagar");
     } catch (error) {
-      console.error('Erro ao excluir conta a pagar:', error);
+      console.error("Erro ao salvar:", error);
       toast({
-        title: 'Erro',
-        description: 'Não foi possível excluir a conta a pagar.',
-        variant: 'destructive',
+        title: "Erro",
+        description: "Não foi possível salvar as alterações.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("Tem certeza que deseja excluir esta conta e todas as parcelas?")) return;
+    try {
+      const { error } = await supabase.from("contas_pagar").delete().eq("id", contaId);
+      if (error) throw error;
+
+      toast({
+        title: "Sucesso",
+        description: "Conta a pagar excluída com sucesso.",
+      });
+      navigate("/financeiro/contas-pagar");
+    } catch (error) {
+      console.error("Erro ao excluir conta:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir a conta.",
+        variant: "destructive",
       });
     }
   };
 
-  const handleViewParcelas = (conta: ContaPagar) => {
-    setSelectedConta(conta);
-    const contaId = (conta as any).conta_id || conta.id;
-    fetchParcelas(contaId);
-    setIsParcelasDialogOpen(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      fornecedor_id: '',
-      categoria_id: '',
-      filial_id: '',
-      descricao: '',
-      numero_nota: '',
-      chave_nfe: '',
-      valor_total_centavos: '',
-      num_parcelas: '1',
-      referencia: '',
-    });
-  };
-
-  const formatCurrency = (centavos: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(centavos / 100);
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Em Aberto':
-        return <Badge variant="destructive">Em Aberto</Badge>;
-      case 'Parcialmente Pago':
-        return <Badge variant="secondary">Parcialmente Pago</Badge>;
-      case 'Pago':
-        return <Badge variant="default">Pago</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+  useEffect(() => {
+    if (!Number.isFinite(contaId)) {
+      toast({
+        title: "Erro",
+        description: "ID inválido.",
+        variant: "destructive",
+      });
+      navigate("/financeiro/contas-pagar");
+      return;
     }
-  };
+    fetchConta();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contaId]);
 
-  const filteredContas = contas.filter(conta =>
-    conta.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conta.numero_nota?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conta.pessoas_juridicas.nome_fantasia.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  if (loading) {
-    return <div>Carregando...</div>;
-  }
+  if (loading) return <div>Carregando...</div>;
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
-          <p className="text-muted-foreground">
-            Gerencie as contas a pagar e seus vencimentos
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar
+          </Button>
+          <h1 className="text-3xl font-bold tracking-tight">Conta #{contaId}</h1>
         </div>
-        <div className="flex space-x-2">
-
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => { resetForm(); setEditingConta(null); }}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nova Conta
-              </Button>
-            </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>
-                {editingConta ? 'Editar Conta a Pagar' : 'Nova Conta a Pagar'}
-              </DialogTitle>
-              <DialogDescription>
-                Preencha os dados da conta a pagar
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="fornecedor_id">Fornecedor</Label>
-                  <Select value={formData.fornecedor_id} onValueChange={(value) => setFormData({ ...formData, fornecedor_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um fornecedor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fornecedores.map((fornecedor) => (
-                        <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                          {fornecedor.nome_fantasia}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="categoria_id">Categoria</Label>
-                  <Select value={formData.categoria_id} onValueChange={(value) => setFormData({ ...formData, categoria_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma categoria" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categorias.map((categoria) => (
-                        <SelectItem key={categoria.id} value={categoria.id.toString()}>
-                          {categoria.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="filial_id">Filial</Label>
-                  <Select value={formData.filial_id} onValueChange={(value) => setFormData({ ...formData, filial_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma filial" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filiais.map((filial) => (
-                        <SelectItem key={filial.id} value={filial.id.toString()}>
-                          {filial.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="valor_total_centavos">Valor Total (R$)</Label>
-                  <Input
-                    id="valor_total_centavos"
-                    type="number"
-                    step="0.01"
-                    value={formData.valor_total_centavos}
-                    onChange={(e) => setFormData({ ...formData, valor_total_centavos: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="num_parcelas">Número de Parcelas</Label>
-                  <Input
-                    id="num_parcelas"
-                    type="number"
-                    min="1"
-                    value={formData.num_parcelas}
-                    onChange={(e) => setFormData({ ...formData, num_parcelas: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="numero_nota">Número da Nota</Label>
-                  <Input
-                    id="numero_nota"
-                    value={formData.numero_nota}
-                    onChange={(e) => setFormData({ ...formData, numero_nota: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="chave_nfe">Chave NFe</Label>
-                  <Input
-                    id="chave_nfe"
-                    value={formData.chave_nfe}
-                    onChange={(e) => setFormData({ ...formData, chave_nfe: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="referencia">Referência</Label>
-                  <Input
-                    id="referencia"
-                    value={formData.referencia}
-                    onChange={(e) => setFormData({ ...formData, referencia: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="descricao">Descrição</Label>
-                <Textarea
-                  id="descricao"
-                  value={formData.descricao}
-                  onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit">
-                  {editingConta ? 'Atualizar' : 'Cadastrar'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleDelete}>
+            <Trash2 className="h-4 w-4 mr-2" />
+            Excluir
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            <Save className="h-4 w-4 mr-2" />
+            Salvar
+          </Button>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Lista de Contas a Pagar</CardTitle>
-          <CardDescription>
-            {contas.length} conta(s) em aberto
-          </CardDescription>
-          <div className="flex items-center space-x-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por descrição, nota ou fornecedor..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
+          <CardTitle>Detalhes</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Descrição</Label>
+              <Input
+                value={form.descricao}
+                onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Número da Nota</Label>
+              <Input
+                value={form.numero_nota}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, numero_nota: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <Label>Chave NFe</Label>
+              <Input
+                value={form.chave_nfe}
+                onChange={(e) => setForm((f) => ({ ...f, chave_nfe: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Valor Total (R$)</Label>
+              <Input
+                inputMode="decimal"
+                placeholder="0,00"
+                value={form.valor_total}
+                onChange={(e) => setForm((f) => ({ ...f, valor_total: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Nº de Parcelas</Label>
+              <Input
+                type="number"
+                min={1}
+                value={form.num_parcelas}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, num_parcelas: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <Label>Referência</Label>
+              <Input
+                value={form.referencia}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, referencia: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <Label>Fornecedor (ID)</Label>
+              <Input
+                placeholder="ex: 12"
+                value={form.fornecedor_id}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, fornecedor_id: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <Label>Categoria (ID)</Label>
+              <Input
+                placeholder="ex: 5"
+                value={form.categoria_id}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, categoria_id: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          <div>
+            <Label>Observações</Label>
+            <Textarea
+              rows={4}
+              value={form.observacoes}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, observacoes: e.target.value }))
+              }
             />
           </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Descrição</TableHead>
-                <TableHead>Fornecedor</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Valor Total</TableHead>
-                <TableHead>Valor em Aberto</TableHead>
-                <TableHead>Próximo Vencimento</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredContas.map((conta) => (
-                <TableRow key={conta.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{conta.descricao}</div>
-                      {conta.numero_nota && (
-                        <div className="text-sm text-muted-foreground">
-                          NF: {conta.numero_nota}
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                     <span
-                       className="text-primary hover:underline cursor-pointer"
-                       onClick={() => {
-                         const fornecedorId = (conta as any)?.contas_pagar?.fornecedor_id;
-                         if (fornecedorId) navigate(`/cadastros/pessoa-juridica/${fornecedorId}`);
-                       }}
-                     >
-                       {conta.pessoas_juridicas?.nome_fantasia || '-'}
-                     </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{(conta as any)?.categorias_financeiras?.nome ?? '-'}</Badge>
-                  </TableCell>
-                  <TableCell>{formatCurrency(conta.valor_total_centavos)}</TableCell>
-                  <TableCell>{formatCurrency(conta.valor_em_aberto || 0)}</TableCell>
-                  <TableCell>
-                    {conta.proximo_vencimento && 
-                      new Date(conta.proximo_vencimento).toLocaleDateString('pt-BR')
-                    }
-                  </TableCell>
-                  <TableCell>
-                    {getStatusBadge(conta.status_pagamento || 'Em Aberto')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewParcelas(conta)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(conta)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(conta)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
         </CardContent>
       </Card>
-
-      {/* Dialog para visualizar parcelas */}
-      <Dialog open={isParcelasDialogOpen} onOpenChange={setIsParcelasDialogOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Parcelas - {selectedConta?.descricao}</DialogTitle>
-            <DialogDescription>
-              Visualize e gerencie as parcelas desta conta
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Parcela</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Pago em</TableHead>
-                  <TableHead>Valor Pago</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {parcelas.map((parcela) => (
-                  <TableRow key={parcela.id}>
-                    <TableCell>{parcela.parcela_num}</TableCell>
-                    <TableCell>{formatCurrency(parcela.valor_parcela_centavos)}</TableCell>
-                    <TableCell>
-                      {new Date(parcela.vencimento).toLocaleDateString('pt-BR')}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={parcela.pago ? 'default' : 'destructive'}>
-                        {parcela.pago ? 'Pago' : 'Em Aberto'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {parcela.pago_em && 
-                        new Date(parcela.pago_em).toLocaleDateString('pt-BR')
-                      }
-                    </TableCell>
-                    <TableCell>
-                      {parcela.valor_pago_centavos && 
-                        formatCurrency(parcela.valor_pago_centavos)
-                      }
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {!parcela.pago && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            // Implementar função de pagamento
-                            toast({
-                              title: 'Funcionalidade em desenvolvimento',
-                              description: 'A funcionalidade de pagamento será implementada em breve.',
-                            });
-                          }}
-                        >
-                          <CreditCard className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
