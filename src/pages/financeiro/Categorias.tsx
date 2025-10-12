@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FolderOpen, ChevronRight, ChevronDown, Trash2, SquarePen, ArchiveRestore, Archive } from "lucide-react";
+import {
+  Plus, FolderOpen, ChevronRight, ChevronDown, Trash2, SquarePen,
+  ArchiveRestore, Archive, GripVertical
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +14,23 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+
+// dnd-kit
+import {
+  DndContext,
+  DragEndEvent,
+  closestCenter,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type Categoria = {
   id: number;
@@ -30,6 +50,34 @@ const TIPOS: Array<{ value: Categoria["tipo"]; label: string }> = [
   { value: "receita", label: "Receita" },
   { value: "transferencia", label: "Transferência" },
 ];
+
+// --- Sortable item (apenas a linha do nó, sem filhos) ---
+function SortableRow(props: {
+  id: number;
+  children: React.ReactNode;
+}) {
+  const { id, children } = props;
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="py-1">
+      <div className="flex items-center gap-2">
+        <span
+          className="cursor-grab active:cursor-grabbing text-muted-foreground"
+          {...attributes}
+          {...listeners}
+          title="Arraste para reordenar entre irmãos"
+        >
+          <GripVertical className="h-4 w-4" />
+        </span>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default function Categorias() {
   const { toast } = useToast();
@@ -69,6 +117,7 @@ export default function Categorias() {
       const { data, error } = await supabase
         .from("categorias_financeiras")
         .select("*")
+        .order("parent_id", { ascending: true })
         .order("ordem", { ascending: true })
         .order("nome", { ascending: true });
 
@@ -86,7 +135,7 @@ export default function Categorias() {
     fetchCategorias();
   }, []);
 
-  // Monta árvore simples
+  // Monta árvore
   const tree = useMemo<TreeNode[]>(() => {
     const map = new Map<number, TreeNode>();
     const roots: TreeNode[] = [];
@@ -99,7 +148,6 @@ export default function Categorias() {
         roots.push(node);
       }
     });
-    // ordena filhos por ordem/nome
     const sortNodes = (nodes: TreeNode[]) => {
       nodes.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.nome.localeCompare(b.nome));
       nodes.forEach((n) => sortNodes(n.children));
@@ -108,25 +156,25 @@ export default function Categorias() {
     return roots;
   }, [categorias]);
 
-  // Filtro simples por nome
+  // Filtro por nome + arquivadas
   const filteredTree = useMemo<TreeNode[]>(() => {
     const term = search.trim().toLowerCase();
+    const match = (n: TreeNode) =>
+      n.nome.toLowerCase().includes(term) && (showArchived || !n.archived);
+
     if (!term && showArchived) return tree;
     if (!term && !showArchived) {
-      // remove arquivadas
       const filterArchived = (nodes: TreeNode[]): TreeNode[] =>
         nodes
           .filter((n) => !n.archived)
           .map((n) => ({ ...n, children: filterArchived(n.children) }));
       return filterArchived(tree);
     }
-    const match = (n: TreeNode) => n.nome.toLowerCase().includes(term) && (showArchived || !n.archived);
     const recurse = (nodes: TreeNode[]): TreeNode[] =>
       nodes
         .map((n) => ({ ...n, children: recurse(n.children) }))
         .filter((n) => {
           if (match(n)) return true;
-          // mantém ancestrais se algum filho bate no termo
           const anyChild = (x: TreeNode): boolean => x.children.some((c) => match(c) || anyChild(c));
           return anyChild(n);
         });
@@ -135,10 +183,10 @@ export default function Categorias() {
 
   const toggleExpand = (id: number) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
 
-  // Ações
+  // ---------- Form Ações ----------
   const handleSave = async () => {
     if (!form.nome || !form.tipo) {
-      toast({ title: "Atenção", description: "Preencha pelo menos Nome e Tipo.", variant: "destructive" });
+      toast({ title: "Atenção", description: "Preencha ao menos Nome e Tipo.", variant: "destructive" });
       return;
     }
     try {
@@ -157,16 +205,14 @@ export default function Categorias() {
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria atualizada." });
       } else {
-        const { error } = await supabase.from("categorias_financeiras").insert([
-          {
-            nome: form.nome,
-            tipo: form.tipo,
-            parent_id: form.parent_id ?? null,
-            ordem: form.ordem ?? 0,
-            archived: !!form.archived,
-            cor: form.cor ?? "#E2E8F0",
-          },
-        ]);
+        const { error } = await supabase.from("categorias_financeiras").insert([{
+          nome: form.nome,
+          tipo: form.tipo,
+          parent_id: form.parent_id ?? null,
+          ordem: form.ordem ?? 0,
+          archived: !!form.archived,
+          cor: form.cor ?? "#E2E8F0",
+        }]);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria criada." });
       }
@@ -200,11 +246,9 @@ export default function Categorias() {
   };
 
   const canDelete = async (id: number) => {
-    // Preferência: usar a function can_delete_categoria (migration acima)
     const { data, error } = await supabase.rpc("can_delete_categoria", { p_id: id });
     if (!error && typeof data === "boolean") return data;
 
-    // fallback: checar filhos/uso manualmente
     const [{ count: filhos }, { count: uso }] = await Promise.all([
       supabase.from("categorias_financeiras").select("*", { count: "exact", head: true }).eq("parent_id", id),
       supabase.from("contas_pagar").select("*", { count: "exact", head: true }).eq("categoria_id", id),
@@ -216,14 +260,10 @@ export default function Categorias() {
     try {
       const allowed = await canDelete(c.id);
       if (!allowed) {
-        toast({
-          title: "Não é possível excluir",
-          description: "Categoria possui subcategorias ou está em uso em contas a pagar.",
-          variant: "destructive",
-        });
+        toast({ title: "Não é possível excluir", description: "Categoria possui subcategorias ou está em uso.", variant: "destructive" });
         return;
       }
-      if (!confirm(`Excluir "${c.nome}"? Esta ação não pode ser desfeita.`)) return;
+      if (!confirm(`Excluir "${c.nome}"?`)) return;
 
       const { error } = await supabase.from("categorias_financeiras").delete().eq("id", c.id);
       if (error) throw error;
@@ -252,28 +292,95 @@ export default function Categorias() {
     }
   };
 
-  const NodeRow: React.FC<{ n: TreeNode; level: number }> = ({ n, level }) => {
+  // ---------- Drag & Drop (reordena entre IRMÃOS) ----------
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+  );
+
+  // Util: retorna todos irmãos (não filtrado) de um nó
+  const siblingsOf = (nodeId: number): Categoria[] => {
+    const node = categorias.find(c => c.id === nodeId);
+    const parentId = node?.parent_id ?? null;
+    return categorias
+      .filter(c => (c.parent_id ?? null) === parentId)
+      .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.nome.localeCompare(b.nome));
+  };
+
+  // Persiste uma ordem para um grupo de irmãos
+  const persistOrder = async (siblings: Categoria[]) => {
+    // Reatribui 0..N
+    const withOrder = siblings.map((s, i) => ({ id: s.id, ordem: i, parent_id: s.parent_id }));
+    // Atualiza um por um (compat mais ampla)
+    await Promise.all(
+      withOrder.map(row =>
+        supabase.from("categorias_financeiras").update({ ordem: row.ordem }).eq("id", row.id)
+      )
+    );
+  };
+
+  const onDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!active?.id || !over?.id) return;
+
+    const aId = Number(active.id);
+    const bId = Number(over.id);
+
+    const a = categorias.find(c => c.id === aId);
+    const b = categorias.find(c => c.id === bId);
+    if (!a || !b) return;
+
+    // Só permite reorder se forem irmãos
+    const aParent = a.parent_id ?? null;
+    const bParent = b.parent_id ?? null;
+    if (aParent !== bParent) {
+      toast({
+        title: "Mover entre pais",
+        description: "Para mover para outro pai, edite no formulário (campo 'Categoria Pai').",
+      });
+      return;
+    }
+
+    const sibs = siblingsOf(aId);
+    const ids = sibs.map(s => s.id);
+    const from = ids.indexOf(aId);
+    const to = ids.indexOf(bId);
+    if (from < 0 || to < 0 || from === to) return;
+
+    // Reordena no client
+    const reordered = [...sibs];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+
+    try {
+      await persistOrder(reordered);
+      await fetchCategorias();
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: "Erro ao reordenar", description: err?.message || "Falha ao gravar ordem.", variant: "destructive" });
+    }
+  };
+
+  // ---------- UI: NodeRow e listas por nível ----------
+  const NodeHeader: React.FC<{ n: TreeNode; level: number }> = ({ n, level }) => {
     const hasChildren = n.children.length > 0;
     const open = expanded[n.id] ?? true;
 
     if (!showArchived && n.archived) return null;
 
     return (
-      <div className="py-1">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center" style={{ paddingLeft: level * 16 }}>
-            {hasChildren ? (
-              <Button variant="ghost" size="icon" onClick={() => toggleExpand(n.id)} title={open ? "Recolher" : "Expandir"}>
-                {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </Button>
-            ) : (
-              <span style={{ width: 40 }} />
-            )}
-            <FolderOpen className="h-4 w-4 text-primary mr-2" />
-            <span className={`font-medium ${n.archived ? "line-through text-muted-foreground" : ""}`}>{n.nome}</span>
-            <Badge variant="outline" className="ml-2">{n.tipo}</Badge>
-            {n.archived && <Badge variant="secondary" className="ml-1">arquivada</Badge>}
-          </div>
+      <>
+        <div className="flex items-center gap-2 w-full" style={{ paddingLeft: level * 16 }}>
+          {hasChildren ? (
+            <Button variant="ghost" size="icon" onClick={() => toggleExpand(n.id)} title={open ? "Recolher" : "Expandir"}>
+              {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </Button>
+          ) : <span style={{ width: 40 }} />}
+
+          <FolderOpen className="h-4 w-4 text-primary mr-2" />
+          <span className={`font-medium ${n.archived ? "line-through text-muted-foreground" : ""}`}>{n.nome}</span>
+          <Badge variant="outline" className="ml-2">{n.tipo}</Badge>
+          {n.archived && <Badge variant="secondary" className="ml-1">arquivada</Badge>}
 
           <div className="ml-auto flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => handleNewChild(n.id)} title="Nova subcategoria">
@@ -291,15 +398,31 @@ export default function Categorias() {
             </Button>
           </div>
         </div>
+      </>
+    );
+  };
 
-        {hasChildren && (expanded[n.id] ?? true) && (
-          <div className="mt-1">
-            {n.children.map((c) => (
-              <NodeRow key={c.id} n={c} level={level + 1} />
-            ))}
+  // Lista por nível com SortableContext (reordenar irmãos)
+  const NodeList: React.FC<{ nodes: TreeNode[]; level: number }> = ({ nodes, level }) => {
+    if (nodes.length === 0) return null;
+
+    const items = nodes.map(n => n.id);
+
+    return (
+      <SortableContext items={items} strategy={verticalListSortingStrategy}>
+        {nodes.map((n) => (
+          <div key={n.id}>
+            <SortableRow id={n.id}>
+              <NodeHeader n={n} level={level} />
+            </SortableRow>
+            {(expanded[n.id] ?? true) && n.children.length > 0 && (
+              <div className="ml-8">
+                <NodeList nodes={n.children} level={level + 1} />
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        ))}
+      </SortableContext>
     );
   };
 
@@ -317,7 +440,7 @@ export default function Categorias() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold">Categorias Financeiras</h1>
-          <p className="text-muted-foreground">Organize suas categorias em árvore de forma simples.</p>
+          <p className="text-muted-foreground">Organize suas categorias com drag & drop (reordenar irmãos) e formulário para mover de pai.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={handleNewRoot}>
@@ -328,7 +451,7 @@ export default function Categorias() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Painel da Árvore */}
+        {/* ÁRVORE */}
         <Card>
           <CardHeader>
             <CardTitle>Estrutura</CardTitle>
@@ -342,11 +465,7 @@ export default function Categorias() {
                 className="max-w-sm"
               />
               <div className="flex items-center gap-2">
-                <Checkbox
-                  id="showArchived"
-                  checked={showArchived}
-                  onCheckedChange={(v) => setShowArchived(!!v)}
-                />
+                <Checkbox id="showArchived" checked={showArchived} onCheckedChange={(v) => setShowArchived(!!v)} />
                 <Label htmlFor="showArchived">Mostrar arquivadas</Label>
               </div>
             </div>
@@ -356,16 +475,14 @@ export default function Categorias() {
             {filteredTree.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada.</p>
             ) : (
-              <div>
-                {filteredTree.map((n) => (
-                  <NodeRow key={n.id} n={n} level={0} />
-                ))}
-              </div>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+                <NodeList nodes={filteredTree} level={0} />
+              </DndContext>
             )}
           </CardContent>
         </Card>
 
-        {/* Formulário */}
+        {/* FORM */}
         <Card>
           <CardHeader>
             <CardTitle>{editing ? `Editar: ${editing.nome}` : "Nova Categoria"}</CardTitle>
@@ -419,19 +536,13 @@ export default function Categorias() {
               <Label>Categoria Pai</Label>
               <Select
                 value={form.parent_id !== null && form.parent_id !== undefined ? String(form.parent_id) : "null"}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, parent_id: v === "null" ? null : parseInt(v) }))
-                }
+                onValueChange={(v) => setForm((f) => ({ ...f, parent_id: v === "null" ? null : parseInt(v) }))}
               >
                 <SelectTrigger><SelectValue placeholder="(raiz)" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="null">(raiz)</SelectItem>
                   {categorias.map((c) => (
-                    <SelectItem
-                      key={c.id}
-                      value={String(c.id)}
-                      disabled={editing?.id === c.id} // evita pai = próprio
-                    >
+                    <SelectItem key={c.id} value={String(c.id)} disabled={editing?.id === c.id}>
                       {c.nome}
                     </SelectItem>
                   ))}
@@ -451,16 +562,3 @@ export default function Categorias() {
             <div className="flex justify-end gap-2">
               {editing && (
                 <Button variant="outline" onClick={resetForm}>
-                  Cancelar
-                </Button>
-              )}
-              <Button onClick={handleSave}>
-                {editing ? "Salvar alterações" : "Criar categoria"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
