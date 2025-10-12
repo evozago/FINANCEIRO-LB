@@ -17,7 +17,7 @@ import { FornecedorDetalhes } from "@/pages/financeiro/FornecedorDetalhes";
 import { ContasBancarias } from "@/pages/financeiro/ContasBancarias";
 import { FechamentoCaixa } from "@/pages/financeiro/FechamentoCaixa";
 import { ContasRecorrentes } from "@/pages/financeiro/ContasRecorrentes";
-import { Categorias } from "@/pages/financeiro/Categorias";
+import Categorias from "@/pages/financeiro/Categorias";
 import { VendasMensaisPorVendedora } from "@/pages/vendas/VendasMensaisPorVendedora";
 import { Metas } from "@/pages/vendas/Metas";
 import RegistrarVendas from "@/pages/vendas/RegistrarVendas";
