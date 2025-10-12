@@ -39,29 +39,25 @@ const TIPOS: Array<{ value: Categoria["tipo"]; label: string }> = [
 
 const SWATCHES = ["#E2E8F0","#FDE68A","#FCA5A5","#BFDBFE","#D1FAE5","#F5D0FE","#E9D5FF","#F3F4F6","#FCD34D","#86EFAC"];
 
-// ===== helpers de erro (fallbacks)
-function hasSchemaCacheErrFor(field: string, err: any) {
+// Erros de schema cache (PostgREST)
+const hasSchemaCacheErrFor = (field: string, err: any) => {
   const msg = String(err?.message || "").toLowerCase();
   return err?.code === "PGRST204" || (msg.includes(field) && msg.includes("schema"));
-}
-function isOrdemMissing(err: any) {
+};
+const isOrdemMissing = (err: any) => {
   const msg = String(err?.message || "").toLowerCase();
   return err?.code === "42703" || (msg.includes("column") && msg.includes("ordem"));
-}
+};
 
 function Categorias() {
   const { toast } = useToast();
 
-  // dados
   const [loading, setLoading] = useState(true);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
-
-  // árvore/ux
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState("");
 
-  // form
   const [editing, setEditing] = useState<Categoria | null>(null);
   const [form, setForm] = useState<Partial<Categoria>>({
     nome: "",
@@ -72,7 +68,6 @@ function Categorias() {
     cor: "#E2E8F0",
   });
 
-  // mover
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveNode, setMoveNode] = useState<Categoria | null>(null);
   const [moveParentId, setMoveParentId] = useState<string>("null");
@@ -80,7 +75,7 @@ function Categorias() {
 
   const toggleExpand = (id: number) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
 
-  // ===== fetch com fallback (ordem pode não existir)
+  // ===== Fetch (fallback quando 'ordem' não existe ainda)
   const fetchCategorias = async () => {
     setLoading(true);
     try {
@@ -108,11 +103,13 @@ function Categorias() {
         console.error(err);
         toast({ title: "Erro", description: "Não foi possível carregar categorias.", variant: "destructive" });
       }
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { fetchCategorias(); }, []);
 
-  // ===== monta árvore
+  // ===== árvore
   const tree = useMemo<TreeNode[]>(() => {
     const map = new Map<number, TreeNode>();
     const roots: TreeNode[] = [];
@@ -130,7 +127,7 @@ function Categorias() {
     return roots;
   }, [categorias]);
 
-  // ===== filtro visual
+  // ===== filtro
   const filteredTree = useMemo<TreeNode[]>(() => {
     const term = search.trim().toLowerCase();
     const showNode = (n: TreeNode) => (showArchived || !n.archived);
@@ -150,7 +147,7 @@ function Categorias() {
     return recurse(tree);
   }, [tree, search, showArchived]);
 
-  // ===== salvar/editar com fallback para 'archived' e 'cor'
+  // ===== salvar (com returning:'minimal' e fallbacks)
   const handleSave = async () => {
     if (!form.nome || !form.tipo) {
       toast({ title: "Atenção", description: "Preencha ao menos Nome e Tipo.", variant: "destructive" });
@@ -166,18 +163,23 @@ function Categorias() {
       cor: form.cor ?? "#E2E8F0",
     };
 
-    // variações de payload sem campos (para fallback de schema)
     const { archived, ...payloadNoArchived } = payloadFull as any;
     const { cor, ...payloadNoCor } = payloadFull as any;
     const { cor: _c, archived: _a, ...payloadSemCorSemArchived } = payloadFull as any;
 
     const trySave = async (body: any) => {
       if (editing) {
-        const { error } = await supabase.from("categorias_financeiras").update(body).eq("id", editing.id);
+        // returning:'minimal' evita que o supabase-js gere ?columns=... com colunas novas
+        const { error } = await supabase
+          .from("categorias_financeiras")
+          .update(body, { returning: "minimal" })
+          .eq("id", editing.id);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria atualizada." });
       } else {
-        const { error } = await supabase.from("categorias_financeiras").insert([body]);
+        const { error } = await supabase
+          .from("categorias_financeiras")
+          .insert([body], { returning: "minimal" });
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria criada." });
       }
@@ -188,25 +190,22 @@ function Categorias() {
     try {
       await trySave(payloadFull);
     } catch (err: any) {
-      // 1º fallback: remover apenas 'cor'
       if (hasSchemaCacheErrFor("cor", err)) {
         try {
           await trySave(payloadNoCor);
-          toast({ title: "Gravado sem 'cor' (fallback)", description: "Atualize o schema e salve novamente para gravar a cor." });
+          toast({ title: "Gravado sem 'cor' (fallback)", description: "Após o reload de schema, salve novamente para gravar a cor." });
           return;
         } catch (inner1: any) {
-          // 2º fallback: remover apenas 'archived'
           if (hasSchemaCacheErrFor("archived", inner1)) {
             try {
               await trySave(payloadNoArchived);
               toast({ title: "Gravado sem 'archived' (fallback)", description: "Schema ainda não enxergava a coluna." });
               return;
             } catch (inner2: any) {
-              // 3º fallback: remover ambos
               if (hasSchemaCacheErrFor("cor", inner2) || hasSchemaCacheErrFor("archived", inner2)) {
                 try {
                   await trySave(payloadSemCorSemArchived);
-                  toast({ title: "Gravado (fallback máximo)", description: "Salvou sem 'cor' e 'archived' por cache de schema." });
+                  toast({ title: "Gravado (fallback máximo)", description: "Sem 'cor' e 'archived' por cache de schema." });
                   return;
                 } catch (inner3: any) {
                   console.error(inner3);
@@ -223,37 +222,31 @@ function Categorias() {
           }
         }
       } else if (hasSchemaCacheErrFor("archived", err)) {
-        // 1º fallback: remover 'archived'
         try {
           await trySave(payloadNoArchived);
           toast({ title: "Gravado sem 'archived' (fallback)", description: "Schema ainda não enxergava a coluna." });
-          return;
-        } catch (inner1b: any) {
-          // 2º fallback: remover 'cor'
-          if (hasSchemaCacheErrFor("cor", inner1b)) {
+        } catch (innerB: any) {
+          if (hasSchemaCacheErrFor("cor", innerB)) {
             try {
               await trySave(payloadNoCor);
               toast({ title: "Gravado sem 'cor' (fallback)", description: "Atualize o schema para usar o campo de cor." });
-              return;
-            } catch (inner2b: any) {
-              // 3º fallback: remover ambos
-              if (hasSchemaCacheErrFor("cor", inner2b) || hasSchemaCacheErrFor("archived", inner2b)) {
+            } catch (innerC: any) {
+              if (hasSchemaCacheErrFor("cor", innerC) || hasSchemaCacheErrFor("archived", innerC)) {
                 try {
                   await trySave(payloadSemCorSemArchived);
                   toast({ title: "Gravado (fallback máximo)", description: "Sem 'cor' e 'archived' por cache de schema." });
-                  return;
-                } catch (inner3b: any) {
-                  console.error(inner3b);
-                  toast({ title: "Erro ao salvar", description: inner3b?.message || "Falha ao salvar.", variant: "destructive" });
+                } catch (innerD: any) {
+                  console.error(innerD);
+                  toast({ title: "Erro ao salvar", description: innerD?.message || "Falha ao salvar.", variant: "destructive" });
                 }
               } else {
-                console.error(inner2b);
-                toast({ title: "Erro ao salvar", description: inner2b?.message || "Falha ao salvar.", variant: "destructive" });
+                console.error(innerC);
+                toast({ title: "Erro ao salvar", description: innerC?.message || "Falha ao salvar.", variant: "destructive" });
               }
             }
           } else {
-            console.error(inner1b);
-            toast({ title: "Erro ao salvar", description: inner1b?.message || "Falha ao salvar.", variant: "destructive" });
+            console.error(innerB);
+            toast({ title: "Erro ao salvar", description: innerB?.message || "Falha ao salvar.", variant: "destructive" });
           }
         }
       } else {
@@ -278,9 +271,8 @@ function Categorias() {
       cor: c.cor ?? "#E2E8F0",
     });
   };
-  const handleNewRoot = () => resetForm();
 
-  // ===== exclusão / arquivar
+  // ===== exclusão / arquivar / mover (iguais ao anterior)
   const canDelete = async (id: number) => {
     try {
       const { data, error } = await supabase.rpc("can_delete_categoria", { p_id: id });
@@ -315,7 +307,7 @@ function Categorias() {
   const toggleArchive = async (c: Categoria) => {
     try {
       const { error } = await supabase.from("categorias_financeiras").update({ archived: !c.archived }).eq("id", c.id);
-      if (error) throw error;
+    if (error) throw error;
       toast({ title: c.archived ? "Ativada" : "Arquivada", description: `"${c.nome}" ${c.archived ? "reativada" : "arquivada"}.` });
       fetchCategorias();
     } catch (err: any) {
@@ -328,12 +320,12 @@ function Categorias() {
     }
   };
 
-  // ===== mover (dialog)
   const openMove = (c: Categoria) => {
     setMoveNode(c);
     setMoveParentId(c.parent_id == null ? "null" : String(c.parent_id));
     setMoveOpen(true);
   };
+
   const isDescendant = (aId: number, bId: number, map: Map<number, TreeNode>): boolean => {
     const b = map.get(bId);
     if (!b) return false;
@@ -342,6 +334,7 @@ function Categorias() {
     if (parent === aId) return true;
     return isDescendant(aId, parent, map);
   };
+
   const confirmMove = async () => {
     if (!moveNode) return;
     const newParentId = moveParentId === "null" ? null : parseInt(moveParentId, 10);
@@ -371,10 +364,11 @@ function Categorias() {
     } catch (err: any) {
       console.error(err);
       toast({ title: "Erro ao mover", description: err?.message || "Falha ao mover.", variant: "destructive" });
-    } finally { setSavingMove(false); }
+    } finally {
+      setSavingMove(false);
+    }
   };
 
-  // ===== UI
   if (loading) {
     return (
       <div className="container mx-auto p-6">
@@ -420,13 +414,9 @@ function Categorias() {
               <div className="space-y-1">
                 {filteredTree.map((n) => (
                   <NodeRow key={n.id} n={n} level={0}
-                    NodeRow={NodeRow}
-                    expanded={expanded}
-                    toggleExpand={toggleExpand}
-                    handleEdit={handleEdit}
-                    toggleArchive={toggleArchive}
-                    handleDelete={handleDelete}
-                    openMove={(c) => { setMoveNode(c); setMoveParentId(c.parent_id == null ? "null" : String(c.parent_id)); setMoveOpen(true); }}
+                    NodeRow={NodeRow} expanded={expanded} toggleExpand={toggleExpand}
+                    handleEdit={handleEdit} toggleArchive={toggleArchive}
+                    handleDelete={handleDelete} openMove={(c) => { setMoveNode(c); setMoveParentId(c.parent_id == null ? "null" : String(c.parent_id)); setMoveOpen(true); }}
                   />
                 ))}
               </div>
@@ -434,7 +424,7 @@ function Categorias() {
           </CardContent>
         </Card>
 
-        {/* Form */}
+        {/* Formulário */}
         <Card>
           <CardHeader><CardTitle>{editing ? `Editar: ${editing.nome}` : "Nova Categoria"}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -531,32 +521,7 @@ function Categorias() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMoveOpen(false)}>Cancelar</Button>
-            <Button onClick={async () => {
-              if (!moveNode) return;
-              const newParentId = moveParentId === "null" ? null : parseInt(moveParentId, 10);
-              // valida similar ao handle
-              const map = new Map<number, TreeNode>();
-              (categorias || []).forEach((c) => map.set(c.id, { ...(c as any), children: [] }));
-              (categorias || []).forEach((c) => { const node = map.get(c.id)!; if (c.parent_id && map.has(c.parent_id)) map.get(c.parent_id)!.children.push(node); });
-              const isDesc = (aId: number, bId: number): boolean => {
-                const b = map.get(bId); if (!b) return false;
-                const parent = b.parent_id; if (parent == null) return false;
-                if (parent === aId) return true;
-                return isDesc(aId, parent);
-              };
-              if (newParentId === moveNode.id) { alert("Categoria pai não pode ser ela mesma."); return; }
-              if (newParentId != null && isDesc(moveNode.id, newParentId)) { alert("Não mova para um descendente."); return; }
-              setSavingMove(true);
-              try {
-                const { error } = await supabase.from("categorias_financeiras").update({ parent_id: newParentId }).eq("id", moveNode.id);
-                if (error) throw error;
-                toast({ title: "Movida", description: `"${moveNode.nome}" foi movida.` });
-                setMoveOpen(false); setMoveNode(null); await fetchCategorias();
-              } catch (e:any) {
-                console.error(e);
-                toast({ title:"Erro ao mover", description: e?.message || "Falha ao mover.", variant:"destructive" });
-              } finally { setSavingMove(false); }
-            }} disabled={savingMove}>{savingMove ? "Movendo..." : "Confirmar"}</Button>
+            <Button onClick={confirmMove} disabled={savingMove}>{savingMove ? "Movendo..." : "Confirmar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
