@@ -64,7 +64,7 @@ export default function RegistrarVendas() {
   const form = useForm<VendaFormData>({
     resolver: zodResolver(vendaSchema),
     defaultValues: {
-      mes: new Date().getMonth() - 1,
+      mes: new Date().getMonth() ,
       ano: new Date().getFullYear(),
       vendedora_pf_id: "",
       filial_id: "",
@@ -163,7 +163,7 @@ export default function RegistrarVendas() {
       });
 
       form.reset({
-        mes: new Date().getMonth() - 1,
+        mes: new Date().getMonth() ,
         ano: new Date().getFullYear(),
         vendedora_pf_id: "",
         filial_id: "",
@@ -188,7 +188,7 @@ export default function RegistrarVendas() {
     setEditingId(venda.id);
     const vendaData = new Date(venda.data);
     form.reset({
-      mes: vendaData.getMonth() - 1,
+      mes: vendaData.getMonth() ,
       ano: vendaData.getFullYear(),
       vendedora_pf_id: venda.vendedora_pf_id.toString(),
       filial_id: venda.filial_id.toString(),
