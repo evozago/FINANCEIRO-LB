@@ -83,13 +83,18 @@ export default function PessoaJuridicaDetalhes() {
 
         // 2) Resumo (view)
         const { data: resData, error: resErr } = await supabase
-          .from("vw_fin_resumo_por_fornecedor")
-          .select("*")
-          .eq("pessoa_juridica_id", fornecedorId)
-          .maybeSingle(); // pode não haver linhas ainda
-        if (resErr) throw resErr;
-        if (!mounted) return;
-        setResumo((resData as ResumoFornecedor) ?? null);
+  .from("vw_fin_resumo_por_fornecedor")
+  .select("*")
+  .eq("pessoa_juridica_id", fornecedorId)
+  .maybeSingle();
+if (resErr && String(resErr.message).toLowerCase().includes("schema cache")) {
+  console.warn("Resumo indisponível no cache do PostgREST, seguindo sem:", resErr.message);
+  setResumo(null);
+} else if (resErr) {
+  throw resErr;
+} else {
+  setResumo((resData as any) ?? null);
+}
 
         // 3) Contas + Parcelas (RPC robusta)
         const { data: linhasData, error: rpcErr } = await supabase
