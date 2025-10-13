@@ -16,6 +16,7 @@ interface ImportadorVendasProps {
   onSuccess: () => void;
 }
 
+/** Colunas livres do arquivo após o parse */
 interface ParsedRow {
   data?: string;
   vendedora?: string;
@@ -23,16 +24,19 @@ interface ParsedRow {
   valor_bruto?: string;
   desconto?: string;
   qtd_itens?: string;
+  atendimentos?: string;      // <-- NOVO (opcional no arquivo)
   [key: string]: string | undefined;
 }
 
+/** Linha já mapeada/validada para inserção */
 interface MappedRow {
-  data: string;
+  data: string;               // sempre "YYYY-MM-01"
   vendedora_nome: string;
   filial_nome: string;
   valor_bruto_centavos: number;
   desconto_centavos: number;
   qtd_itens: number;
+  atendimentos: number;       // <-- NOVO (>= 0)
   valid: boolean;
   error?: string;
 }
@@ -44,10 +48,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
   const [mappedData, setMappedData] = useState<MappedRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
-  const [importResult, setImportResult] = useState<{
-    success: number;
-    errors: number;
-  } | null>(null);
+  const [importResult, setImportResult] = useState<{ success: number; errors: number } | null>(null);
   const { toast } = useToast();
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -124,7 +125,28 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
     setColumnMapping((prev) => ({ ...prev, [field]: column }));
   }
 
+  /** Normaliza qualquer data para primeiro dia do mês (YYYY-MM-01) */
+  function normalizeToMonthStart(dateStr: string): string {
+    try {
+      if (!dateStr) return "";
+      // dd/MM/yyyy
+      if (dateStr.includes("/")) {
+        const parsed = parse(dateStr, "dd/MM/yyyy", new Date());
+        return format(parsed, "yyyy-MM-01");
+      }
+      // yyyy-MM or yyyy-MM-dd
+      if (/^\d{4}-\d{2}(-\d{2})?$/.test(dateStr)) {
+        const [y, m] = dateStr.slice(0, 7).split("-");
+        return `${y}-${m}-01`;
+      }
+    } catch {
+      // cai no throw abaixo
+    }
+    throw new Error("Data inválida");
+  }
+
   function validateAndMapData() {
+    // atendimentos é opcional; o resto permanece obrigatório
     const requiredFields = ["data", "vendedora", "filial", "valor_bruto", "desconto", "qtd_itens"];
     const missing = requiredFields.filter((field) => !columnMapping[field]);
 
@@ -140,26 +162,24 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
     const mapped = parsedData.map((row) => {
       try {
         const dataStr = row[columnMapping.data]?.trim() || "";
-        const valorBrutoStr = row[columnMapping.valor_bruto]?.replace(/[^\d,.-]/g, "").replace(",", ".") || "0";
-        const descontoStr = row[columnMapping.desconto]?.replace(/[^\d,.-]/g, "").replace(",", ".") || "0";
+        const valorBrutoStr =
+          row[columnMapping.valor_bruto]?.replace(/[^\d,.-]/g, "").replace(",", ".") || "0";
+        const descontoStr =
+          row[columnMapping.desconto]?.replace(/[^\d,.-]/g, "").replace(",", ".") || "0";
         const qtdItensStr = row[columnMapping.qtd_itens]?.trim() || "1";
 
-        // Parse data (aceita formatos: DD/MM/YYYY, YYYY-MM-DD)
-        let dataFormatada = "";
-        try {
-          if (dataStr.includes("/")) {
-            const parsed = parse(dataStr, "dd/MM/yyyy", new Date());
-            dataFormatada = format(parsed, "yyyy-MM-dd");
-          } else {
-            dataFormatada = dataStr;
-          }
-        } catch {
-          throw new Error("Data inválida");
-        }
+        // NOVO (opc): atendimentos
+        const atendStr = columnMapping.atendimentos
+          ? row[columnMapping.atendimentos!]?.trim() || "0"
+          : "0";
+
+        // Data → sempre YYYY-MM-01
+        const dataFormatada = normalizeToMonthStart(dataStr);
 
         const valorBrutoCentavos = Math.round(parseFloat(valorBrutoStr) * 100);
         const descontoCentavos = Math.round(parseFloat(descontoStr) * 100);
-        const qtdItens = parseInt(qtdItensStr);
+        const qtdItens = parseInt(qtdItensStr, 10);
+        const atend = parseInt(atendStr, 10);
 
         if (isNaN(valorBrutoCentavos) || valorBrutoCentavos < 0) {
           throw new Error("Valor bruto inválido");
@@ -170,6 +190,9 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
         if (isNaN(qtdItens) || qtdItens < 1) {
           throw new Error("Quantidade inválida");
         }
+        if (isNaN(atend) || atend < 0) {
+          throw new Error("Atendimentos inválido");
+        }
 
         return {
           data: dataFormatada,
@@ -178,6 +201,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
           valor_bruto_centavos: valorBrutoCentavos,
           desconto_centavos: descontoCentavos,
           qtd_itens: qtdItens,
+          atendimentos: atend,    // <-- NOVO
           valid: true,
         };
       } catch (error) {
@@ -188,6 +212,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
           valor_bruto_centavos: 0,
           desconto_centavos: 0,
           qtd_itens: 0,
+          atendimentos: 0,        // <-- NOVO
           valid: false,
           error: error instanceof Error ? error.message : "Erro desconhecido",
         };
@@ -217,14 +242,10 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
     let errorCount = 0;
 
     // Buscar vendedoras e filiais
-    const { data: vendedoras } = await supabase
-      .from("pessoas_fisicas")
-      .select("id, nome_completo");
+    const { data: vendedoras } = await supabase.from("pessoas_fisicas").select("id, nome_completo");
     const { data: filiais } = await supabase.from("filiais").select("id, nome");
 
-    const vendedorasMap = new Map(
-      vendedoras?.map((v) => [v.nome_completo.toLowerCase(), v.id]) || []
-    );
+    const vendedorasMap = new Map(vendedoras?.map((v) => [v.nome_completo.toLowerCase(), v.id]) || []);
     const filiaisMap = new Map(filiais?.map((f) => [f.nome.toLowerCase(), f.id]) || []);
 
     for (let i = 0; i < validRows.length; i++) {
@@ -234,25 +255,22 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
 
       if (!vendedoraId || !filialId) {
         errorCount++;
+        setImportProgress(Math.round(((i + 1) / validRows.length) * 100));
         continue;
       }
 
       const { error } = await supabase.from("vendas_diarias").insert({
-        data: row.data,
+        data: row.data,                                 // YYYY-MM-01
         vendedora_pf_id: vendedoraId,
         filial_id: filialId,
         valor_bruto_centavos: row.valor_bruto_centavos,
         desconto_centavos: row.desconto_centavos,
         valor_liquido_centavos: row.valor_bruto_centavos - row.desconto_centavos,
         qtd_itens: row.qtd_itens,
+        atendimentos: row.atendimentos ?? 0,            // <-- NOVO (default 0)
       });
 
-      if (error) {
-        errorCount++;
-      } else {
-        successCount++;
-      }
-
+      if (error) errorCount++; else successCount++;
       setImportProgress(Math.round(((i + 1) / validRows.length) * 100));
     }
 
@@ -264,9 +282,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
       description: `${successCount} vendas importadas, ${errorCount} erros`,
     });
 
-    if (successCount > 0) {
-      onSuccess();
-    }
+    if (successCount > 0) onSuccess();
   }
 
   function reset() {
@@ -281,9 +297,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
   if (importResult) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Resultado da Importação</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Resultado da Importação</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -332,6 +346,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
                   <TableHead>Valor Bruto</TableHead>
                   <TableHead>Desconto</TableHead>
                   <TableHead>Itens</TableHead>
+                  <TableHead>Atendimentos</TableHead> {/* NOVO */}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -349,11 +364,10 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
                     <TableCell>{row.data}</TableCell>
                     <TableCell>{row.vendedora_nome}</TableCell>
                     <TableCell>{row.filial_nome}</TableCell>
-                    <TableCell>
-                      R$ {(row.valor_bruto_centavos / 100).toFixed(2)}
-                    </TableCell>
+                    <TableCell>R$ {(row.valor_bruto_centavos / 100).toFixed(2)}</TableCell>
                     <TableCell>R$ {(row.desconto_centavos / 100).toFixed(2)}</TableCell>
                     <TableCell>{row.qtd_itens}</TableCell>
+                    <TableCell>{row.atendimentos}</TableCell> {/* NOVO */}
                   </TableRow>
                 ))}
               </TableBody>
@@ -385,24 +399,20 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
       <Card>
         <CardHeader>
           <CardTitle>Mapear Colunas</CardTitle>
-          <CardDescription>
-            Relacione as colunas do arquivo com os campos do sistema
-          </CardDescription>
+          <CardDescription>Relacione as colunas do arquivo com os campos do sistema</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {["data", "vendedora", "filial", "valor_bruto", "desconto", "qtd_itens"].map(
+            {["data", "vendedora", "filial", "valor_bruto", "desconto", "qtd_itens", "atendimentos" /* opcional */].map(
               (field) => (
                 <div key={field} className="space-y-2">
-                  <label className="text-sm font-medium capitalize">
-                    {field.replace("_", " ")}
-                  </label>
+                  <label className="text-sm font-medium capitalize">{field.replace("_", " ")}</label>
                   <Select
                     value={columnMapping[field]}
                     onValueChange={(value) => handleColumnMapping(field, value)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione a coluna" />
+                      <SelectValue placeholder={field === "atendimentos" ? "Opcional" : "Selecione a coluna"} />
                     </SelectTrigger>
                     <SelectContent>
                       {headers.map((header) => (
@@ -419,9 +429,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
 
           <div className="flex gap-2">
             <Button onClick={validateAndMapData}>Validar e Continuar</Button>
-            <Button variant="outline" onClick={reset}>
-              Cancelar
-            </Button>
+            <Button variant="outline" onClick={reset}>Cancelar</Button>
           </div>
         </CardContent>
       </Card>
@@ -432,17 +440,13 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
     <Card>
       <CardHeader>
         <CardTitle>Importar Vendas</CardTitle>
-        <CardDescription>
-          Faça upload de um arquivo CSV ou Excel com os dados das vendas
-        </CardDescription>
+        <CardDescription>Faça upload de um arquivo CSV ou Excel com os dados das vendas</CardDescription>
       </CardHeader>
       <CardContent>
         <div
           {...getRootProps()}
           className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
-            isDragActive
-              ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50"
+            isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
           }`}
         >
           <input {...getInputProps()} />
@@ -454,9 +458,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
             )}
             <div>
               <p className="text-lg font-medium">
-                {isDragActive
-                  ? "Solte o arquivo aqui"
-                  : "Arraste um arquivo CSV ou Excel aqui"}
+                {isDragActive ? "Solte o arquivo aqui" : "Arraste um arquivo CSV ou Excel aqui"}
               </p>
               <p className="text-sm text-muted-foreground">ou clique para selecionar</p>
             </div>
@@ -464,10 +466,13 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
         </div>
 
         <div className="mt-4 p-4 bg-muted rounded-lg">
-          <p className="text-sm font-medium mb-2">Formato esperado:</p>
+          <p className="text-sm font-medium mb-2">Formato esperado (mínimo):</p>
           <code className="text-xs">
             Data, Vendedora, Filial, Valor Bruto, Desconto, Qtd Itens
           </code>
+          <p className="text-sm mt-2">
+            Opcional: <code>Atendimentos</code> (para ticket médio).
+          </p>
         </div>
       </CardContent>
     </Card>
