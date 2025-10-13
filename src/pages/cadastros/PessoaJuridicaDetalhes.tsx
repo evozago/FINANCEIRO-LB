@@ -82,7 +82,7 @@ export default function PessoaJuridicaDetalhes() {
         setPJ(pjData as PessoaJuridica);
 
         // 2) Resumo (view)
-        const { data: resData, error: resErr } = await supabase
+const { data: resData, error: resErr } = await supabase
   .from("vw_fin_resumo_por_fornecedor")
   .select("*")
   .eq("pessoa_juridica_id", fornecedorId)
