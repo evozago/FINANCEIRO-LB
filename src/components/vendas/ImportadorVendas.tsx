@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useDropzone } from "react-dropzone";
-import Papa from "papaparse";
-import * as XLSX from "xlsx";
-import { supabase } from "@/integrations/supabase/client";
+import Papa from "https://esm.sh/papaparse";
+import * as XLSX from "https://esm.sh/xlsx";
+import { createClient } from "https://esm.sh/@supabase/supabase-js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,6 +11,11 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { format, parse } from "date-fns";
+
+// FIXME: Substitua com a URL e a chave anônima do seu projeto Supabase
+const supabaseUrl = "YOUR_SUPABASE_URL";
+const supabaseKey = "YOUR_SUPABASE_ANON_KEY";
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface ImportadorVendasProps {
   onSuccess: () => void;
@@ -24,19 +29,19 @@ interface ParsedRow {
   valor_bruto?: string;
   desconto?: string;
   qtd_itens?: string;
-  atendimentos?: string;      // <-- NOVO (opcional no arquivo)
+  atendimentos?: string; // <-- NOVO (opcional no arquivo)
   [key: string]: string | undefined;
 }
 
 /** Linha já mapeada/validada para inserção */
 interface MappedRow {
-  data: string;               // sempre "YYYY-MM-01"
+  data: string; // sempre "YYYY-MM-01"
   vendedora_nome: string;
   filial_nome: string;
   valor_bruto_centavos: number;
   desconto_centavos: number;
   qtd_itens: number;
-  atendimentos: number;       // <-- NOVO (>= 0)
+  atendimentos: number; // <-- NOVO (>= 0)
   valid: boolean;
   error?: string;
 }
@@ -74,6 +79,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      delimiter: ";", // <-- AQUI ESTÁ A MUDANÇA
       complete: (results) => {
         setHeaders(results.meta.fields || []);
         setParsedData(results.data as ParsedRow[]);
@@ -201,7 +207,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
           valor_bruto_centavos: valorBrutoCentavos,
           desconto_centavos: descontoCentavos,
           qtd_itens: qtdItens,
-          atendimentos: atend,    // <-- NOVO
+          atendimentos: atend, // <-- NOVO
           valid: true,
         };
       } catch (error) {
@@ -212,7 +218,7 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
           valor_bruto_centavos: 0,
           desconto_centavos: 0,
           qtd_itens: 0,
-          atendimentos: 0,        // <-- NOVO
+          atendimentos: 0, // <-- NOVO
           valid: false,
           error: error instanceof Error ? error.message : "Erro desconhecido",
         };
@@ -260,17 +266,18 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
       }
 
       const { error } = await supabase.from("vendas_diarias").insert({
-        data: row.data,                                 // YYYY-MM-01
+        data: row.data, // YYYY-MM-01
         vendedora_pf_id: vendedoraId,
         filial_id: filialId,
         valor_bruto_centavos: row.valor_bruto_centavos,
         desconto_centavos: row.desconto_centavos,
         valor_liquido_centavos: row.valor_bruto_centavos - row.desconto_centavos,
         qtd_itens: row.qtd_itens,
-        atendimentos: row.atendimentos ?? 0,            // <-- NOVO (default 0)
+        atendimentos: row.atendimentos ?? 0, // <-- NOVO (default 0)
       });
 
-      if (error) errorCount++; else successCount++;
+      if (error) errorCount++;
+      else successCount++;
       setImportProgress(Math.round(((i + 1) / validRows.length) * 100));
     }
 
@@ -297,7 +304,9 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
   if (importResult) {
     return (
       <Card>
-        <CardHeader><CardTitle>Resultado da Importação</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Resultado da Importação</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -429,7 +438,9 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
 
           <div className="flex gap-2">
             <Button onClick={validateAndMapData}>Validar e Continuar</Button>
-            <Button variant="outline" onClick={reset}>Cancelar</Button>
+            <Button variant="outline" onClick={reset}>
+              Cancelar
+            </Button>
           </div>
         </CardContent>
       </Card>
