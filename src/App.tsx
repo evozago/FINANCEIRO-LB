@@ -50,6 +50,10 @@ const App = () => (
             <Route path="cadastros/pessoas-fisicas" element={<PessoasFisicas />} />
             <Route path="cadastros/pessoas-fisicas/:id" element={<PessoaFisicaDetalhes />} />
             <Route path="cadastros/pessoas-juridicas" element={<PessoasJuridicas />} />
+            <Route path="cadastros/filiais" element={<Filiais />} />
+            <Route path="cadastros/cargos" element={<Cargos />} />
+            <Route path="cadastros/marcas" element={<Marcas />} />
+
 
             {/* Rota CANÔNICA (singular) para detalhe */}
             <Route path="cadastros/pessoa-juridica/:id" element={<PessoaJuridicaDetalhes />} />
@@ -78,6 +82,7 @@ const App = () => (
             <Route path="vendas/relatorios" element={<RelatoriosVendas />} />
             <Route path="vendas/simulador-metas" element={<SimuladorMetas />} />
             <Route path="vendas/dashboard-comparativo" element={<DashboardComparativo />} />
+
 
             {/* Compras */}
             <Route path="compras/pedidos" element={<Pedidos />} />
