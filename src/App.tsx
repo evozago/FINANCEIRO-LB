@@ -22,7 +22,7 @@ import { VendasMensaisPorVendedora } from "@/pages/vendas/VendasMensaisPorVended
 import { Metas } from "@/pages/vendas/Metas";
 import RegistrarVendas from "@/pages/vendas/RegistrarVendas";
 import { PessoaFisicaDetalhes } from "@/pages/cadastros/PessoaFisicaDetalhes";
-import { PessoaJuridicaDetalhes } from "@/pages/cadastros/PessoaJuridicaDetalhes";
+import PessoaJuridicaDetalhes from "@/pages/cadastros/PessoaJuridicaDetalhes";
 import { MarcaDetalhes } from "@/pages/cadastros/MarcaDetalhes";
 import { RelatoriosVendas } from "@/pages/vendas/RelatoriosVendas";
 import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
