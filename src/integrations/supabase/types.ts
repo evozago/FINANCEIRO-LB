@@ -52,26 +52,44 @@ export type Database = {
       }
       categorias_financeiras: {
         Row: {
+          archived: boolean
           categoria_pai_id: number | null
+          cor: string
           created_at: string
+          descricao: string | null
           id: number
           nome: string
+          ordem: number
+          parent_id: number | null
+          slug: string | null
           tipo: Database["public"]["Enums"]["tipo_categoria"]
           updated_at: string
         }
         Insert: {
+          archived?: boolean
           categoria_pai_id?: number | null
+          cor?: string
           created_at?: string
+          descricao?: string | null
           id?: number
           nome: string
+          ordem?: number
+          parent_id?: number | null
+          slug?: string | null
           tipo?: Database["public"]["Enums"]["tipo_categoria"]
           updated_at?: string
         }
         Update: {
+          archived?: boolean
           categoria_pai_id?: number | null
+          cor?: string
           created_at?: string
+          descricao?: string | null
           id?: number
           nome?: string
+          ordem?: number
+          parent_id?: number | null
+          slug?: string | null
           tipo?: Database["public"]["Enums"]["tipo_categoria"]
           updated_at?: string
         }
@@ -79,6 +97,13 @@ export type Database = {
           {
             foreignKeyName: "categorias_financeiras_categoria_pai_id_fkey"
             columns: ["categoria_pai_id"]
+            isOneToOne: false
+            referencedRelation: "categorias_financeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "categorias_financeiras_parent_fk"
+            columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "categorias_financeiras"
             referencedColumns: ["id"]
@@ -324,6 +349,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "compras_pedidos_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
+          },
+          {
             foreignKeyName: "compras_pedidos_marca_id_fkey"
             columns: ["marca_id"]
             isOneToOne: false
@@ -348,7 +380,8 @@ export type Database = {
           id: number
           nome_conta: string
           numero_conta: string | null
-          pj_id: number
+          pf_id: number | null
+          pj_id: number | null
           saldo_atual_centavos: number
           updated_at: string
         }
@@ -360,7 +393,8 @@ export type Database = {
           id?: number
           nome_conta: string
           numero_conta?: string | null
-          pj_id: number
+          pf_id?: number | null
+          pj_id?: number | null
           saldo_atual_centavos?: number
           updated_at?: string
         }
@@ -372,7 +406,8 @@ export type Database = {
           id?: number
           nome_conta?: string
           numero_conta?: string | null
-          pj_id?: number
+          pf_id?: number | null
+          pj_id?: number | null
           saldo_atual_centavos?: number
           updated_at?: string
         }
@@ -390,6 +425,41 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "pessoas_juridicas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_bancarias_pj_id_fkey"
+            columns: ["pj_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
+          },
+          {
+            foreignKeyName: "fk_pf"
+            columns: ["pf_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_pj"
+            columns: ["pj_id"]
+            isOneToOne: false
+            referencedRelation: "analise_fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_pj"
+            columns: ["pj_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_juridicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_pj"
+            columns: ["pj_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
           },
         ]
       }
@@ -450,7 +520,8 @@ export type Database = {
           descricao: string | null
           empresa_destinataria_id: number | null
           filial_id: number | null
-          fornecedor_id: number
+          fornecedor_id: number | null
+          fornecedor_pf_id: number | null
           id: number
           num_parcelas: number | null
           numero_nf: string | null
@@ -468,7 +539,8 @@ export type Database = {
           descricao?: string | null
           empresa_destinataria_id?: number | null
           filial_id?: number | null
-          fornecedor_id: number
+          fornecedor_id?: number | null
+          fornecedor_pf_id?: number | null
           id?: number
           num_parcelas?: number | null
           numero_nf?: string | null
@@ -486,7 +558,8 @@ export type Database = {
           descricao?: string | null
           empresa_destinataria_id?: number | null
           filial_id?: number | null
-          fornecedor_id?: number
+          fornecedor_id?: number | null
+          fornecedor_pf_id?: number | null
           id?: number
           num_parcelas?: number | null
           numero_nf?: string | null
@@ -519,6 +592,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "contas_pagar_empresa_destinataria_id_fkey"
+            columns: ["empresa_destinataria_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
+          },
+          {
             foreignKeyName: "contas_pagar_filial_id_fkey"
             columns: ["filial_id"]
             isOneToOne: false
@@ -537,6 +617,20 @@ export type Database = {
             columns: ["fornecedor_id"]
             isOneToOne: false
             referencedRelation: "pessoas_juridicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
+          },
+          {
+            foreignKeyName: "fk_fornecedor_pf"
+            columns: ["fornecedor_pf_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
             referencedColumns: ["id"]
           },
         ]
@@ -683,7 +777,38 @@ export type Database = {
             referencedRelation: "pessoas_juridicas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "contas_recorrentes_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
+          },
         ]
+      }
+      cores: {
+        Row: {
+          created_at: string | null
+          hex_code: string | null
+          id: number
+          nome: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          hex_code?: string | null
+          id?: number
+          nome: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          hex_code?: string | null
+          id?: number
+          nome?: string
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       fechamento_caixa: {
         Row: {
@@ -893,6 +1018,13 @@ export type Database = {
             referencedRelation: "pessoas_juridicas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "filiais_pj_id_fkey"
+            columns: ["pj_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
+          },
         ]
       }
       formas_pagamento: {
@@ -952,6 +1084,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "pessoas_juridicas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marcas_pj_vinculada_id_fkey"
+            columns: ["pj_vinculada_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
           },
         ]
       }
@@ -1138,6 +1277,13 @@ export type Database = {
             referencedRelation: "pessoas_juridicas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "pj_marcas_pj_id_fkey"
+            columns: ["pj_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
+          },
         ]
       }
       pj_representantes: {
@@ -1175,7 +1321,117 @@ export type Database = {
             referencedRelation: "pessoas_juridicas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "pj_representantes_pj_id_fkey"
+            columns: ["pj_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
+          },
         ]
+      }
+      produto_grades: {
+        Row: {
+          cor_id: number | null
+          created_at: string | null
+          custo_centavos: number | null
+          estoque: number | null
+          id: number
+          preco_venda_centavos: number | null
+          produto_id: number
+          sku: string | null
+          tamanho_id: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          cor_id?: number | null
+          created_at?: string | null
+          custo_centavos?: number | null
+          estoque?: number | null
+          id?: number
+          preco_venda_centavos?: number | null
+          produto_id: number
+          sku?: string | null
+          tamanho_id?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          cor_id?: number | null
+          created_at?: string | null
+          custo_centavos?: number | null
+          estoque?: number | null
+          id?: number
+          preco_venda_centavos?: number | null
+          produto_id?: number
+          sku?: string | null
+          tamanho_id?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produto_grades_cor_id_fkey"
+            columns: ["cor_id"]
+            isOneToOne: false
+            referencedRelation: "cores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produto_grades_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produto_grades_tamanho_id_fkey"
+            columns: ["tamanho_id"]
+            isOneToOne: false
+            referencedRelation: "tamanhos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      produtos: {
+        Row: {
+          ativo: boolean | null
+          categoria: string | null
+          created_at: string | null
+          descricao: string | null
+          faixa_etaria: string | null
+          genero: string | null
+          id: number
+          nome: string
+          tipo_manga: string | null
+          unidade_medida: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          categoria?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          faixa_etaria?: string | null
+          genero?: string | null
+          id?: number
+          nome: string
+          tipo_manga?: string | null
+          unidade_medida?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          categoria?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          faixa_etaria?: string | null
+          genero?: string | null
+          id?: number
+          nome?: string
+          tipo_manga?: string | null
+          unidade_medida?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -1205,47 +1461,80 @@ export type Database = {
         Row: {
           ativa: boolean
           categoria_id: number | null
+          chave_nfe: string | null
+          codigo_boleto: string | null
           created_at: string
+          data_emissao: string | null
           dia_fechamento: number | null
           dia_vencimento: number | null
+          dia_vencimento_livre: number | null
+          dias_semana: number[] | null
           filial_id: number
           fornecedor_id: number | null
           id: number
+          intervalo_frequencia: number | null
           livre: boolean
           nome: string
+          num_parcelas: number | null
+          numero_nota: string | null
+          referencia: string | null
           sem_data_final: boolean
+          tipo_frequencia: string | null
+          ultimo_gerado_em: string | null
           updated_at: string
-          valor_esperado_centavos: number
+          valor_total_centavos: number
         }
         Insert: {
           ativa?: boolean
           categoria_id?: number | null
+          chave_nfe?: string | null
+          codigo_boleto?: string | null
           created_at?: string
+          data_emissao?: string | null
           dia_fechamento?: number | null
           dia_vencimento?: number | null
+          dia_vencimento_livre?: number | null
+          dias_semana?: number[] | null
           filial_id: number
           fornecedor_id?: number | null
           id?: number
+          intervalo_frequencia?: number | null
           livre?: boolean
           nome: string
+          num_parcelas?: number | null
+          numero_nota?: string | null
+          referencia?: string | null
           sem_data_final?: boolean
+          tipo_frequencia?: string | null
+          ultimo_gerado_em?: string | null
           updated_at?: string
-          valor_esperado_centavos?: number
+          valor_total_centavos?: number
         }
         Update: {
           ativa?: boolean
           categoria_id?: number | null
+          chave_nfe?: string | null
+          codigo_boleto?: string | null
           created_at?: string
+          data_emissao?: string | null
           dia_fechamento?: number | null
           dia_vencimento?: number | null
+          dia_vencimento_livre?: number | null
+          dias_semana?: number[] | null
           filial_id?: number
           fornecedor_id?: number | null
           id?: number
+          intervalo_frequencia?: number | null
           livre?: boolean
           nome?: string
+          num_parcelas?: number | null
+          numero_nota?: string | null
+          referencia?: string | null
           sem_data_final?: boolean
+          tipo_frequencia?: string | null
+          ultimo_gerado_em?: string | null
           updated_at?: string
-          valor_esperado_centavos?: number
+          valor_total_centavos?: number
         }
         Relationships: [
           {
@@ -1275,6 +1564,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "pessoas_juridicas"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recorrencias_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fin_resumo_por_fornecedor"
+            referencedColumns: ["pessoa_juridica_id"]
           },
         ]
       }
@@ -1319,6 +1615,30 @@ export type Database = {
           },
         ]
       }
+      tamanhos: {
+        Row: {
+          created_at: string | null
+          id: number
+          nome: string
+          ordem: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: number
+          nome: string
+          ordem?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          nome?: string
+          ordem?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       taxas_bandeira: {
         Row: {
           bandeira_id: number
@@ -1360,6 +1680,7 @@ export type Database = {
       }
       vendas_diarias: {
         Row: {
+          atendimentos: number
           created_at: string
           data: string
           desconto_centavos: number
@@ -1371,6 +1692,7 @@ export type Database = {
           vendedora_pf_id: number | null
         }
         Insert: {
+          atendimentos?: number
           created_at?: string
           data: string
           desconto_centavos?: number
@@ -1382,6 +1704,7 @@ export type Database = {
           vendedora_pf_id?: number | null
         }
         Update: {
+          atendimentos?: number
           created_at?: string
           data?: string
           desconto_centavos?: number
@@ -1597,6 +1920,108 @@ export type Database = {
           },
         ]
       }
+      vw_fin_resumo_por_fornecedor: {
+        Row: {
+          cnpj: string | null
+          nome: string | null
+          pessoa_juridica_id: number | null
+          total_contas_centavos: number | null
+          total_em_aberto_centavos: number | null
+          total_pago_centavos: number | null
+          total_vencido_centavos: number | null
+        }
+        Relationships: []
+      }
+      vw_vendas_pbi_mes: {
+        Row: {
+          ano: number | null
+          filial_id: number | null
+          mes: number | null
+          soma_atendimentos: number | null
+          soma_bruto_centavos: number | null
+          soma_desconto_centavos: number | null
+          soma_itens: number | null
+          soma_liquido_centavos: number | null
+          ticket_medio_centavos: number | null
+          vendedora_pf_id: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendas_diarias_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_diarias_vendedora_pf_id_fkey"
+            columns: ["vendedora_pf_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vw_vendas_pbi_raw: {
+        Row: {
+          ano: number | null
+          atendimentos: number | null
+          data: string | null
+          desconto_centavos: number | null
+          filial_id: number | null
+          id: number | null
+          mes: number | null
+          qtd_itens: number | null
+          ticket_medio_centavos: number | null
+          valor_bruto_centavos: number | null
+          valor_liquido_centavos: number | null
+          vendedora_pf_id: number | null
+        }
+        Insert: {
+          ano?: never
+          atendimentos?: number | null
+          data?: string | null
+          desconto_centavos?: number | null
+          filial_id?: number | null
+          id?: number | null
+          mes?: never
+          qtd_itens?: number | null
+          ticket_medio_centavos?: never
+          valor_bruto_centavos?: number | null
+          valor_liquido_centavos?: never
+          vendedora_pf_id?: number | null
+        }
+        Update: {
+          ano?: never
+          atendimentos?: number | null
+          data?: string | null
+          desconto_centavos?: number | null
+          filial_id?: number | null
+          id?: number | null
+          mes?: never
+          qtd_itens?: number | null
+          ticket_medio_centavos?: never
+          valor_bruto_centavos?: number | null
+          valor_liquido_centavos?: never
+          vendedora_pf_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendas_diarias_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_diarias_vendedora_pf_id_fkey"
+            columns: ["vendedora_pf_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       aplicar_recorrencia_mes: {
@@ -1685,6 +2110,23 @@ export type Database = {
         }
         Returns: undefined
       }
+      pj_fin_listar_contas: {
+        Args: { _fornecedor_id: number; _limit?: number }
+        Returns: {
+          conta_id: number
+          created_at: string
+          data_pagamento: string
+          descricao: string
+          num_parcelas: number
+          numero_nota: string
+          pago: boolean
+          parcela_id: number
+          parcela_num: number
+          valor_parcela_centavos: number
+          valor_total_centavos: number
+          vencimento: string
+        }[]
+      }
       proximas_contas_recorrentes: {
         Args: { dias_antecedencia?: number }
         Returns: {
@@ -1711,6 +2153,18 @@ export type Database = {
         Args: { "": string }
         Returns: string[]
       }
+      to_slug: {
+        Args: { txt: string }
+        Returns: string
+      }
+      unaccent: {
+        Args: { "": string }
+        Returns: string
+      }
+      unaccent_init: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
     }
     Enums: {
       app_role: "admin" | "user" | "rh"
@@ -1722,6 +2176,9 @@ export type Database = {
         | "revenda"
         | "servico"
         | "outros"
+        | "despesa"
+        | "receita"
+        | "transferencia"
       tipo_link: "pedido" | "foto" | "outro"
       tipo_movimentacao: "debito" | "credito"
     }
@@ -1860,6 +2317,9 @@ export const Constants = {
         "revenda",
         "servico",
         "outros",
+        "despesa",
+        "receita",
+        "transferencia",
       ],
       tipo_link: ["pedido", "foto", "outro"],
       tipo_movimentacao: ["debito", "credito"],

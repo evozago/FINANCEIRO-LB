@@ -13,7 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 interface ContaRecorrente {
   id: number;
   nome: string;
-  valor_esperado_centavos: number;
+  valor_total_centavos: number;
+  valor_esperado_centavos?: number;
   dia_vencimento: number;
   fornecedor_id?: number;
   categoria_id: number;

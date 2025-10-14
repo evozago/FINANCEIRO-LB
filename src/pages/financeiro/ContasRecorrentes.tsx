@@ -14,7 +14,8 @@ import { useToast } from '@/hooks/use-toast';
 interface ContaRecorrente {
   id: number;
   nome: string;
-  valor_esperado_centavos: number;
+  valor_total_centavos: number;
+  valor_esperado_centavos?: number;
   dia_vencimento: number;
   fornecedor_id?: number;
   categoria_id: number;
@@ -57,7 +58,7 @@ export function ContasRecorrentes() {
 
   const [formData, setFormData] = useState({
     nome: '',
-    valor_esperado_centavos: 0,
+    valor_total_centavos: 0,
     dia_vencimento: '1',
     fornecedor_id: '',
     categoria_id: '',
@@ -184,7 +185,7 @@ export function ContasRecorrentes() {
       return;
     }
 
-    if (!formData.valor_esperado_centavos || formData.valor_esperado_centavos <= 0) {
+    if (!formData.valor_total_centavos || formData.valor_total_centavos <= 0) {
       toast({
         title: 'Erro',
         description: 'Valor deve ser maior que zero.',
@@ -196,7 +197,7 @@ export function ContasRecorrentes() {
     try {
       const dataToSubmit = {
         nome: formData.nome.trim(),
-        valor_esperado_centavos: formData.valor_esperado_centavos,
+        valor_total_centavos: formData.valor_total_centavos,
         dia_vencimento: parseInt(formData.dia_vencimento),
         fornecedor_id: formData.fornecedor_id ? parseInt(formData.fornecedor_id) : null,
         categoria_id: parseInt(formData.categoria_id),
@@ -250,7 +251,7 @@ export function ContasRecorrentes() {
     setEditingConta(conta);
     setFormData({
       nome: conta.nome,
-      valor_esperado_centavos: conta.valor_esperado_centavos,
+      valor_total_centavos: conta.valor_total_centavos || conta.valor_esperado_centavos || 0,
       dia_vencimento: conta.dia_vencimento.toString(),
       fornecedor_id: conta.fornecedor_id?.toString() || '',
       categoria_id: conta.categoria_id.toString(),
@@ -320,8 +321,8 @@ export function ContasRecorrentes() {
       const mesAtual = hoje.getMonth() + 1;
       const anoAtual = hoje.getFullYear();
 
-      // Buscar contas ativas
-      const contasAtivas = contas.filter(conta => conta.ativa);
+      // Buscar contas ativas (excluindo contas livres)
+      const contasAtivas = contas.filter(conta => conta.ativa && !conta.livre);
 
       if (contasAtivas.length === 0) {
         toast({
@@ -335,6 +336,7 @@ export function ContasRecorrentes() {
       let contasJaExistentes = 0;
 
       for (const conta of contasAtivas) {
+        const valorConta = conta.valor_total_centavos || conta.valor_esperado_centavos || 0;
         const descricaoConta = `${conta.nome} - ${String(mesAtual).padStart(2, '0')}/${anoAtual}`;
         
         // Verificar se já existe
@@ -362,7 +364,7 @@ export function ContasRecorrentes() {
             .from('contas_pagar')
             .insert({
               descricao: descricaoConta,
-              valor_total_centavos: conta.valor_esperado_centavos,
+              valor_total_centavos: valorConta,
               fornecedor_id: conta.fornecedor_id,
               categoria_id: conta.categoria_id,
               filial_id: conta.filial_id,
@@ -379,7 +381,7 @@ export function ContasRecorrentes() {
               .insert({
                 conta_id: novaConta.id,
                 parcela_num: 1,
-                valor_parcela_centavos: conta.valor_esperado_centavos,
+                valor_parcela_centavos: valorConta,
                 vencimento: dataVencimento.toISOString().split('T')[0],
                 pago: false
               });
@@ -408,10 +410,64 @@ export function ContasRecorrentes() {
     }
   };
 
+  const gerarContaLivre = async (conta: ContaRecorrente) => {
+    try {
+      const hoje = new Date();
+      const timestamp = Date.now();
+      const descricaoConta = `${conta.nome} - ${hoje.toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`;
+      const valorConta = conta.valor_total_centavos || conta.valor_esperado_centavos || 0;
+      
+      // Calcular data de vencimento (hoje ou data configurada)
+      const dataVencimento = hoje.toISOString().split('T')[0];
+      
+      // Criar conta a pagar
+      const { data: novaConta, error: insertError } = await supabase
+        .from('contas_pagar')
+        .insert({
+          descricao: descricaoConta,
+          valor_total_centavos: valorConta,
+          fornecedor_id: conta.fornecedor_id,
+          categoria_id: conta.categoria_id,
+          filial_id: conta.filial_id,
+          num_parcelas: 1,
+          referencia: `LIVRE-${conta.id}-${timestamp}`
+        })
+        .select('id')
+        .single();
+
+      if (insertError) throw insertError;
+
+      if (novaConta) {
+        // Criar parcela
+        await supabase
+          .from('contas_pagar_parcelas')
+          .insert({
+            conta_id: novaConta.id,
+            parcela_num: 1,
+            valor_parcela_centavos: valorConta,
+            vencimento: dataVencimento,
+            pago: false
+          });
+
+        toast({
+          title: 'Sucesso',
+          description: 'Conta gerada com sucesso!',
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao gerar conta livre:', error);
+      toast({
+        title: 'Erro',
+        description: 'Erro ao gerar conta.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       nome: '',
-      valor_esperado_centavos: 0,
+      valor_total_centavos: 0,
       dia_vencimento: '1',
       fornecedor_id: '',
       categoria_id: '',
@@ -452,9 +508,10 @@ export function ContasRecorrentes() {
 
   const contasAtivas = contas.filter(conta => conta.ativa).length;
   const contasInativas = contas.filter(conta => !conta.ativa).length;
+  const contasLivres = contas.filter(conta => conta.livre && conta.ativa).length;
   const valorTotalMensal = contas
-    .filter(conta => conta.ativa)
-    .reduce((sum, conta) => sum + conta.valor_esperado_centavos, 0);
+    .filter(conta => conta.ativa && !conta.livre)
+    .reduce((sum, conta) => sum + (conta.valor_total_centavos || conta.valor_esperado_centavos || 0), 0);
 
   if (loading) {
     return (
@@ -518,11 +575,11 @@ export function ContasRecorrentes() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="valor_esperado_centavos">Valor Esperado (R$) *</Label>
+                    <Label htmlFor="valor_total_centavos">Valor Esperado (R$) *</Label>
                     <CurrencyInput
-                      id="valor_esperado_centavos"
-                      value={formData.valor_esperado_centavos}
-                      onValueChange={(value) => setFormData({ ...formData, valor_esperado_centavos: value })}
+                      id="valor_total_centavos"
+                      value={formData.valor_total_centavos}
+                      onValueChange={(value) => setFormData({ ...formData, valor_total_centavos: value })}
                       placeholder="0,00"
                       required
                     />
@@ -612,8 +669,14 @@ export function ContasRecorrentes() {
                       checked={formData.livre}
                       onChange={(e) => setFormData({ ...formData, livre: e.target.checked })}
                     />
-                    <Label htmlFor="livre">Conta livre (valor pode variar)</Label>
+                    <Label htmlFor="livre">Conta Livre (pode ser gerada múltiplas vezes)</Label>
                   </div>
+                  
+                  {formData.livre && (
+                    <div className="pl-6 text-sm text-muted-foreground">
+                      Esta conta poderá ser gerada quantas vezes for necessário, com vencimento para o dia da geração
+                    </div>
+                  )}
                 </div>
                 
                 <div className="flex justify-end space-x-2">
@@ -654,11 +717,11 @@ export function ContasRecorrentes() {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Contas</CardTitle>
-            <Calendar className="h-4 w-4 text-blue-600" />
+            <CardTitle className="text-sm font-medium">Contas Livres</CardTitle>
+            <RefreshCw className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{contas.length}</div>
+            <div className="text-2xl font-bold text-purple-600">{contasLivres}</div>
           </CardContent>
         </Card>
         
@@ -719,12 +782,19 @@ export function ContasRecorrentes() {
             <TableBody>
               {filteredContas.map((conta) => (
                 <TableRow key={conta.id}>
-                  <TableCell className="font-medium">{conta.nome}</TableCell>
+                  <TableCell className="font-medium">
+                    {conta.nome}
+                    {conta.livre && (
+                      <Badge variant="outline" className="ml-2">Livre</Badge>
+                    )}
+                  </TableCell>
                   <TableCell>{getFornecedorNome(conta.fornecedor_id)}</TableCell>
                   <TableCell>{getCategoriaNome(conta.categoria_id)}</TableCell>
                   <TableCell>{getFilialNome(conta.filial_id)}</TableCell>
-                  <TableCell>{formatCurrency(conta.valor_esperado_centavos)}</TableCell>
-                  <TableCell>Dia {conta.dia_vencimento}</TableCell>
+                  <TableCell>{formatCurrency(conta.valor_total_centavos || conta.valor_esperado_centavos || 0)}</TableCell>
+                  <TableCell>
+                    {conta.livre ? 'Dia atual' : `Dia ${conta.dia_vencimento}`}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={conta.ativa ? 'default' : 'secondary'}>
                       {conta.ativa ? 'Ativa' : 'Inativa'}
@@ -732,6 +802,16 @@ export function ContasRecorrentes() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center space-x-2">
+                      {conta.livre && conta.ativa && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => gerarContaLivre(conta)}
+                          title="Gerar nova conta"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
