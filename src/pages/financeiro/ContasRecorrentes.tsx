@@ -482,7 +482,15 @@ export function ContasRecorrentes() {
       console.error('Erro ao gerar conta recorrente:', error);
       toast({
         title: 'Erro',
-        description: `Erro ao gerar conta recorrente: ${error.message || 'Erro desconhecido'  const resetForm = () => {
+          description: `Erro ao gerar conta recorrente: ${error.message || 'Erro desconhecido'}`,
+        });
+      } finally {
+        setGenerating(false);
+        fetchContas(); // Recarrega a lista para atualizar o ultimo_gerado_em
+      }
+    };
+
+  const resetForm = () => {
     setFormData({
       nome: "",
       valor_total_centavos: 0,
