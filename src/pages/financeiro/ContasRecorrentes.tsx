@@ -429,7 +429,7 @@ export function ContasRecorrentes() {
             numero_nota: conta.numero_nota,
             chave_nfe: conta.chave_nfe,
             valor_total_centavos: conta.valor_total_centavos,
-             num_parcelas: conta.num_parcelas,
+            num_parcelas: conta.num_parcelas,
             referencia: conta.referencia,
             data_emissao: conta.data_emissao,
           })
