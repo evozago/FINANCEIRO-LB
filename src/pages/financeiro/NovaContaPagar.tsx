@@ -140,7 +140,7 @@ export default function NovaContaPagar() {
 
         parcelas.push({
           conta_id: conta.id,
-          parcela_num: i,
+          numero_parcela: i,
           valor_parcela_centavos: i === numParcelas ? valorParcela + valorRestante : valorParcela,
           vencimento: vencimento.toISOString().split('T')[0],
           pago: false,
