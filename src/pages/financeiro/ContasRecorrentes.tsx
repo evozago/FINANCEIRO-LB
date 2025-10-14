@@ -14,15 +14,25 @@ import { useToast } from '@/hooks/use-toast';
 interface ContaRecorrente {
   id: number;
   nome: string;
-  valor_esperado_centavos: number;
+  valor_total_centavos: number;
   dia_vencimento: number;
-  fornecedor_id?: number;
+  fornecedor_id?: number | null;
   categoria_id: number;
   filial_id: number;
   ativa: boolean;
   livre: boolean;
   sem_data_final: boolean;
-  dia_fechamento?: number;
+  dia_fechamento?: number | null;
+  numero_nota?: string | null;
+  chave_nfe?: string | null;
+  num_parcelas: number;
+  referencia?: string | null;
+  data_emissao?: string | null;
+  codigo_boleto?: string | null;
+  tipo_frequencia: 'diaria' | 'semanal' | 'quinzenal' | 'mensal';
+  intervalo_frequencia: number;
+  dias_semana?: number[] | null;
+  ultimo_gerado_em?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -55,17 +65,26 @@ export function ContasRecorrentes() {
   const [generating, setGenerating] = useState(false);
   const { toast } = useToast();
 
-  const [formData, setFormData] = useState({
-    nome: '',
-    valor_esperado_centavos: 0,
-    dia_vencimento: '1',
-    fornecedor_id: '',
-    categoria_id: '',
-    filial_id: '',
+  const [formData, setFormData] = useState<Omit<ContaRecorrente, 'id' | 'created_at' | 'updated_at' | 'ultimo_gerado_em'>>({
+    nome: "",
+    valor_total_centavos: 0,
+    dia_vencimento: 1,
+    fornecedor_id: undefined,
+    categoria_id: 0,
+    filial_id: 0,
     ativa: true,
     livre: false,
     sem_data_final: true,
-    dia_fechamento: '',
+    dia_fechamento: undefined,
+    numero_nota: undefined,
+    chave_nfe: undefined,
+    num_parcelas: 1,
+    referencia: undefined,
+    data_emissao: undefined,
+    codigo_boleto: undefined,
+    tipo_frequencia: "mensal",
+    intervalo_frequencia: 1,
+    dias_semana: [],
   });
 
   useEffect(() => {
@@ -184,7 +203,7 @@ export function ContasRecorrentes() {
       return;
     }
 
-    if (!formData.valor_esperado_centavos || formData.valor_esperado_centavos <= 0) {
+    if (formData.valor_total_centavos <= 0) {
       toast({
         title: 'Erro',
         description: 'Valor deve ser maior que zero.',
@@ -196,15 +215,24 @@ export function ContasRecorrentes() {
     try {
       const dataToSubmit = {
         nome: formData.nome.trim(),
-        valor_esperado_centavos: formData.valor_esperado_centavos,
-        dia_vencimento: parseInt(formData.dia_vencimento),
-        fornecedor_id: formData.fornecedor_id ? parseInt(formData.fornecedor_id) : null,
-        categoria_id: parseInt(formData.categoria_id),
-        filial_id: parseInt(formData.filial_id),
+        valor_total_centavos: formData.valor_total_centavos,
+        dia_vencimento: parseInt(formData.dia_vencimento.toString()),
+        fornecedor_id: formData.fornecedor_id || null,
+        categoria_id: formData.categoria_id,
+        filial_id: formData.filial_id,
         ativa: formData.ativa,
         livre: formData.livre,
         sem_data_final: formData.sem_data_final,
-        dia_fechamento: formData.dia_fechamento ? parseInt(formData.dia_fechamento) : null,
+        dia_fechamento: formData.dia_fechamento || null,
+        numero_nota: formData.numero_nota || null,
+        chave_nfe: formData.chave_nfe || null,
+        num_parcelas: formData.num_parcelas,
+        referencia: formData.referencia || null,
+        data_emissao: formData.data_emissao || null,
+        codigo_boleto: formData.codigo_boleto || null,
+        tipo_frequencia: formData.tipo_frequencia,
+        intervalo_frequencia: formData.intervalo_frequencia,
+        dias_semana: formData.dias_semana.length > 0 ? formData.dias_semana : null,
       };
 
       if (editingConta) {
@@ -250,15 +278,24 @@ export function ContasRecorrentes() {
     setEditingConta(conta);
     setFormData({
       nome: conta.nome,
-      valor_esperado_centavos: conta.valor_esperado_centavos,
-      dia_vencimento: conta.dia_vencimento.toString(),
-      fornecedor_id: conta.fornecedor_id?.toString() || '',
-      categoria_id: conta.categoria_id.toString(),
-      filial_id: conta.filial_id.toString(),
+      valor_total_centavos: conta.valor_total_centavos,
+      dia_vencimento: conta.dia_vencimento,
+      fornecedor_id: conta.fornecedor_id || undefined,
+      categoria_id: conta.categoria_id,
+      filial_id: conta.filial_id,
       ativa: conta.ativa,
       livre: conta.livre,
       sem_data_final: conta.sem_data_final,
-      dia_fechamento: conta.dia_fechamento?.toString() || '',
+      dia_fechamento: conta.dia_fechamento || undefined,
+      numero_nota: conta.numero_nota || undefined,
+      chave_nfe: conta.chave_nfe || undefined,
+      num_parcelas: conta.num_parcelas,
+      referencia: conta.referencia || undefined,
+      data_emissao: conta.data_emissao || undefined,
+      codigo_boleto: conta.codigo_boleto || undefined,
+      tipo_frequencia: conta.tipo_frequencia,
+      intervalo_frequencia: conta.intervalo_frequencia,
+      dias_semana: conta.dias_semana || [],
     });
     setIsDialogOpen(true);
   };
@@ -313,113 +350,169 @@ export function ContasRecorrentes() {
     }
   };
 
-  const gerarContasMes = async () => {
-    setGenerating(true);
+  const handleGerarConta = async (conta: ContaRecorrente) => {
+
     try {
-      const hoje = new Date();
-      const mesAtual = hoje.getMonth() + 1;
-      const anoAtual = hoje.getFullYear();
+      const dataGeracao = new Date();
+      const result = await gerarContasRecorrentes(conta, dataGeracao);
 
-      // Buscar contas ativas
-      const contasAtivas = contas.filter(conta => conta.ativa);
-
-      if (contasAtivas.length === 0) {
+      if (result?.status === 'gerada') {
         toast({
-          title: 'Informação',
-          description: 'Nenhuma conta recorrente ativa encontrada.',
+          title: 'Sucesso',
+          description: `Conta "${conta.nome}" gerada com sucesso.`,
         });
-        return;
+      } else if (result?.status === 'existente') {
+        toast({
+          title: 'Aviso',
+          description: `A conta "${conta.nome}" para este período já existe.`,
+          variant: 'destructive',
+        });
+      }
+      fetchContas(); // Atualiza a lista para refletir a última data de geração
+    } catch (error) {
+      // O erro já é tratado dentro de gerarContasRecorrentes
+
+  };
+
+  const gerarContasRecorrentes = async (conta: ContaRecorrente, dataGeracao: Date) => {
+    try {
+      const mesGeracao = dataGeracao.getMonth() + 1;
+      const anoGeracao = dataGeracao.getFullYear();
+
+      let datasParaGerar: Date[] = [];
+
+      if (conta.tipo_frequencia === 'diaria') {
+        datasParaGerar.push(dataGeracao);
+      } else if (conta.tipo_frequencia === 'semanal' || conta.tipo_frequencia === 'quinzenal') {
+        // Para semanal/quinzenal, gerar para os dias da semana selecionados
+        const diaSemanaGeracao = dataGeracao.getDay(); // 0 = Domingo, 1 = Segunda
+        const diasSelecionados = conta.dias_semana || [];
+
+        if (diasSelecionados.includes(diaSemanaGeracao + 1)) { // +1 porque getDay() é 0-6 e dias_semana é 1-7
+          datasParaGerar.push(dataGeracao);
+        }
+      } else if (conta.tipo_frequencia === 'mensal') {
+        // Para mensal, gerar se o dia do vencimento for igual ao dia da geração
+        if (dataGeracao.getDate() === conta.dia_vencimento) {
+          datasParaGerar.push(dataGeracao);
+        }
       }
 
       let contasGeradas = 0;
       let contasJaExistentes = 0;
 
-      for (const conta of contasAtivas) {
-        const descricaoConta = `${conta.nome} - ${String(mesAtual).padStart(2, '0')}/${anoAtual}`;
-        
-        // Verificar se já existe
+      for (const dataAtual of datasParaGerar) {
+        const mesConta = dataAtual.getMonth() + 1;
+        const anoConta = dataAtual.getFullYear();
+        const descricaoConta = `${conta.nome} - ${String(mesConta).padStart(2, '0')}/${anoConta}`;
+
+        // Verificar se já existe uma conta a pagar com a mesma descrição para evitar duplicidade
         const { data: contaExistente } = await supabase
           .from('contas_pagar')
           .select('id')
           .eq('descricao', descricaoConta)
           .limit(1);
 
-        if (!contaExistente || contaExistente.length === 0) {
-          // Calcular data de vencimento
-          let dataVencimento;
-          try {
-            dataVencimento = new Date(anoAtual, mesAtual - 1, conta.dia_vencimento);
-            // Se a data é inválida (ex: 31 de fevereiro), usar último dia do mês
-            if (dataVencimento.getMonth() !== mesAtual - 1) {
-              dataVencimento = new Date(anoAtual, mesAtual, 0); // Último dia do mês anterior
-            }
-          } catch {
-            dataVencimento = new Date(anoAtual, mesAtual, 0);
-          }
-          
-          // Criar conta a pagar
-          const { data: novaConta, error: insertError } = await supabase
-            .from('contas_pagar')
-            .insert({
-              descricao: descricaoConta,
-              valor_total_centavos: conta.valor_esperado_centavos,
-              fornecedor_id: conta.fornecedor_id,
-              categoria_id: conta.categoria_id,
-              filial_id: conta.filial_id,
-              num_parcelas: 1,
-              referencia: `REC-${conta.id}-${String(mesAtual).padStart(2, '0')}${anoAtual}`
-            })
-            .select('id')
-            .single();
-
-          if (!insertError && novaConta) {
-            // Criar parcela
-            await supabase
-              .from('contas_pagar_parcelas')
-              .insert({
-                conta_id: novaConta.id,
-                parcela_num: 1,
-                valor_parcela_centavos: conta.valor_esperado_centavos,
-                vencimento: dataVencimento.toISOString().split('T')[0],
-                pago: false
-              });
-
-            contasGeradas++;
-          }
-        } else {
+        if (contaExistente && contaExistente.length > 0) {
           contasJaExistentes++;
+          continue; // Pula para a próxima data se já existe
         }
+
+        // Criar conta a pagar
+        const { data: novaConta, error: novaContaError } = await supabase
+          .from('contas_pagar')
+          .insert({
+            fornecedor_id: conta.fornecedor_id,
+            categoria_id: conta.categoria_id,
+            filial_id: conta.filial_id,
+            descricao: descricaoConta,
+            numero_nota: conta.numero_nota,
+            chave_nfe: conta.chave_nfe,
+            valor_total_centavos: conta.valor_total_centavos,
+           num_parcelas: conta.num_parcelas,,
+            referencia: conta.referencia,
+            data_emissao: conta.data_emissao,
+          })
+          .select()
+          .single();
+
+        if (novaContaError) throw novaContaError;
+
+        // Calcular valor de cada parcela
+        const valorParcela = Math.floor(conta.valor_total_centavos / conta.num_parcelas);
+        const valorRestante = conta.valor_total_centavos - (valorParcela * conta.num_parcelas);
+
+        // Criar parcelas
+        const parcelas = [];
+        for (let i = 1; i <= conta.num_parcelas; i++) {
+          const vencimento = new Date(dataAtual);
+          // Ajustar vencimento para parcelas futuras se houver mais de uma
+          if (conta.num_parcelas > 1) {
+            vencimento.setMonth(vencimento.getMonth() + (i - 1));
+          }
+
+          parcelas.push({
+            conta_id: novaConta.id,
+            parcela_num: i,
+            valor_parcela_centavos: i === conta.num_parcelas ? valorParcela + valorRestante : valorParcela,
+            vencimento: vencimento.toISOString().split('T')[0],
+            pago: false,
+          });
+        }
+
+        const { error: parcelasError } = await supabase
+          .from('contas_pagar_parcelas')
+          .insert(parcelas);
+
+        if (parcelasError) throw parcelasError;
+        contasGeradas++;
       }
 
-      toast({
-        title: 'Geração Concluída',
-        description: `${contasGeradas} conta(s) gerada(s). ${contasJaExistentes} já existiam.`,
-      });
-      
-    } catch (error) {
-      console.error('Erro ao gerar contas:', error);
+      // Atualizar ultimo_gerado_em da conta recorrente APENAS se alguma conta foi gerada
+      if (contasGeradas > 0) {
+        await supabase
+          .from('recorrencias')
+          .update({ ultimo_gerado_em: dataGeracao.toISOString().split('T')[0] })
+          .eq('id', conta.id);
+      }
+
+      return { status: contasGeradas > 0 ? 'gerada' : 'nenhuma_gerada', contasGeradas, contasJaExistentes };
+
+    } catch (error: any) {
+      console.error('Erro ao gerar conta recorrente:', error);
       toast({
         title: 'Erro',
-        description: 'Erro ao gerar contas do mês.',
-        variant: 'destructive',
-      });
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const resetForm = () => {
+        description: `Erro ao gerar conta recorrente: ${error.message || 'Erro desconhecido'  const resetForm = () => {
     setFormData({
-      nome: '',
-      valor_esperado_centavos: 0,
-      dia_vencimento: '1',
-      fornecedor_id: '',
-      categoria_id: '',
-      filial_id: '',
+      nome: "",
+      valor_total_centavos: 0,
+      dia_vencimento: 1,
+      fornecedor_id: undefined,
+      categoria_id: 0,
+      filial_id: 0,
       ativa: true,
       livre: false,
       sem_data_final: true,
-      dia_fechamento: '',
+      dia_fechamento: undefined,
+      numero_nota: undefined,
+      chave_nfe: undefined,
+      num_parcelas: 1,
+      referencia: undefined,
+      data_emissao: undefined,
+      codigo_boleto: undefined,
+      tipo_frequencia: "mensal",
+      intervalo_frequencia: 1,
+      dias_semana: [],
+    });
+  };_nota: ";
+      chave_nfe: ";
+      num_parcelas: 1;
+      referencia: ";
+      data_emissao: ";
+      codigo_boleto: ";
+      tipo_frequencia: "mensal";
+      intervalo_frequencia: 1;
+      dias_semana: [] as number[];
     });
   };
 
@@ -520,7 +613,7 @@ export function ContasRecorrentes() {
                   <div>
                     <Label htmlFor="valor_esperado_centavos">Valor Esperado (R$) *</Label>
                     <CurrencyInput
-                      id="valor_esperado_centavos"
+                      valor_total_centavos: 0;"
                       value={formData.valor_esperado_centavos}
                       onValueChange={(value) => setFormData({ ...formData, valor_esperado_centavos: value })}
                       placeholder="0,00"
@@ -542,6 +635,113 @@ export function ContasRecorrentes() {
                       ))}
                     </select>
                   </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="numero_nota">Número da Nota</Label>
+                    <Input
+                      id="numero_nota"
+                      value={formData.numero_nota}
+                      onChange={(e) => setFormData({ ...formData, numero_nota: e.target.value })}
+                      placeholder="Número da Nota Fiscal"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="chave_nfe">Chave NFe</Label>
+                    <Input
+                      id="chave_nfe"
+                      value={formData.chave_nfe}
+                      onChange={(e) => setFormData({ ...formData, chave_nfe: e.target.value })}
+                      placeholder="Chave da Nota Fiscal Eletrônica"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="num_parcelas">Número de Parcelas *</Label>
+                    <Input
+                      id="num_parcelas"
+                      type="number"
+                      value={formData.num_parcelas}
+                      onChange={(e) => setFormData({ ...formData, num_parcelas: parseInt(e.target.value) || 1 })}
+                      min={1}
+                      required
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="referencia">Referência</Label>
+                    <Input
+                      id="referencia"
+                      value={formData.referencia}
+                      onChange={(e) => setFormData({ ...formData, referencia: e.target.value })}
+                      placeholder="Referência da conta"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="data_emissao">Data de Emissão</Label>
+                    <Input
+                      id="data_emissao"
+                      type="date"
+                      value={formData.data_emissao}
+                      onChange={(e) => setFormData({ ...formData, data_emissao: e.target.value })}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="codigo_boleto">Código de Barras/Boleto</Label>
+                    <Input
+                      id="codigo_boleto"
+                      value={formData.codigo_boleto}
+                      onChange={(e) => setFormData({ ...formData, codigo_boleto: e.target.value })}
+                      placeholder="Código de barras ou número do boleto"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="tipo_frequencia">Tipo de Frequência *</Label>
+                    <select
+                      id="tipo_frequencia"
+                      value={formData.tipo_frequencia}
+                      onChange={(e) => setFormData({ ...formData, tipo_frequencia: e.target.value as "diaria" | "semanal" | "quinzenal" | "mensal" })}
+                      className="w-full p-2 border border-gray-300 rounded-md"
+                      required
+                    >
+                      <option value="diaria">Diária</option>
+                      <option value="semanal">Semanal</option>
+                      <option value="quinzenal">Quinzenal</option>
+                      <option value="mensal">Mensal</option>
+                    </select>
+                  </div>
+                  {formData.tipo_frequencia !== "diaria" && (
+                    <div className="col-span-2">
+                      <Label htmlFor="intervalo_frequencia">Intervalo da Frequência *</Label>
+                      <Input
+                        id="intervalo_frequencia"
+                        type="number"
+                        value={formData.intervalo_frequencia}
+                        onChange={(e) => setFormData({ ...formData, intervalo_frequencia: parseInt(e.target.value) || 1 })}
+                        min={1}
+                        required
+                      />
+                    </div>
+                  )}
+                  {(formData.tipo_frequencia === "semanal" || formData.tipo_frequencia === "quinzenal") && (
+                    <div className="col-span-2">
+                      <Label>Dias da Semana</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {[1, 2, 3, 4, 5, 6, 7].map((dia) => (
+                          <div key={dia} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={`dia_semana_${dia}`}
+                              checked={formData.dias_semana.includes(dia)}
+                              onChange={(e) => {
+                                const newDias = e.target.checked
+                                  ? [...formData.dias_semana, dia]
+                                  : formData.dias_semana.filter((d) => d !== dia);
+                                setFormData({ ...formData, dias_semana: newDias.sort() });
+                              }}
+                            />
+                            <Label htmlFor={`dia_semana_${dia}`}>{["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"][dia - 1]}</Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <Label htmlFor="categoria_id">Categoria *</Label>
                     <select 
@@ -560,18 +760,116 @@ export function ContasRecorrentes() {
                     </select>
                   </div>
                   <div>
-                    <Label htmlFor="filial_id">Filial *</Label>
-                    <select 
-                      id="filial_id"
-                      value={formData.filial_id} 
-                      onChange={(e) => setFormData({ ...formData, filial_id: e.target.value })}
-                      className="w-full p-2 border border-gray-300 rounded-md"
-                      required
+                         <Label htmlFor="filial_id">Filial *</Label>
+                <select
+                  id="filial_id"
+                  value={formData.filial_id}
+                  onChange={(e) => setFormData({ ...formData, filial_id: e.target.value })}
+                  className="w-full p-2 border rounded"
+                  required
+                >
+                  <option value="">Selecione...</option>
+                  {filiais.map(filial => (
+                    <option key={filial.id} value={filial.id}>{filial.nome}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="numero_nota">Número da Nota</Label>
+                <Input
+                  id="numero_nota"
+                  value={formData.numero_nota}
+                  onChange={(e) => setFormData({ ...formData, numero_nota: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="chave_nfe">Chave NFE</Label>
+                <Input
+                  id="chave_nfe"
+                  value={formData.chave_nfe}
+                  onChange={(e) => setFormData({ ...formData, chave_nfe: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="num_parcelas">Número de Parcelas</Label>
+                <Input
+                  id="num_parcelas"
+                  type="number"
+                  value={formData.num_parcelas}
+                  onChange={(e) => setFormData({ ...formData, num_parcelas: parseInt(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="referencia">Referência</Label>
+                <Input
+                  id="referencia"
+                  value={formData.referencia}
+                  onChange={(e) => setFormData({ ...formData, referencia: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="data_emissao">Data de Emissão</Label>
+                <Input
+                  id="data_emissao"
+                  type="date"
+                  value={formData.data_emissao}
+                  onChange={(e) => setFormData({ ...formData, data_emissao: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="codigo_boleto">Código do Boleto</Label>
+                <Input
+                  id="codigo_boleto"
+                  value={formData.codigo_boleto}
+                  onChange={(e) => setFormData({ ...formData, codigo_boleto: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="tipo_frequencia">Tipo de Frequência</Label>
+                <select
+                  id="tipo_frequencia"
+                  value={formData.tipo_frequencia}
+                  onChange={(e) => setFormData({ ...formData, tipo_frequencia: e.target.value as any })}
+                  className="w-full p-2 border rounded"
+                >
+                  <option value="diaria">Diária</option>
+                  <option value="semanal">Semanal</option>
+                  <option value="quinzenal">Quinzenal</option>
+                  <option value="mensal">Mensal</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="intervalo_frequencia">Intervalo da Frequência</Label>
+                <Input
+                  id="intervalo_frequencia"
+                  type="number"
+                  value={formData.intervalo_frequencia}
+                  onChange={(e) => setFormData({ ...formData, intervalo_frequencia: parseInt(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label>Dias da Semana</Label>
+                <div className="flex space-x-2">
+                  {[ "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb" ].map((dia, index) => (
+                    <Button
+                      key={dia}
+                      variant={formData.dias_semana.includes(index + 1) ? "default" : "outline"}
+                      onClick={() => {
+                        const novosDias = [...formData.dias_semana];
+                        if (novosDias.includes(index + 1)) {
+                          const i = novosDias.indexOf(index + 1);
+                          novosDias.splice(i, 1);
+                        } else {
+                          novosDias.push(index + 1);
+                        }
+                        setFormData({ ...formData, dias_semana: novosDias });
+                      }}
                     >
-                      <option value="">Selecione uma filial</option>
-                      {filiais.map((filial) => (
-                        <option key={filial.id} value={filial.id.toString()}>
-                          {filial.nome}
+                      {dia}
+                    </Button>
+                  ))}
+                </div>
+              </div>             {filial.nome}
                         </option>
                       ))}
                     </select>
@@ -743,6 +1041,14 @@ export function ContasRecorrentes() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handleGerarConta(conta)}
+                        disabled={generating}
+                      >
+                        <DollarSign className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleEdit(conta)}
                       >
                         <Edit className="h-4 w-4" />
@@ -753,6 +1059,14 @@ export function ContasRecorrentes() {
                         onClick={() => handleDelete(conta.id)}
                       >
                         <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleGerarConta(conta)}
+                        title="Gerar Conta"
+                      >
+                        <RefreshCw className="h-4 w-4" />
                       </Button>
                     </div>
                   </TableCell>
