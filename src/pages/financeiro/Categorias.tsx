@@ -85,7 +85,7 @@ function Categorias() {
         .order("ordem", { ascending: true })
         .order("nome", { ascending: true });
       if (error) throw error;
-      setCategorias((data || []) as Categoria[]);
+      setCategorias((data || []) as any);
     } catch (err: any) {
       if (isOrdemMissing(err)) {
         try {
@@ -94,7 +94,7 @@ function Categorias() {
             .select("*")
             .order("nome", { ascending: true });
           if (error) throw error;
-          setCategorias((data || []) as Categoria[]);
+          setCategorias((data || []) as any);
         } catch (inner) {
           console.error(inner);
           toast({ title: "Erro", description: "Não foi possível carregar categorias.", variant: "destructive" });
@@ -172,14 +172,14 @@ function Categorias() {
         // returning:'minimal' evita que o supabase-js gere ?columns=... com colunas novas
         const { error } = await supabase
           .from("categorias_financeiras")
-          .update(body, { returning: "minimal" })
+          .update(body)
           .eq("id", editing.id);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria atualizada." });
       } else {
         const { error } = await supabase
           .from("categorias_financeiras")
-          .insert([body], { returning: "minimal" });
+          .insert([body]);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria criada." });
       }
@@ -275,11 +275,11 @@ function Categorias() {
   // ===== exclusão / arquivar / mover (iguais ao anterior)
   const canDelete = async (id: number) => {
     try {
-      const { data, error } = await supabase.rpc("can_delete_categoria", { p_id: id });
+      const { data, error } = await supabase.rpc("can_delete_categoria" as any, { p_id: id });
       if (!error && typeof data === "boolean") return data;
     } catch {}
     const [{ count: filhos }, { count: uso }] = await Promise.all([
-      supabase.from("categorias_financeiras").select("*", { count: "exact", head: true }).eq("parent_id", id),
+      supabase.from("categorias_financeiras").select("*", { count: "exact", head: true }).eq("categoria_pai_id", id),
       supabase.from("contas_pagar").select("*", { count: "exact", head: true }).eq("categoria_id", id),
     ]);
     return (filhos || 0) === 0 && (uso || 0) === 0;
@@ -306,9 +306,9 @@ function Categorias() {
 
   const toggleArchive = async (c: Categoria) => {
     try {
-      const { error } = await supabase.from("categorias_financeiras").update({ archived: !c.archived }).eq("id", c.id);
+      const { error } = await supabase.from("categorias_financeiras").update({ archived: !(c as any).archived } as any).eq("id", c.id);
     if (error) throw error;
-      toast({ title: c.archived ? "Ativada" : "Arquivada", description: `"${c.nome}" ${c.archived ? "reativada" : "arquivada"}.` });
+      toast({ title: (c as any).archived ? "Ativada" : "Arquivada", description: `"${c.nome}" ${(c as any).archived ? "reativada" : "arquivada"}.` });
       fetchCategorias();
     } catch (err: any) {
       if (hasSchemaCacheErrFor("archived", err)) {
@@ -354,7 +354,7 @@ function Categorias() {
     }
     try {
       setSavingMove(true);
-      const { error } = await supabase.from("categorias_financeiras").update({ parent_id: newParentId }).eq("id", moveNode.id);
+      const { error } = await supabase.from("categorias_financeiras").update({ categoria_pai_id: newParentId } as any).eq("id", moveNode.id);
       if (error) throw error;
       toast({ title: "Movida", description: `"${moveNode.nome}" foi movida com sucesso.` });
       setMoveOpen(false);
