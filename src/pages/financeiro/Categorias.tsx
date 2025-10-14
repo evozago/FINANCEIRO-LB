@@ -393,23 +393,33 @@ function Categorias() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Árvore */}
-        <Card>
-          <CardHeader><CardTitle>Estrutura</CardTitle></CardHeader>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Árvore - ocupa 2 colunas */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Estrutura de Categorias</CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
               <div className="relative flex-1 max-w-md">
-                <Input placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                <Input 
+                  placeholder="Buscar por nome..." 
+                  value={search} 
+                  onChange={(e) => setSearch(e.target.value)} 
+                  className="h-10"
+                />
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="showArchived" checked={showArchived} onCheckedChange={(v) => setShowArchived(!!v)} />
-                <Label htmlFor="showArchived">Mostrar arquivadas</Label>
+                <Label htmlFor="showArchived" className="cursor-pointer">Mostrar arquivadas</Label>
               </div>
             </div>
-            <Separator className="mb-3" />
+            <Separator className="mb-4" />
             {filteredTree.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada.</p>
+              <div className="text-center py-12">
+                <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada.</p>
+              </div>
             ) : (
               <div className="space-y-1">
                 {filteredTree.map((n) => (
@@ -424,46 +434,57 @@ function Categorias() {
           </CardContent>
         </Card>
 
-        {/* Formulário */}
-        <Card>
-          <CardHeader><CardTitle>{editing ? `Editar: ${editing.nome}` : "Nova Categoria"}</CardTitle></CardHeader>
+        {/* Formulário - ocupa 1 coluna */}
+        <Card className="lg:col-span-1">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {editing ? (
+                <>
+                  <SquarePen className="h-5 w-5" />
+                  Editar Categoria
+                </>
+              ) : (
+                <>
+                  <Plus className="h-5 w-5" />
+                  Nova Categoria
+                </>
+              )}
+            </CardTitle>
+            {editing && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Editando: <strong>{editing.nome}</strong>
+              </p>
+            )}
+          </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-3">
+            <div className="space-y-4">
               <div>
-                <Label>Nome</Label>
-                <Input value={form.nome || ""} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} placeholder="Ex.: Despesas Operacionais" />
+                <Label htmlFor="categoria-nome">Nome da Categoria</Label>
+                <Input 
+                  id="categoria-nome"
+                  value={form.nome || ""} 
+                  onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} 
+                  placeholder="Ex.: Despesas Operacionais" 
+                  className="mt-1.5"
+                />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <Label>Tipo</Label>
-                  <Select value={(form.tipo as string) || "despesa"} onValueChange={(v) => setForm((f) => ({ ...f, tipo: v as Categoria["tipo"] }))}>
-                    <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
-                    <SelectContent>{TIPOS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Ordem</Label>
-                  <Input type="number" value={String(form.ordem ?? 0)} onChange={(e) => setForm((f) => ({ ...f, ordem: parseInt(e.target.value || "0", 10) }))} />
-                </div>
-                <div>
-                  <Label>Cor</Label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={form.cor || "#E2E8F0"}
-                      onChange={(e) => setForm((f) => ({ ...f, cor: e.target.value }))}
-                      className="h-10 w-14 rounded-md border cursor-pointer"
-                      aria-label="Selecionar cor"
-                    />
-                    <div className="h-10 w-10 rounded-md border" style={{ backgroundColor: form.cor || "#E2E8F0" }} title={form.cor || "#E2E8F0"} />
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {SWATCHES.map((hex) => (
-                      <button key={hex} type="button" className="h-6 w-6 rounded-md border hover:scale-105 transition" style={{ backgroundColor: hex }} onClick={() => setForm((f) => ({ ...f, cor: hex }))} title={hex} />
+              <div>
+                <Label htmlFor="categoria-tipo">Tipo</Label>
+                <Select value={(form.tipo as string) || "despesa"} onValueChange={(v) => setForm((f) => ({ ...f, tipo: v as Categoria["tipo"] }))}>
+                  <SelectTrigger id="categoria-tipo" className="mt-1.5">
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPOS.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>
+                        <Badge variant={t.value === "despesa" ? "destructive" : t.value === "receita" ? "default" : "secondary"} className="mr-2">
+                          {t.label}
+                        </Badge>
+                      </SelectItem>
                     ))}
-                  </div>
-                </div>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
@@ -486,13 +507,31 @@ function Categorias() {
               </div>
 
               <div className="flex items-center gap-2">
-                <Checkbox id="archived" checked={!!form.archived} onCheckedChange={(v) => setForm((f) => ({ ...f, archived: !!v }))} />
-                <Label htmlFor="archived">Arquivada</Label>
+                <Checkbox 
+                  id="archived" 
+                  checked={!!form.archived} 
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, archived: !!v }))} 
+                />
+                <Label htmlFor="archived" className="cursor-pointer">
+                  Categoria arquivada
+                </Label>
               </div>
 
-              <div className="flex justify-end gap-2">
-                {editing && <Button variant="outline" onClick={() => { setEditing(null); setForm({ nome:"",tipo:"despesa",parent_id:null,ordem:0,archived:false,cor:"#E2E8F0" }); }}>Cancelar</Button>}
-                <Button onClick={handleSave}>{editing ? "Salvar alterações" : "Criar categoria"}</Button>
+              <div className="flex justify-end gap-2 pt-4">
+                {editing && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => { 
+                      setEditing(null); 
+                      setForm({ nome:"",tipo:"despesa",parent_id:null,ordem:0,archived:false,cor:"#E2E8F0" }); 
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                )}
+                <Button onClick={handleSave}>
+                  {editing ? "Salvar Alterações" : "Criar Categoria"}
+                </Button>
               </div>
             </div>
           </CardContent>
