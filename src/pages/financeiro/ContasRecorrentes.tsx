@@ -483,6 +483,7 @@ export function ContasRecorrentes() {
       toast({
         title: 'Erro',
           description: `Erro ao gerar conta recorrente: ${error.message || 'Erro desconhecido'}`,
+          variant: 'destructive',
         });
       } finally {
         setGenerating(false);
