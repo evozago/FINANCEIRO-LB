@@ -14,9 +14,10 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { EditarParcelaModal } from '@/components/financeiro/EditarParcelaModal';
 import {
   Search, Filter, Edit, Check, Trash2, Settings2, CalendarIcon,
-  ArrowUpDown, X, Plus, RotateCcw
+  ArrowUpDown, X, Plus, RotateCcw, Edit2
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -98,10 +99,14 @@ export function ContasPagarSimple() {
   const [paymentObservacao, setPaymentObservacao] = useState('');
   const [replicarPrimeiro, setReplicarPrimeiro] = useState(false);
 
+  // modal edição individual
+  const [editingParcela, setEditingParcela] = useState<ParcelaCompleta | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+
   // visibilidade colunas
   const [visibleColumns, setVisibleColumns] = useState({
     fornecedor: true, descricao: true, numero_nota: true, categoria: true, filial: true,
-    valor_parcela: true, parcela: true, vencimento: true, status: true
+    valor_parcela: true, parcela: true, vencimento: true, status: true, acoes: true
   });
 
   // ordenação
@@ -653,6 +658,7 @@ export function ContasPagarSimple() {
                     </TableHead>
                   )}
                   {visibleColumns.status && <TableHead>Status</TableHead>}
+                  {visibleColumns.acoes && <TableHead className="w-24">Ações</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -705,6 +711,21 @@ export function ContasPagarSimple() {
                       )}
                       {visibleColumns.vencimento && <TableCell>{formatDate(parcela.vencimento)}</TableCell>}
                       {visibleColumns.status && <TableCell>{getStatusBadge(parcela.vencimento, parcela.pago)}</TableCell>}
+                      {visibleColumns.acoes && (
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingParcela(parcela as any);
+                              setShowEditModal(true);
+                            }}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))
                 )}
@@ -933,12 +954,23 @@ export function ContasPagarSimple() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setVisibleColumns({
               fornecedor: true, descricao: true, numero_nota: true, categoria: true,
-              filial: true, valor_parcela: true, parcela: true, vencimento: true, status: true
+              filial: true, valor_parcela: true, parcela: true, vencimento: true, status: true, acoes: true
             })}>Restaurar Padrão</Button>
             <Button onClick={() => setShowColumnsModal(false)}>Aplicar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Editar Parcela Individual */}
+      <EditarParcelaModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        parcela={editingParcela as any}
+        onSuccess={() => {
+          fetchParcelas();
+          setEditingParcela(null);
+        }}
+      />
     </div>
   );
 }
