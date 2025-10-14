@@ -11,6 +11,7 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { PreviewParcelas } from "@/components/financeiro/PreviewParcelas";
 
 export default function NovaContaPagar() {
   const navigate = useNavigate();
@@ -31,6 +32,11 @@ export default function NovaContaPagar() {
   const [dataVencimento, setDataVencimento] = useState("");
   const [codigoBoleto, setCodigoBoleto] = useState("");
   const [anexo, setAnexo] = useState<File | null>(null);
+  const [parcelasPersonalizadas, setParcelasPersonalizadas] = useState<Array<{
+    numero: number;
+    valor_centavos: number;
+    vencimento: string;
+  }>>([]);
 
   // Fetch fornecedores PJ
   const { data: fornecedoresPJ } = useQuery({
@@ -126,27 +132,37 @@ export default function NovaContaPagar() {
 
       if (contaError) throw contaError;
 
-      // Calcular valor de cada parcela
-      const valorParcela = Math.floor(valorTotalCentavos / numParcelas);
-      const valorRestante = valorTotalCentavos - (valorParcela * numParcelas);
-
-      // Criar parcelas
-      const parcelas = [];
-      const baseDate = dataVencimento ? new Date(dataVencimento) : new Date();
-
-      for (let i = 1; i <= numParcelas; i++) {
-        const vencimento = new Date(baseDate);
-        vencimento.setMonth(vencimento.getMonth() + (i - 1));
-
-        parcelas.push({
-          conta_id: conta.id,
-          parcela_num: i,
-          numero_parcela: i,
-          valor_parcela_centavos: i === numParcelas ? valorParcela + valorRestante : valorParcela,
-          vencimento: vencimento.toISOString().split('T')[0],
-          pago: false,
-        });
-      }
+      // Usar parcelas personalizadas se existirem, senão calcular automaticamente
+      const parcelas = parcelasPersonalizadas.length > 0
+        ? parcelasPersonalizadas.map(p => ({
+            conta_id: conta.id,
+            parcela_num: p.numero,
+            numero_parcela: p.numero,
+            valor_parcela_centavos: p.valor_centavos,
+            vencimento: p.vencimento,
+            pago: false,
+          }))
+        : (() => {
+            const valorParcela = Math.floor(valorTotalCentavos / numParcelas);
+            const valorRestante = valorTotalCentavos - (valorParcela * numParcelas);
+            const baseDate = dataVencimento ? new Date(dataVencimento) : new Date();
+            const temp = [];
+            
+            for (let i = 1; i <= numParcelas; i++) {
+              const vencimento = new Date(baseDate);
+              vencimento.setMonth(vencimento.getMonth() + (i - 1));
+              
+              temp.push({
+                conta_id: conta.id,
+                parcela_num: i,
+                numero_parcela: i,
+                valor_parcela_centavos: i === numParcelas ? valorParcela + valorRestante : valorParcela,
+                vencimento: vencimento.toISOString().split('T')[0],
+                pago: false,
+              });
+            }
+            return temp;
+          })();
 
       const { error: parcelasError } = await supabase
         .from("contas_pagar_parcelas")
@@ -323,6 +339,16 @@ export default function NovaContaPagar() {
                 onChange={(e) => setDataVencimento(e.target.value)}
               />
             </div>
+
+            {/* Preview das Parcelas */}
+            {numParcelas > 1 && valorTotalCentavos > 0 && dataVencimento && (
+              <PreviewParcelas
+                valorTotal={valorTotalCentavos}
+                numParcelas={numParcelas}
+                dataInicial={dataVencimento}
+                onChange={setParcelasPersonalizadas}
+              />
+            )}
 
             {/* Número da Nota */}
             <div className="grid gap-2">
