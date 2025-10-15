@@ -102,7 +102,7 @@ export function PessoasJuridicas() {
 
   const fetchCategorias = async () => {
     try {
-      const { data, error } = await supabase.from('categorias_pj').select('id, nome').order('nome');
+      const { data, error } = await supabase.from('categorias_financeiras').select('id, nome').order('nome');
       if (error) throw error;
       setCategorias((data || []).map(cat => ({ id: cat.id, nome: cat.nome })));
     } catch (error) { console.error('Erro ao buscar categorias:', error); }
