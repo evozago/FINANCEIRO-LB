@@ -21,8 +21,8 @@ export default function NovaContaPagar() {
     // Form state
 const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
   const [fornecedorId, setFornecedorId] = useState("");
-  const [categoriaId, setCategoriaId] = useState("");
-  const [filialId, setFilialId] = useState("");
+  const [categoriaId, setCategoriaId] = useState("none");
+  const [filialId, setFilialId] = useState("none");
   const [descricao, setDescricao] = useState("");
   const [valorTotalCentavos, setValorTotalCentavos] = useState(0);
   const [numParcelas, setNumParcelas] = useState(1);
@@ -36,7 +36,7 @@ const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
   const [parcelasPersonalizadas, setParcelasPersonalizadas] = useState<PreviewParcela[]>([]);
 
   const parseOptionalId = (value: string): number | null => {
-    if (!value) {
+    if (!value || value === "none") {
       return null;
     }
 
@@ -255,6 +255,7 @@ const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
             <div className="grid gap-2">
               <Label htmlFor="categoria">Categoria</Label>
               <Select value={categoriaId} onValueChange={setCategoriaId}>
+                
                 <SelectTrigger id="categoria">
                   <SelectValue placeholder="Selecione a categoria" />
                 </SelectTrigger>
