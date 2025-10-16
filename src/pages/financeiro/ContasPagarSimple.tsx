@@ -858,6 +858,7 @@ export function ContasPagarSimple() {
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start">
                           <CalendarIcon className="mr-2 h-4 w-4" />
+
                           {paymentData[parcela.id]?.data_pagamento ? format(paymentData[parcela.id].data_pagamento as Date, 'dd/MM/yyyy') : 'Selecionar'}
                         </Button>
                       </PopoverTrigger>
@@ -883,47 +884,62 @@ export function ContasPagarSimple() {
                   </div>
                   <div>
                     <Label>Banco Pagador</Label>
-                    <Select
-                      value={paymentData[parcela.id]?.conta_bancaria_id || ''}
-                      onValueChange={(v) => setPaymentData({
-                        ...paymentData,
-                        [parcela.id]: {
-                          data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
-                          conta_bancaria_id: v,
-                          forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
-                          codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
-                          valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
-                          valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
-                        }
-                      })}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Banco" /></SelectTrigger>
-                      <SelectContent className="bg-background z-50">
-                        {contasBancarias.map(c => (<SelectItem key={c.id} value={c.id.toString()}>{c.nome_conta} - {c.banco}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
+                      <Select
+                        value={paymentData[parcela.id]?.conta_bancaria_id ? paymentData[parcela.id]!.conta_bancaria_id : 'none'}
+                        onValueChange={(v) => setPaymentData({
+                          ...paymentData,
+                          [parcela.id]: {
+                            data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
+                            conta_bancaria_id: v === 'none' ? '' : v,
+                            forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
+                            codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
+                            valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
+                            valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
+                          }
+                        })}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Banco" /></SelectTrigger>
+                        <SelectContent className="bg-background z-50">
+                          <SelectItem value="none">Nenhum</SelectItem>
+                          {contasBancarias
+                            .filter((c) => c.id != null)
+                            .map((c) => (
+                              <SelectItem key={c.id} value={c.id.toString()}>
+                                {c.nome_conta}
+                                {c.banco ? ` - ${c.banco}` : ''}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
                   </div>
                   <div>
                     <Label>Forma de Pagamento</Label>
-                    <Select
-                      value={paymentData[parcela.id]?.forma_pagamento_id || ''}
-                      onValueChange={(v) => setPaymentData({
-                        ...paymentData,
-                        [parcela.id]: {
-                          data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
-                          conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
-                          forma_pagamento_id: v,
-                          codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
-                          valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
-                          valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
-                        }
-                      })}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Forma" /></SelectTrigger>
-                      <SelectContent className="bg-background z-50">
-                        {formasPagamento.map(f => (<SelectItem key={f.id} value={f.id.toString()}>{f.nome}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
+                      <Select
+                        value={paymentData[parcela.id]?.forma_pagamento_id ? paymentData[parcela.id]!.forma_pagamento_id : 'none'}
+                        onValueChange={(v) => setPaymentData({
+                          ...paymentData,
+                          [parcela.id]: {
+                            data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
+                            conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
+                            forma_pagamento_id: v === 'none' ? '' : v,
+                            codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
+                            valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
+                            valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
+                          }
+                        })}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Forma" /></SelectTrigger>
+                        <SelectContent className="bg-background z-50">
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {formasPagamento
+                            .filter((f) => f.id != null)
+                            .map((f) => (
+                              <SelectItem key={f.id} value={f.id.toString()}>
+                                {f.nome}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
                   </div>
                   <div>
                     <Label>Código Identificador</Label>
