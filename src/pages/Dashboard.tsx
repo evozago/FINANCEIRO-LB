@@ -1,14 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { format, startOfMonth, differenceInCalendarDays } from 'date-fns';
+import { DateRange } from 'react-day-picker';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatsCard } from '@/components/ui/stats-card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { 
-  DollarSign, 
-  TrendingUp, 
-  CreditCard, 
+import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  DollarSign,
+  TrendingUp,
   AlertTriangle,
   Calendar,
   Target,
@@ -18,13 +21,15 @@ import {
   Upload,
   Plus,
   BadgeDollarSign,
-  ShoppingCart
+    ShoppingCart,
+  Loader2
+
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-interface DashboardMetrics {
+interface SalesMetrics {
   vencendo_hoje_valor: number;
   vencendo_hoje_qtd: number;
   pagas_hoje_valor: number;
@@ -47,6 +52,25 @@ interface ContaVencendo {
   valor_em_aberto: number;
   proximo_vencimento: string;
 }
+interface ParcelaWithContext {
+  contaId: number;
+  valorParcelaCentavos: number;
+  valorPagoCentavos: number | null;
+  vencimento: string;
+  pagoEm: string | null;
+  filialId: number | null;
+  filialNome: string;
+  categoriaId: number | null;
+  categoriaNome: string;
+  categoriaCor: string | null;
+}
+
+interface FilialOption {
+  id: number;
+  nome: string;
+}
+
+
 
 interface VendedoraPerformance {
   vendedora_nome: string;
@@ -57,34 +81,67 @@ interface VendedoraPerformance {
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const [metrics, setMetrics] = useState<DashboardMetrics>({
-    vencendo_hoje_valor: 0,
-    vencendo_hoje_qtd: 0,
-    pagas_hoje_valor: 0,
-    pagas_hoje_qtd: 0,
-    vence_ate_fim_mes_valor: 0,
-    vence_ate_fim_mes_qtd: 0,
-    vencidas_valor: 0,
-    vencidas_qtd: 0,
-    pendentes_nao_recorrentes_valor: 0,
-    pendentes_nao_recorrentes_qtd: 0,
+  const [salesMetrics, setSalesMetrics] = useState<SalesMetrics>({
+
     total_vendas_mes: 0,
     valor_vendas_mes: 0,
     ticket_medio_mes: 0,
   });
   const [contasVencendo, setContasVencendo] = useState<ContaVencendo[]>([]);
-  const [vendedorasPerformance, setVendedorasPerformance] = useState<VendedoraPerformance[]>([]);
+  const [vendedorasPerformance, setVendedorasPerformance] = useState<VendedoraPerformance[]>
+    ([]);
+    const [openParcels, setOpenParcels] = useState<ParcelaWithContext[]>([]);
+  const [paidParcels, setPaidParcels] = useState<ParcelaWithContext[]>([]);
+  const [filiais, setFiliais] = useState<FilialOption[]>([]);
+  const [selectedFilial, setSelectedFilial] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: startOfMonth(new Date()),
+    to: new Date(),
+  });
+
   const [loading, setLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchFiliais();
   }, []);
 
-  const fetchDashboardData = async () => {
+  useEffect(() => {
+    if (!dateRange?.from || !dateRange?.to) return;
+
+    let isMounted = true;
+
+    const loadDashboard = async () => {
+      if (!loading) {
+        setIsRefreshing(true);
+      }
+
+      await fetchDashboardData(dateRange.from, dateRange.to);
+
+      if (isMounted) {
+        if (loading) {
+          setLoading(false);
+        }
+        setIsRefreshing(false);
+      }
+    };
+
+    loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [dateRange, loading]);
+
+  const fetchDashboardData = async (from: Date, to: Date) => {
+    const fromStr = format(from, 'yyyy-MM-dd');
+    const toStr = format(to, 'yyyy-MM-dd');
+
     try {
       await Promise.all([
-        fetchContasMetrics(),
+        fetchFinancialAnalytics(fromStr, toStr),
         fetchVendasMetrics(),
         fetchContasVencendo(),
         fetchVendedorasPerformance(),
@@ -96,69 +153,96 @@ export function Dashboard() {
         description: 'Não foi possível carregar os dados do dashboard.',
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
     }
   };
 
-  const fetchContasMetrics = async () => {
+  const fetchFiliais = async () => {
     try {
-      const hoje = new Date().toISOString().split('T')[0];
-      const fimMes = new Date();
-      fimMes.setMonth(fimMes.getMonth() + 1);
-      fimMes.setDate(0);
-      const fimMesStr = fimMes.toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('filiais')
+        .select('id, nome')
+        .order('nome');
 
-      // Buscar todas as parcelas não pagas
-      const { data: parcelasNaoPagas, error: naoPagasError } = await supabase
-        .from('contas_pagar_parcelas')
-        .select('id, valor_parcela_centavos, vencimento, conta_id')
-        .eq('pago', false);
-
-      if (naoPagasError) throw naoPagasError;
-
-      // Buscar parcelas pagas hoje
-      const { data: parcelasPagasHoje, error: pagasHojeError } = await supabase
-        .from('contas_pagar_parcelas')
-        .select('id, valor_pago_centavos')
-        .eq('pago', true)
-        .eq('pago_em', hoje);
-
-      if (pagasHojeError) throw pagasHojeError;
-
-      // Calcular métricas
-      const vencendoHoje = parcelasNaoPagas?.filter(p => p.vencimento === hoje) || [];
-      const vencidas = parcelasNaoPagas?.filter(p => p.vencimento < hoje) || [];
-      const venceAteFimMes = parcelasNaoPagas?.filter(p => 
-        p.vencimento > hoje && p.vencimento <= fimMesStr
-      ) || [];
-
-      // Buscar contas não recorrentes (sem referência ou referência null)
-      const { data: contasNaoRecorrentes } = await supabase
-        .from('contas_pagar')
-        .select('id')
-        .is('referencia', null);
-
-      const idsContasNaoRecorrentes = new Set(contasNaoRecorrentes?.map(c => c.id) || []);
-
-      // Filtrar parcelas não pagas de contas não recorrentes
-      const pendentesNaoRec = parcelasNaoPagas?.filter(p => idsContasNaoRecorrentes.has(p.conta_id)) || [];
-
-      setMetrics(prev => ({
-        ...prev,
-        vencendo_hoje_valor: vencendoHoje.reduce((sum, p) => sum + (p.valor_parcela_centavos || 0), 0),
-        vencendo_hoje_qtd: vencendoHoje.length,
-        pagas_hoje_valor: (parcelasPagasHoje || []).reduce((sum, p) => sum + (p.valor_pago_centavos || 0), 0),
-        pagas_hoje_qtd: parcelasPagasHoje?.length || 0,
-        vence_ate_fim_mes_valor: venceAteFimMes.reduce((sum, p) => sum + (p.valor_parcela_centavos || 0), 0),
-        vence_ate_fim_mes_qtd: venceAteFimMes.length,
-        vencidas_valor: vencidas.reduce((sum, p) => sum + (p.valor_parcela_centavos || 0), 0),
-        vencidas_qtd: vencidas.length,
-        pendentes_nao_recorrentes_valor: pendentesNaoRec.reduce((sum, p) => sum + (p.valor_parcela_centavos || 0), 0),
-        pendentes_nao_recorrentes_qtd: pendentesNaoRec.length,
-      }));
+      if (error) throw error;
+      setFiliais(data || []);
     } catch (error) {
-      console.error('Erro ao buscar métricas de contas:', error);
+      console.error('Erro ao carregar filiais:', error);
+    }
+  };
+
+  const fetchFinancialAnalytics = async (from: string, to: string) => {
+    try {
+      const { data: openData, error: openError } = await supabase
+
+        .from('contas_pagar_parcelas')
+        .select(`
+          id,
+          conta_id,
+          valor_parcela_centavos,
+          valor_pago_centavos,
+          vencimento,
+          pago_em,
+          contas_pagar!inner(
+            filial_id,
+            categoria_id,
+            filiais(nome),
+            categorias_financeiras(nome, cor)
+          )
+        `)
+        .eq('pago', false)
+        .gte('vencimento', from)
+        .lte('vencimento', to);
+
+      if (openError) throw openError;
+
+      const { data: paidData, error: paidError } = await supabase
+        .from('contas_pagar_parcelas')
+        .select(`
+          id,
+          conta_id,
+          valor_parcela_centavos,
+          valor_pago_centavos,
+          vencimento,
+          pago_em,
+          contas_pagar!inner(
+            filial_id,
+            categoria_id,
+            filiais(nome),
+            categorias_financeiras(nome, cor)
+          )
+        `)
+        .eq('pago', true)
+        .gte('pago_em', from)
+        .lte('pago_em', to);
+
+      if (paidError) throw paidError;
+
+      const mapToContext = (items: any[] | null) =>
+        (items || []).map(item => ({
+          contaId: item.conta_id,
+          valorParcelaCentavos: item.valor_parcela_centavos || 0,
+          valorPagoCentavos: item.valor_pago_centavos ?? null,
+          vencimento: item.vencimento,
+          pagoEm: item.pago_em,
+          filialId: item.contas_pagar?.filial_id ?? null,
+          filialNome: item.contas_pagar?.filiais?.nome || 'Sem filial',
+          categoriaId: item.contas_pagar?.categoria_id ?? null,
+          categoriaNome: item.contas_pagar?.categorias_financeiras?.nome || 'Sem categoria',
+          categoriaCor: item.contas_pagar?.categorias_financeiras?.cor ?? null,
+        })) as ParcelaWithContext[];
+
+      setOpenParcels(mapToContext(openData));
+      setPaidParcels(mapToContext(paidData));
+
+    } catch (error) {
+      console.error('Erro ao buscar dados financeiros:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar os dados financeiros do período.',
+        variant: 'destructive',
+      });
+      setOpenParcels([]);
+      setPaidParcels([]);
     }
   };
 
@@ -182,12 +266,11 @@ export function Dashboard() {
       ) || 0;
       const ticketMedio = totalVendas > 0 ? valorVendasMes / totalVendas : 0;
 
-      setMetrics(prev => ({
-        ...prev,
+      setSalesMetrics({
         total_vendas_mes: totalVendas,
         valor_vendas_mes: valorVendasMes,
         ticket_medio_mes: ticketMedio,
-      }));
+      });
     } catch (error) {
       console.error('Erro ao buscar métricas de vendas:', error);
     }
@@ -291,17 +374,264 @@ export function Dashboard() {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
   };
+  const filteredOpenParcels = useMemo(() => {
+    if (selectedFilial === 'all') return openParcels;
+    if (selectedFilial === 'unassigned') {
+      return openParcels.filter(parcel => parcel.filialId === null);
+    }
+    const filialId = Number(selectedFilial);
+    if (Number.isNaN(filialId)) return openParcels;
+    return openParcels.filter(parcel => parcel.filialId === filialId);
+  }, [openParcels, selectedFilial]);
+
+  const filteredPaidParcels = useMemo(() => {
+    if (selectedFilial === 'all') return paidParcels;
+    if (selectedFilial === 'unassigned') {
+      return paidParcels.filter(parcel => parcel.filialId === null);
+    }
+    const filialId = Number(selectedFilial);
+    if (Number.isNaN(filialId)) return paidParcels;
+    return paidParcels.filter(parcel => parcel.filialId === filialId);
+  }, [paidParcels, selectedFilial]);
+
+  const financialOverview = useMemo(() => {
+    const totalAberto = filteredOpenParcels.reduce((sum, parcela) => sum + parcela.valorParcelaCentavos, 0);
+    const totalPago = filteredPaidParcels.reduce(
+      (sum, parcela) => sum + (parcela.valorPagoCentavos ?? parcela.valorParcelaCentavos),
+      0
+    );
+    const quantidadeAberto = filteredOpenParcels.length;
+    const quantidadePagas = filteredPaidParcels.length;
+    const ticketMedioPago = quantidadePagas > 0 ? totalPago / quantidadePagas : 0;
+
+    const delays = filteredPaidParcels
+      .filter(parcela => parcela.pagoEm)
+      .map(parcela =>
+        differenceInCalendarDays(new Date(parcela.pagoEm as string), new Date(parcela.vencimento))
+      );
+    const atrasoMedioDias = delays.length > 0
+      ? delays.reduce((acc, valor) => acc + valor, 0) / delays.length
+      : null;
+
+    const percentualPago = quantidadePagas + quantidadeAberto > 0
+      ? (quantidadePagas / (quantidadePagas + quantidadeAberto)) * 100
+      : 0;
+
+    return {
+      totalAberto,
+      totalPago,
+      quantidadeAberto,
+      quantidadePagas,
+      ticketMedioPago,
+      atrasoMedioDias,
+      percentualPago,
+    };
+  }, [filteredOpenParcels, filteredPaidParcels]);
+
+  const filialChartData = useMemo(() => {
+    const map = new Map<string, { filialId: number | null; filial: string; valorPago: number; valorAberto: number }>();
+
+    const upsert = (
+      key: string,
+      data: { filialId: number | null; filial: string; valorPago?: number; valorAberto?: number }
+    ) => {
+      const existing = map.get(key) || { filialId: data.filialId, filial: data.filial, valorPago: 0, valorAberto: 0 };
+      map.set(key, {
+        filialId: existing.filialId,
+        filial: existing.filial,
+        valorPago: existing.valorPago + (data.valorPago || 0),
+        valorAberto: existing.valorAberto + (data.valorAberto || 0),
+      });
+    };
+
+    openParcels.forEach(parcela => {
+      const key = parcela.filialId !== null ? parcela.filialId.toString() : 'unassigned';
+      upsert(key, {
+        filialId: parcela.filialId,
+        filial: parcela.filialNome,
+        valorAberto: parcela.valorParcelaCentavos,
+      });
+    });
+
+    paidParcels.forEach(parcela => {
+      const key = parcela.filialId !== null ? parcela.filialId.toString() : 'unassigned';
+      upsert(key, {
+        filialId: parcela.filialId,
+        filial: parcela.filialNome,
+        valorPago: parcela.valorPagoCentavos ?? parcela.valorParcelaCentavos,
+      });
+    });
+
+    const data = Array.from(map.values())
+      .map(item => ({
+        ...item,
+        valorPago: item.valorPago / 100,
+        valorAberto: item.valorAberto / 100,
+      }))
+      .sort((a, b) => (b.valorPago + b.valorAberto) - (a.valorPago + a.valorAberto));
+
+    if (selectedFilial === 'all') return data;
+    if (selectedFilial === 'unassigned') {
+      return data.filter(item => item.filialId === null);
+    }
+    const filialId = Number(selectedFilial);
+    if (Number.isNaN(filialId)) return data;
+    return data.filter(item => item.filialId === filialId);
+  }, [openParcels, paidParcels, selectedFilial]);
+
+  const categoriaChartData = useMemo(() => {
+    const map = new Map<
+      string,
+      { categoriaId: number | null; categoria: string; cor: string | null; valorPago: number; valorAberto: number }
+    >();
+
+    const upsert = (
+      key: string,
+      data: { categoriaId: number | null; categoria: string; cor: string | null; valorPago?: number; valorAberto?: number }
+    ) => {
+      const existing = map.get(key) || {
+        categoriaId: data.categoriaId,
+        categoria: data.categoria,
+        cor: data.cor,
+        valorPago: 0,
+        valorAberto: 0,
+      };
+      map.set(key, {
+        categoriaId: existing.categoriaId,
+        categoria: existing.categoria,
+        cor: existing.cor,
+        valorPago: existing.valorPago + (data.valorPago || 0),
+        valorAberto: existing.valorAberto + (data.valorAberto || 0),
+      });
+    };
+
+    filteredOpenParcels.forEach(parcela => {
+      const key = parcela.categoriaId !== null ? parcela.categoriaId.toString() : 'unassigned';
+      upsert(key, {
+        categoriaId: parcela.categoriaId,
+        categoria: parcela.categoriaNome,
+        cor: parcela.categoriaCor,
+        valorAberto: parcela.valorParcelaCentavos,
+      });
+    });
+
+    filteredPaidParcels.forEach(parcela => {
+      const key = parcela.categoriaId !== null ? parcela.categoriaId.toString() : 'unassigned';
+      upsert(key, {
+        categoriaId: parcela.categoriaId,
+        categoria: parcela.categoriaNome,
+        cor: parcela.categoriaCor,
+        valorPago: parcela.valorPagoCentavos ?? parcela.valorParcelaCentavos,
+      });
+    });
+
+    return Array.from(map.values())
+      .map(item => ({
+        ...item,
+        valorPago: item.valorPago / 100,
+        valorAberto: item.valorAberto / 100,
+      }))
+      .sort((a, b) => (b.valorPago + b.valorAberto) - (a.valorPago + a.valorAberto))
+      .slice(0, 12);
+  }, [filteredOpenParcels, filteredPaidParcels]);
+
+  const dailySeriesData = useMemo(() => {
+    const map = new Map<string, { date: string; pagos: number; abertos: number }>();
+
+    filteredPaidParcels.forEach(parcela => {
+      const dateKey = parcela.pagoEm || parcela.vencimento;
+      const existing = map.get(dateKey) || { date: dateKey, pagos: 0, abertos: 0 };
+      existing.pagos += parcela.valorPagoCentavos ?? parcela.valorParcelaCentavos;
+      map.set(dateKey, existing);
+    });
+
+    filteredOpenParcels.forEach(parcela => {
+      const dateKey = parcela.vencimento;
+      const existing = map.get(dateKey) || { date: dateKey, pagos: 0, abertos: 0 };
+      existing.abertos += parcela.valorParcelaCentavos;
+      map.set(dateKey, existing);
+    });
+
+    return Array.from(map.values())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map(item => ({
+        ...item,
+        pagos: item.pagos / 100,
+        abertos: item.abertos / 100,
+        label: format(new Date(item.date), 'dd/MM'),
+      }));
+  }, [filteredOpenParcels, filteredPaidParcels]);
+
+  const statusDistribution = useMemo(
+    () => [
+      { name: 'Pagas', value: financialOverview.quantidadePagas, color: 'hsl(var(--success))' },
+      { name: 'Em aberto', value: financialOverview.quantidadeAberto, color: 'hsl(var(--warning))' },
+    ],
+    [financialOverview.quantidadePagas, financialOverview.quantidadeAberto]
+  );
+
+  const statusValueChartData = useMemo(
+    () => [
+      { name: 'Pagas', valor: financialOverview.totalPago / 100 },
+      { name: 'Em aberto', valor: financialOverview.totalAberto / 100 },
+    ],
+    [financialOverview.totalPago, financialOverview.totalAberto]
+  );
+
+  const periodoLabel = useMemo(() => {
+    if (!dateRange?.from || !dateRange?.to) return '';
+    return `${format(dateRange.from, 'dd/MM/yyyy')} - ${format(dateRange.to, 'dd/MM/yyyy')}`;
+  }, [dateRange]);
+
+  const atrasoDescricao = useMemo(() => {
+    if (financialOverview.atrasoMedioDias === null) {
+      return 'Sem pagamentos registrados no período';
+    }
+    if (financialOverview.atrasoMedioDias > 0) {
+      return 'Média de dias após o vencimento';
+    }
+    if (financialOverview.atrasoMedioDias < 0) {
+      return 'Média de dias antes do vencimento';
+    }
+    return 'Pagamentos realizados no dia do vencimento';
+  }, [financialOverview.atrasoMedioDias]);
+
+  const handleRangeChange = (range: DateRange | undefined) => {
+    if (!range?.from) return;
+    if (!range.to) {
+      setDateRange({ from: range.from, to: range.from });
+      return;
+    }
+    setDateRange(range);
+  };
+
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-10 w-32" />
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-64" />
+            <Skeleton className="h-6 w-48" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-36" />
+            <Skeleton className="h-10 w-36" />
+          </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div className="flex flex-wrap gap-2">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-10 w-48" />
+          <Skeleton className="h-10 w-48" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
+                <div className="grid gap-6 xl:grid-cols-2">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-[320px]" />
           ))}
         </div>
         <div className="grid gap-4 md:grid-cols-3">
@@ -312,6 +642,14 @@ export function Dashboard() {
       </div>
     );
   }
+  const atrasoValor =
+    financialOverview.atrasoMedioDias === null
+      ? 'Sem dados'
+      : `${Math.abs(financialOverview.atrasoMedioDias).toFixed(1)} dias`;
+
+  const percentualPagoDisplay = Math.max(0, Math.min(100, financialOverview.percentualPago));
+  const percentualAberto = Math.max(0, Math.min(100, 100 - percentualPagoDisplay));
+
 
   return (
     <div className="space-y-6">
@@ -334,217 +672,234 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Resumo Financeiro - Situação Atual */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker value={dateRange} onChange={handleRangeChange} />
+          <Select value={selectedFilial} onValueChange={setSelectedFilial}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Filial" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as filiais</SelectItem>
+              {filiais.map(filial => (
+                <SelectItem key={filial.id} value={filial.id.toString()}>
+                  {filial.nome}
+                </SelectItem>
+              ))}
+              <SelectItem value="unassigned">Sem filial vinculada</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          {periodoLabel && <span>Período: {periodoLabel}</span>}
+          {isRefreshing && (
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Atualizando dados...
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatsCard
-          title="Vencendo Hoje"
-          value={formatCurrency(metrics.vencendo_hoje_valor)}
-          description={`${metrics.vencendo_hoje_qtd} títulos`}
-          icon={Clock}
+          title="Total Pago no Período"
+          value={formatCurrency(financialOverview.totalPago)}
+          description={`Ticket médio: ${formatCurrency(financialOverview.ticketMedioPago)}`}
+          icon={DollarSign}
+          variant="success"
+        />
+        <StatsCard
+          title="Total em Aberto"
+          value={formatCurrency(financialOverview.totalAberto)}
+          description={`Parcelas em aberto: ${financialOverview.quantidadeAberto}`}
+          icon={AlertTriangle}
           variant="warning"
         />
         <StatsCard
-          title="Pagas Hoje"
-          value={formatCurrency(metrics.pagas_hoje_valor)}
-          description={`${metrics.pagas_hoje_qtd} títulos`}
+          title="Contas Pagas"
+          value={financialOverview.quantidadePagas.toString()}
+          description={`Participação: ${percentualPagoDisplay.toFixed(1)}%`}
           icon={CheckCircle2}
           variant="success"
         />
         <StatsCard
-          title="Vence até Fim do Mês"
-          value={formatCurrency(metrics.vence_ate_fim_mes_valor)}
-          description={`${metrics.vence_ate_fim_mes_qtd} títulos`}
-          icon={Calendar}
+          title="Contas em Aberto"
+          value={financialOverview.quantidadeAberto.toString()}
+          description={`Participação: ${percentualAberto.toFixed(1)}%`}
+          icon={Clock}
           variant="info"
         />
         <StatsCard
-          title="Vencidas"
-          value={formatCurrency(metrics.vencidas_valor)}
-          description={`${metrics.vencidas_qtd} títulos`}
-          icon={AlertTriangle}
-          variant="danger"
-        />
-        <StatsCard
-          title="Pendentes Não Recorrentes"
-          value={formatCurrency(metrics.pendentes_nao_recorrentes_valor)}
-          description={`${metrics.pendentes_nao_recorrentes_qtd} títulos`}
-          icon={FileText}
-          variant="purple"
+          title="Atraso Médio"
+          value={atrasoValor}
+          description={atrasoDescricao}
+          icon={Calendar}
+          variant={
+            financialOverview.atrasoMedioDias === null
+              ? 'default'
+              : financialOverview.atrasoMedioDias > 0
+              ? 'danger'
+              : financialOverview.atrasoMedioDias < 0
+              ? 'success'
+              : 'info'
+          }
         />
       </div>
 
-      {/* Métricas de Vendas */}
       <div className="grid gap-4 md:grid-cols-3">
         <StatsCard
           title="Vendas do Mês"
-          value={metrics.total_vendas_mes.toString()}
-          description={`${formatCurrency(metrics.valor_vendas_mes)} faturado`}
+          value={salesMetrics.total_vendas_mes.toString()}
+          description={`${formatCurrency(salesMetrics.valor_vendas_mes)} faturado`}
           icon={ShoppingCart}
           variant="success"
         />
         <StatsCard
-          title="Ticket Médio"
-          value={formatCurrency(metrics.ticket_medio_mes)}
-          description="Média por venda"
+          title="Ticket Médio de Vendas"
+          value={formatCurrency(salesMetrics.ticket_medio_mes)}
+          description="Média por venda no mês atual"
           icon={BadgeDollarSign}
           variant="info"
         />
         <StatsCard
-          title="Total em Contas"
-          value={(metrics.vencendo_hoje_qtd + metrics.vence_ate_fim_mes_qtd + metrics.vencidas_qtd).toString()}
-          description="Parcelas em aberto"
-          icon={CreditCard}
+          title="Percentual de Pagamentos"
+          value={`${percentualPagoDisplay.toFixed(1)}%`}
+          description="Parcelas pagas sobre o total do período"
+          icon={TrendingUp}
           variant="default"
         />
       </div>
 
-      {/* Gráficos de Análise */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Distribuição por Status</CardTitle>
-            <CardDescription>Visualização das contas por situação</CardDescription>
+            <CardTitle>Pagamentos por Filial</CardTitle>
+            <CardDescription>Valores pagos e em aberto no período selecionado</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Vencendo Hoje', value: metrics.vencendo_hoje_qtd, color: 'hsl(var(--warning))' },
-                    { name: 'Pagas Hoje', value: metrics.pagas_hoje_qtd, color: 'hsl(var(--success))' },
-                    { name: 'Vence no Mês', value: metrics.vence_ate_fim_mes_qtd, color: 'hsl(var(--info))' },
-                    { name: 'Vencidas', value: metrics.vencidas_qtd, color: 'hsl(var(--destructive))' },
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {[
-                    { name: 'Vencendo Hoje', value: metrics.vencendo_hoje_qtd, color: 'hsl(38, 92%, 50%)' },
-                    { name: 'Pagas Hoje', value: metrics.pagas_hoje_qtd, color: 'hsl(142, 76%, 36%)' },
-                    { name: 'Vence no Mês', value: metrics.vence_ate_fim_mes_qtd, color: 'hsl(199, 89%, 48%)' },
-                    { name: 'Vencidas', value: metrics.vencidas_qtd, color: 'hsl(0, 72%, 51%)' },
-                  ].map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => `${value} contas`} />
-              </PieChart>
-            </ResponsiveContainer>
+            {filialChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={filialChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="filial" tick={{ fontSize: 12 }} />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => formatCurrency(Math.round(Number(value) * 100))} />
+                  <Legend />
+                  <Bar dataKey="valorPago" name="Pago" fill="hsl(var(--success))" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="valorAberto" name="Em aberto" fill="hsl(var(--warning))" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[320px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
+                Nenhum dado encontrado para o período selecionado.
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Comparativo de Valores</CardTitle>
-            <CardDescription>Valores em aberto vs. pagos</CardDescription>
+            <CardTitle>Categorias Financeiras</CardTitle>
+            <CardDescription>Principais categorias de contas pagas e a pagar</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart
-                data={[
-                  { name: 'Vencendo Hoje', valor: metrics.vencendo_hoje_valor / 100 },
-                  { name: 'Pagas Hoje', valor: metrics.pagas_hoje_valor / 100 },
-                  { name: 'Vence no Mês', valor: metrics.vence_ate_fim_mes_valor / 100 },
-                  { name: 'Vencidas', valor: metrics.vencidas_valor / 100 },
-                ]}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(value) => formatCurrency(Number(value) * 100)} />
-                <Bar dataKey="valor" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {categoriaChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={categoriaChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="categoria" tick={{ fontSize: 12 }} interval={0} height={60} />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => formatCurrency(Math.round(Number(value) * 100))} />
+                  <Legend />
+                  <Bar dataKey="valorPago" name="Pago" fill="hsl(var(--success))" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="valorAberto" name="Em aberto" fill="hsl(var(--info))" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[320px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
+                Nenhuma categoria encontrada para o período selecionado.
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Contas Vencendo */}
+      <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Calendar className="h-5 w-5" />
-              <span>Próximos Vencimentos</span>
-            </CardTitle>
-            <CardDescription>
-              Contas que vencem nos próximos 7 dias
-            </CardDescription>
+            <CardTitle>Evolução diária de pagamentos</CardTitle>
+            <CardDescription>Comparativo entre valores pagos e previstos por dia</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {contasVencendo.length > 0 ? (
-                contasVencendo.map((conta) => (
-                  <div key={conta.conta_id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="font-medium text-sm">{conta.descricao}</div>
-                      <div className="text-xs text-muted-foreground">{conta.fornecedor}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-medium text-sm">{formatCurrency(conta.valor_em_aberto)}</div>
-                      <div className="text-xs text-muted-foreground">{formatDate(conta.proximo_vencimento)}</div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nenhuma conta vencendo nos próximos dias
-                </p>
-              )}
-            </div>
+            {dailySeriesData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={dailySeriesData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis />
+                  <Tooltip
+                    formatter={(value: number) => formatCurrency(Math.round(Number(value) * 100))}
+                    labelFormatter={(label, payload) => {
+                      const original = payload?.[0]?.payload?.date;
+                      return original ? format(new Date(original), 'dd/MM/yyyy') : label;
+                    }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="pagos" name="Pagos" stroke="hsl(var(--success))" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="abertos" name="A pagar" stroke="hsl(var(--warning))" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[320px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
+                Nenhuma movimentação encontrada para o período selecionado.
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Performance das Vendedoras */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Target className="h-5 w-5" />
-              <span>Performance de Vendas</span>
-            </CardTitle>
-            <CardDescription>
-              Top 5 vendedoras do mês atual
-            </CardDescription>
+            <CardTitle>Distribuição por Situação</CardTitle>
+            <CardDescription>Quantidades e valores consolidados do período</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {vendedorasPerformance.length > 0 ? (
-                vendedorasPerformance.map((vendedora, index) => (
-                  <div key={vendedora.vendedora_nome} className="flex items-center space-x-3">
-                    <div className="flex-shrink-0 w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-medium">{index + 1}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{vendedora.vendedora_nome}</div>
-                      <div className="flex items-center space-x-2">
-                        <Progress 
-                          value={Math.min(vendedora.percentual_meta, 100)} 
-                          className="flex-1 h-2"
-                        />
-                        <span className="text-xs font-medium w-12 text-right">
-                          {vendedora.percentual_meta.toFixed(0)}%
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-medium">{formatCurrency(vendedora.valor_liquido_total)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Meta: {formatCurrency(vendedora.meta_ajustada)}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nenhuma venda registrada este mês
-                </p>
-              )}
-            </div>
+          <CardContent className="space-y-6">
+            {statusDistribution.every(item => item.value === 0) ? (
+              <div className="h-[320px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
+                Ainda não há parcelas pagas ou em aberto no período selecionado.
+              </div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie
+                      data={statusDistribution}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {statusDistribution.map((entry, index) => (
+                        <Cell key={`status-cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => `${value} parcelas`} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={statusValueChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => formatCurrency(Math.round(Number(value) * 100))} />
+                    <Bar dataKey="valor" name="Valor" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
