@@ -189,7 +189,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
             </Label>
           </div>
 
-          {/* Campos de Pagamento (aparecem se marcado como pago) */}
+           {/* Campos de Pagamento (aparecem se marcado como pago) */}
           {formData.pago && (
             <>
               <div className="grid gap-2">
@@ -214,11 +214,15 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
               <div className="grid gap-2">
                 <Label htmlFor="forma_pagamento">Forma de Pagamento</Label>
                 <Select
-                  value={formData.forma_pagamento_id?.toString() || ""}
+                  value={
+                    formData.forma_pagamento_id != null
+                      ? formData.forma_pagamento_id.toString()
+                      : "none"
+                  }
                   onValueChange={(value) =>
                     setFormData({
                       ...formData,
-                      forma_pagamento_id: value ? Number.parseInt(value, 10) : null,
+                      forma_pagamento_id: value === "none" ? null : Number.parseInt(value, 10),
                     })
                   }
                 >
@@ -226,7 +230,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
                     <SelectValue placeholder="Selecione a forma de pagamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma</SelectItem>
+                    <SelectItem value="none">Nenhuma</SelectItem>
                     {formasPagamento.map((forma) => (
                       <SelectItem key={forma.id} value={forma.id.toString()}>
                         {forma.nome}
@@ -239,11 +243,15 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
               <div className="grid gap-2">
                 <Label htmlFor="conta_bancaria">Conta Bancária</Label>
                 <Select
-                  value={formData.conta_bancaria_id?.toString() || ""}
+                  value={
+                    formData.conta_bancaria_id != null
+                      ? formData.conta_bancaria_id.toString()
+                      : "none"
+                  }
                   onValueChange={(value) =>
                     setFormData({
                       ...formData,
-                      conta_bancaria_id: value ? Number.parseInt(value, 10) : null,
+                      conta_bancaria_id: value === "none" ? null : Number.parseInt(value, 10),
                     })
                   }
                 >
@@ -251,7 +259,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
                     <SelectValue placeholder="Selecione a conta bancária" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma</SelectItem>
+                    <SelectItem value="none">Nenhuma</SelectItem>
                     {contasBancarias.map((conta) => (
                       <SelectItem key={conta.id} value={conta.id.toString()}>
                         {conta.nome_conta} {conta.banco ? `- ${conta.banco}` : ""}
