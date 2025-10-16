@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -19,7 +19,7 @@ export default function NovaContaPagar() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Form state
-const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
+  const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
   const [fornecedorId, setFornecedorId] = useState("");
   const [categoriaId, setCategoriaId] = useState("none");
   const [filialId, setFilialId] = useState("none");
@@ -75,6 +75,46 @@ const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
   const { data: fornecedoresPF } = useQuery({
     queryKey: ["fornecedores-pf"],
 @@ -112,73 +117,85 @@ export default function NovaContaPagar() {
+        queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pessoas_fisicas")
+        .select("id, nome_completo")
+        .order("nome_completo");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch categorias financeiras
+  const { data: categorias } = useQuery({
+    queryKey: ["categorias-financeiras"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("categorias_financeiras")
+        .select("id, nome")
+        .order("nome");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch filiais
+  const { data: filiais } = useQuery({
+    queryKey: ["filiais"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("filiais")
+        .select("id, nome")
+        .order("nome");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!fornecedorId) {
       toast.error("Selecione um fornecedor");
       return;
     }
@@ -130,7 +170,9 @@ const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
       const usarParcelasPersonalizadas = parcelasCustomizadas.length === numParcelas;
 
       if (!usarParcelasPersonalizadas && parcelasPersonalizadas.length > 0) {
-        toast.warning("Não foi possível aplicar as parcelas personalizadas. Parcelamento recalculado automaticamente.");
+        toast.warning(
+          "Não foi possível aplicar as parcelas personalizadas. Parcelamento recalculado automaticamente.",
+        );
       }
 
       const parcelas: NovaParcelaInsert[] = usarParcelasPersonalizadas
@@ -157,17 +199,16 @@ const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
             return temp;
           })();
 
-      const { error: parcelasError } = await supabase
-        .from("contas_pagar_parcelas")
-        .insert(parcelas);
+      const { error: parcelasError } = await supabase.from("contas_pagar_parcelas").insert(parcelas);
 
       if (parcelasError) throw parcelasError;
 
       toast.success("Conta a pagar criada com sucesso!");
       navigate("/financeiro/contas-pagar");
-    } catch (error: any) {
+    } catch (error) {
       console.error("Erro ao criar conta:", error);
-      toast.error("Erro ao criar conta a pagar: " + error.message);
+      const message = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao criar conta a pagar: " + message);
     } finally {
       setIsSubmitting(false);
     }
