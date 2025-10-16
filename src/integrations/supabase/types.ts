@@ -1234,13 +1234,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "fk_categoria_financeira"
-            columns: ["categoria_id"]
-            isOneToOne: false
-            referencedRelation: "categorias_financeiras"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "pessoas_juridicas_categoria_id_fkey"
             columns: ["categoria_id"]
             isOneToOne: false
