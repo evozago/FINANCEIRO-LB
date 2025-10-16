@@ -1,24 +1,4 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CurrencyInput } from "@/components/ui/currency-input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { PreviewParcelas } from "@/components/financeiro/PreviewParcelas";
-
-export default function NovaContaPagar() {
-  const navigate = useNavigate();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Form state
-  const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
+const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
   const [fornecedorId, setFornecedorId] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
   const [filialId, setFilialId] = useState("");
@@ -32,11 +12,30 @@ export default function NovaContaPagar() {
   const [dataVencimento, setDataVencimento] = useState("");
   const [codigoBoleto, setCodigoBoleto] = useState("");
   const [anexo, setAnexo] = useState<File | null>(null);
-  const [parcelasPersonalizadas, setParcelasPersonalizadas] = useState<Array<{
-    numero: number;
-    valor_centavos: number;
+  const [parcelasPersonalizadas, setParcelasPersonalizadas] = useState<PreviewParcela[]>([]);
+
+  const parseOptionalId = (value: string): number | null => {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const sanitizeOptionalString = (value: string): string | null => {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
+
+  type NovaParcelaInsert = {
+    conta_id: number;
+    parcela_num: number;
+    numero_parcela: number;
+    valor_parcela_centavos: number;
     vencimento: string;
-  }>>([]);
+    pago: boolean;
+  };
 
   // Fetch fornecedores PJ
   const { data: fornecedoresPJ } = useQuery({
@@ -54,46 +53,7 @@ export default function NovaContaPagar() {
   // Fetch fornecedores PF
   const { data: fornecedoresPF } = useQuery({
     queryKey: ["fornecedores-pf"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pessoas_fisicas")
-        .select("id, nome_completo")
-        .order("nome_completo");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Fetch categorias
-  const { data: categorias } = useQuery({
-    queryKey: ["categorias"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("categorias_financeiras")
-        .select("id, nome")
-        .order("nome");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Fetch filiais
-  const { data: filiais } = useQuery({
-    queryKey: ["filiais"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("filiais")
-        .select("id, nome")
-        .order("nome");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!fornecedorId) {
+@@ -112,73 +117,85 @@ export default function NovaContaPagar() {
       toast.error("Selecione um fornecedor");
       return;
     }
@@ -115,17 +75,18 @@ export default function NovaContaPagar() {
       const { data: conta, error: contaError } = await supabase
         .from("contas_pagar")
         .insert({
-          fornecedor_id: fornecedorTipo === "pj" ? parseInt(fornecedorId) : null,
-          fornecedor_pf_id: fornecedorTipo === "pf" ? parseInt(fornecedorId) : null,
-          categoria_id: categoriaId ? parseInt(categoriaId) : null,
-          filial_id: filialId ? parseInt(filialId) : null,
-          descricao,
+          fornecedor_id: fornecedorTipo === "pj" ? parseOptionalId(fornecedorId) : null,
+          fornecedor_pf_id: fornecedorTipo === "pf" ? parseOptionalId(fornecedorId) : null,
+          categoria_id: parseOptionalId(categoriaId),
+          filial_id: parseOptionalId(filialId),
+          descricao: sanitizeOptionalString(descricao),
           valor_total_centavos: valorTotalCentavos,
           num_parcelas: numParcelas,
-          numero_nota: numeroNota || null,
-          chave_nfe: chaveNfe || null,
+          numero_nota: sanitizeOptionalString(numeroNota),
+          chave_nfe: sanitizeOptionalString(chaveNfe),
           data_emissao: dataEmissao || null,
-          referencia: referencia || null,
+          referencia: sanitizeOptionalString(referencia),
+          codigo_boleto: sanitizeOptionalString(codigoBoleto),
         })
         .select()
         .single();
@@ -133,31 +94,42 @@ export default function NovaContaPagar() {
       if (contaError) throw contaError;
 
       // Usar parcelas personalizadas se existirem, senão calcular automaticamente
-      const parcelas = parcelasPersonalizadas.length > 0
-        ? parcelasPersonalizadas.map(p => ({
-            conta_id: conta.id,
-            parcela_num: p.numero,
-            numero_parcela: p.numero,
-            valor_parcela_centavos: p.valor_centavos,
-            vencimento: p.vencimento,
-            pago: false,
-          }))
+      const parcelasCustomizadas = parcelasPersonalizadas
+        .filter((p) => Number.isFinite(p.valor_centavos) && p.valor_centavos >= 0 && p.vencimento)
+        .map((p) => ({
+          conta_id: conta.id,
+          parcela_num: p.numero,
+          numero_parcela: p.numero,
+          valor_parcela_centavos: Math.round(p.valor_centavos),
+          vencimento: formatDateToISO(parseLocalDate(p.vencimento)),
+          pago: false,
+        }))
+        .sort((a, b) => a.parcela_num - b.parcela_num);
+
+      const usarParcelasPersonalizadas = parcelasCustomizadas.length === numParcelas;
+
+      if (!usarParcelasPersonalizadas && parcelasPersonalizadas.length > 0) {
+        toast.warning("Não foi possível aplicar as parcelas personalizadas. Parcelamento recalculado automaticamente.");
+      }
+
+      const parcelas: NovaParcelaInsert[] = usarParcelasPersonalizadas
+        ? parcelasCustomizadas
         : (() => {
             const valorParcela = Math.floor(valorTotalCentavos / numParcelas);
-            const valorRestante = valorTotalCentavos - (valorParcela * numParcelas);
-            const baseDate = dataVencimento ? new Date(dataVencimento) : new Date();
-            const temp = [];
-            
+            const valorRestante = valorTotalCentavos - valorParcela * numParcelas;
+            const baseDate = dataVencimento ? parseLocalDate(dataVencimento) : todayLocalDate();
+            const temp: NovaParcelaInsert[] = [];
+
             for (let i = 1; i <= numParcelas; i++) {
-              const vencimento = new Date(baseDate);
+              const vencimento = new Date(baseDate.getTime());
               vencimento.setMonth(vencimento.getMonth() + (i - 1));
-              
+
               temp.push({
                 conta_id: conta.id,
                 parcela_num: i,
                 numero_parcela: i,
                 valor_parcela_centavos: i === numParcelas ? valorParcela + valorRestante : valorParcela,
-                vencimento: vencimento.toISOString().split('T')[0],
+                vencimento: formatDateToISO(vencimento),
                 pago: false,
               });
             }
