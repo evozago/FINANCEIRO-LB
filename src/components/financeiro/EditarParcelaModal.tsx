@@ -1,14 +1,14 @@
-import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { CurrencyInput } from '@/components/ui/currency-input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import { useEffect, useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface Parcela {
   id: number;
@@ -35,27 +35,41 @@ interface EditarParcelaModalProps {
 export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: EditarParcelaModalProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<Partial<Parcela>>({});
-  const [contasBancarias, setContasBancarias] = useState<any[]>([]);
-  const [formasPagamento, setFormasPagamento] = useState<any[]>([]);
+  const [contasBancarias, setContasBancarias] = useState<Array<{ id: number; nome_conta: string; banco: string | null }>>([]);
+  const [formasPagamento, setFormasPagamento] = useState<Array<{ id: number; nome: string }>>([]);
+
+  const sanitizeOptionalString = (value: string | null | undefined): string | null => {
+    const trimmed = (value ?? "").trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
 
   useEffect(() => {
     if (parcela) {
       setFormData({
         ...parcela,
-        pago_em: parcela.pago_em || null,
-        valor_pago_centavos: parcela.valor_pago_centavos || parcela.valor_parcela_centavos,
+        pago_em: parcela.pago_em ?? null,
+        valor_pago_centavos: parcela.valor_pago_centavos ?? parcela.valor_parcela_centavos,
       });
     }
   }, [parcela]);
 
   useEffect(() => {
     async function fetchData() {
-      const [{ data: contas }, { data: formas }] = await Promise.all([
-        supabase.from('contas_bancarias').select('*').eq('ativa', true).order('nome_conta'),
-        supabase.from('formas_pagamento').select('*').order('nome')
+      const [contasResult, formasResult] = await Promise.all([
+        supabase.from("contas_bancarias").select("*").eq("ativa", true).order("nome_conta"),
+        supabase.from("formas_pagamento").select("*").order("nome")
       ]);
-      setContasBancarias(contas || []);
-      setFormasPagamento(formas || []);
+
+      if (contasResult.error) {
+        console.error("Erro ao carregar contas bancárias:", contasResult.error);
+      }
+
+      if (formasResult.error) {
+        console.error("Erro ao carregar formas de pagamento:", formasResult.error);
+      }
+
+      setContasBancarias((contasResult.data as Array<{ id: number; nome_conta: string; banco: string | null }> | null) ?? []);
+      setFormasPagamento((formasResult.data as Array<{ id: number; nome: string }> | null) ?? []);
     }
     if (open) fetchData();
   }, [open]);
@@ -66,32 +80,44 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
     setLoading(true);
     try {
       const valorAnterior = parcela.valor_parcela_centavos;
-      const novoValor = formData.valor_parcela_centavos || valorAnterior;
+      const novoValor = Math.max(0, Math.round(formData.valor_parcela_centavos ?? valorAnterior));
       const diferenca = novoValor - valorAnterior;
+
+      if (!formData.vencimento) {
+        toast.error("Informe a data de vencimento da parcela.");
+        setLoading(false);
+        return;
+      }
+
+      const pago = Boolean(formData.pago);
+      const valorPago = pago ? Math.max(0, Math.round(formData.valor_pago_centavos ?? novoValor)) : null;
+      const pagoEm = pago ? formData.pago_em || null : null;
+      const formaPagamentoId = pago ? formData.forma_pagamento_id ?? null : null;
+      const contaBancariaId = pago ? formData.conta_bancaria_id ?? null : null;
 
       // 1. Atualizar a parcela
       const { error: parcelaError } = await supabase
-        .from('contas_pagar_parcelas')
+        .from("contas_pagar_parcelas")
         .update({
-          valor_parcela_centavos: formData.valor_parcela_centavos,
+          valor_parcela_centavos: novoValor,
           vencimento: formData.vencimento,
-          pago: formData.pago,
-          pago_em: formData.pago_em,
-          valor_pago_centavos: formData.valor_pago_centavos,
-          forma_pagamento_id: formData.forma_pagamento_id,
-          conta_bancaria_id: formData.conta_bancaria_id,
-          observacao: formData.observacao,
+          pago,
+          pago_em: pagoEm,
+          valor_pago_centavos: valorPago,
+          forma_pagamento_id: formaPagamentoId,
+          conta_bancaria_id: contaBancariaId,
+          observacao: sanitizeOptionalString(formData.observacao),
         })
-        .eq('id', parcela.id);
+        .eq("id", parcela.id);
 
       if (parcelaError) throw parcelaError;
 
       // 2. Atualizar o valor total da conta pai se houve mudança no valor
       if (diferenca !== 0) {
         const { data: contaAtual, error: contaFetchError } = await supabase
-          .from('contas_pagar')
-          .select('valor_total_centavos')
-          .eq('id', parcela.conta_id)
+          .from("contas_pagar")
+          .select("valor_total_centavos")
+          .eq("id", parcela.conta_id)
           .single();
 
         if (contaFetchError) throw contaFetchError;
@@ -99,19 +125,20 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
         const novoTotal = (contaAtual.valor_total_centavos || 0) + diferenca;
 
         const { error: contaUpdateError } = await supabase
-          .from('contas_pagar')
+          .from("contas_pagar")
           .update({ valor_total_centavos: novoTotal })
-          .eq('id', parcela.conta_id);
+          .eq("id", parcela.conta_id);
 
         if (contaUpdateError) throw contaUpdateError;
       }
 
-      toast.success('Parcela atualizada com sucesso!');
+      toast.success("Parcela atualizada com sucesso!");
       onSuccess();
       onOpenChange(false);
-    } catch (error: any) {
-      console.error('Erro ao salvar parcela:', error);
-      toast.error('Erro ao salvar parcela: ' + error.message);
+    } catch (error: unknown) {
+      console.error("Erro ao salvar parcela:", error);
+      const message = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao salvar parcela: " + message);
     } finally {
       setLoading(false);
     }
@@ -134,7 +161,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
             <Label htmlFor="valor">Valor da Parcela *</Label>
             <CurrencyInput
               id="valor"
-              value={formData.valor_parcela_centavos || 0}
+              value={formData.valor_parcela_centavos ?? 0}
               onValueChange={(value) => setFormData({ ...formData, valor_parcela_centavos: value })}
             />
           </div>
@@ -145,7 +172,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
             <Input
               id="vencimento"
               type="date"
-              value={formData.vencimento || ''}
+              value={formData.vencimento || ""}
               onChange={(e) => setFormData({ ...formData, vencimento: e.target.value })}
             />
           </div>
@@ -154,8 +181,8 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
           <div className="flex items-center space-x-2">
             <Checkbox
               id="pago"
-              checked={formData.pago || false}
-              onCheckedChange={(checked) => setFormData({ ...formData, pago: checked as boolean })}
+              checked={Boolean(formData.pago)}
+              onCheckedChange={(checked) => setFormData({ ...formData, pago: checked === true })}
             />
             <Label htmlFor="pago" className="cursor-pointer">
               Marcar como pago
@@ -170,7 +197,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
                 <Input
                   id="data_pagamento"
                   type="date"
-                  value={formData.pago_em || ''}
+                  value={formData.pago_em || ""}
                   onChange={(e) => setFormData({ ...formData, pago_em: e.target.value })}
                 />
               </div>
@@ -179,7 +206,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
                 <Label htmlFor="valor_pago">Valor Pago</Label>
                 <CurrencyInput
                   id="valor_pago"
-                  value={formData.valor_pago_centavos || formData.valor_parcela_centavos || 0}
+                  value={formData.valor_pago_centavos ?? formData.valor_parcela_centavos ?? 0}
                   onValueChange={(value) => setFormData({ ...formData, valor_pago_centavos: value })}
                 />
               </div>
@@ -187,8 +214,13 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
               <div className="grid gap-2">
                 <Label htmlFor="forma_pagamento">Forma de Pagamento</Label>
                 <Select
-                  value={formData.forma_pagamento_id?.toString() || ''}
-                  onValueChange={(value) => setFormData({ ...formData, forma_pagamento_id: value ? parseInt(value) : null })}
+                  value={formData.forma_pagamento_id?.toString() || ""}
+                  onValueChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      forma_pagamento_id: value ? Number.parseInt(value, 10) : null,
+                    })
+                  }
                 >
                   <SelectTrigger id="forma_pagamento">
                     <SelectValue placeholder="Selecione a forma de pagamento" />
@@ -207,8 +239,13 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
               <div className="grid gap-2">
                 <Label htmlFor="conta_bancaria">Conta Bancária</Label>
                 <Select
-                  value={formData.conta_bancaria_id?.toString() || ''}
-                  onValueChange={(value) => setFormData({ ...formData, conta_bancaria_id: value ? parseInt(value) : null })}
+                  value={formData.conta_bancaria_id?.toString() || ""}
+                  onValueChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      conta_bancaria_id: value ? Number.parseInt(value, 10) : null,
+                    })
+                  }
                 >
                   <SelectTrigger id="conta_bancaria">
                     <SelectValue placeholder="Selecione a conta bancária" />
@@ -217,7 +254,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
                     <SelectItem value="">Nenhuma</SelectItem>
                     {contasBancarias.map((conta) => (
                       <SelectItem key={conta.id} value={conta.id.toString()}>
-                        {conta.nome_conta} {conta.banco ? `- ${conta.banco}` : ''}
+                        {conta.nome_conta} {conta.banco ? `- ${conta.banco}` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -231,7 +268,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
             <Label htmlFor="observacao">Observação</Label>
             <Textarea
               id="observacao"
-              value={formData.observacao || ''}
+              value={formData.observacao || ""}
               onChange={(e) => setFormData({ ...formData, observacao: e.target.value })}
               placeholder="Observações sobre esta parcela"
               rows={3}
@@ -244,7 +281,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
             Cancelar
           </Button>
           <Button onClick={handleSave} disabled={loading}>
-            {loading ? 'Salvando...' : 'Salvar Alterações'}
+            {loading ? "Salvando..." : "Salvar Alterações"}
           </Button>
         </DialogFooter>
       </DialogContent>
