@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EditarParcelaModal } from '@/components/financeiro/EditarParcelaModal';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import {
   Search, Filter, Edit, Check, Trash2, Settings2, CalendarIcon,
   ArrowUpDown, X, Plus, RotateCcw, Edit2
@@ -94,7 +95,14 @@ export function ContasPagarSimple() {
 
   // pagamento em lote
   const [paymentData, setPaymentData] = useState<{
-    [key: number]: { data_pagamento: Date | null; conta_bancaria_id: string; codigo_identificador: string } | undefined
+    [key: number]: { 
+      data_pagamento: Date | null; 
+      conta_bancaria_id: string; 
+      forma_pagamento_id: string;
+      codigo_identificador: string;
+      valor_original_centavos: number;
+      valor_pago_centavos: number;
+    } | undefined
   }>({});
   const [paymentObservacao, setPaymentObservacao] = useState('');
   const [replicarPrimeiro, setReplicarPrimeiro] = useState(false);
@@ -399,11 +407,15 @@ export function ContasPagarSimple() {
           toast({ title: 'Data de pagamento obrigatória', description: `Preencha a data de ${parcela.fornecedor}`, variant: 'destructive' });
           return;
         }
+        if (!payment?.forma_pagamento_id) {
+          toast({ title: 'Forma de pagamento obrigatória', description: `Selecione a forma de pagamento para ${parcela.fornecedor}`, variant: 'destructive' });
+          return;
+        }
         await supabase.rpc('pagar_parcela', {
           parcela_id: parcela.id,
           conta_bancaria_id: payment?.conta_bancaria_id ? parseInt(payment.conta_bancaria_id) : null,
-          forma_pagamento_id: parcela.forma_pagamento_id || 1,
-          valor_pago_centavos: parcela.valor_parcela_centavos,
+          forma_pagamento_id: parseInt(payment.forma_pagamento_id),
+          valor_pago_centavos: payment?.valor_pago_centavos || parcela.valor_parcela_centavos,
           observacao_param: paymentObservacao
         });
       }
@@ -839,7 +851,7 @@ export function ContasPagarSimple() {
                   <CardDescription>Parcela {parcela.numero_parcela} - Venc: {formatDate(parcela.vencimento)}</CardDescription>
                   <CardDescription>NFe {parcela.numero_nota} - Parcela {parcela.numero_parcela}</CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-3 gap-4">
+                <CardContent className="grid grid-cols-4 gap-4">
                   <div>
                     <Label>Data de Pagamento</Label>
                     <Popover>
@@ -858,7 +870,10 @@ export function ContasPagarSimple() {
                             [parcela.id]: {
                               data_pagamento: date || null,
                               conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
-                              codigo_identificador: paymentData[parcela.id]?.codigo_identificador || ''
+                              forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
+                              codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
+                              valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
+                              valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
                             }
                           })}
                           className="pointer-events-auto"
@@ -875,13 +890,38 @@ export function ContasPagarSimple() {
                         [parcela.id]: {
                           data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
                           conta_bancaria_id: v,
-                          codigo_identificador: paymentData[parcela.id]?.codigo_identificador || ''
+                          forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
+                          codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
+                          valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
+                          valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
                         }
                       })}
                     >
                       <SelectTrigger><SelectValue placeholder="Banco" /></SelectTrigger>
                       <SelectContent className="bg-background z-50">
                         {contasBancarias.map(c => (<SelectItem key={c.id} value={c.id.toString()}>{c.nome_conta} - {c.banco}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Forma de Pagamento</Label>
+                    <Select
+                      value={paymentData[parcela.id]?.forma_pagamento_id || ''}
+                      onValueChange={(v) => setPaymentData({
+                        ...paymentData,
+                        [parcela.id]: {
+                          data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
+                          conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
+                          forma_pagamento_id: v,
+                          codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
+                          valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
+                          valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
+                        }
+                      })}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Forma" /></SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        {formasPagamento.map(f => (<SelectItem key={f.id} value={f.id.toString()}>{f.nome}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -895,16 +935,62 @@ export function ContasPagarSimple() {
                         [parcela.id]: {
                           data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
                           conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
-                          codigo_identificador: e.target.value
+                          forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
+                          codigo_identificador: e.target.value,
+                          valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
+                          valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
                         }
                       })}
                     />
                   </div>
-                  <div className="col-span-3 flex justify-between items-center pt-2 border-t">
-                    <span className="text-sm text-muted-foreground">Original</span>
-                    <span className="font-bold">{formatCurrency(parcela.valor_parcela_centavos)}</span>
-                    <span className="text-sm text-muted-foreground">Pago</span>
-                    <span className="font-bold text-green-600">{formatCurrency(parcela.valor_parcela_centavos)}</span>
+                  <div className="col-span-2">
+                    <Label>Valor Original</Label>
+                    <Input
+                      type="text"
+                      value={formatCurrency(paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos)}
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label>Valor Pago (editável)</Label>
+                    <CurrencyInput
+                      value={paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos}
+                      onValueChange={(valorCentavos) => setPaymentData({
+                        ...paymentData,
+                        [parcela.id]: {
+                          data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
+                          conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
+                          forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
+                          codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
+                          valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
+                          valor_pago_centavos: valorCentavos
+                        }
+                      })}
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <div className="col-span-4 flex justify-between items-center pt-2 border-t">
+                    <div className="flex gap-4">
+                      <div>
+                        <span className="text-sm text-muted-foreground">Valor Original:</span>
+                        <span className="ml-2 font-bold">{formatCurrency(paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos)}</span>
+                      </div>
+                      <div>
+                        <span className="text-sm text-muted-foreground">Valor Pago:</span>
+                        <span className={`ml-2 font-bold ${(paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos) !== (paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos) ? 'text-orange-600' : 'text-green-600'}`}>
+                          {formatCurrency(paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos)}
+                        </span>
+                      </div>
+                      {(paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos) !== (paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos) && (
+                        <div>
+                          <span className="text-sm text-muted-foreground">Diferença:</span>
+                          <span className="ml-2 font-bold text-orange-600">
+                            {formatCurrency(Math.abs((paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos) - (paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos)))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -918,13 +1004,30 @@ export function ContasPagarSimple() {
               <div>
                 <span className="text-sm text-muted-foreground">Total Original:</span>
                 <span className="ml-2 font-bold">
-                  {formatCurrency(filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + p.valor_parcela_centavos, 0))}
+                  {formatCurrency(filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => {
+                    return acc + (paymentData[p.id]?.valor_original_centavos || p.valor_parcela_centavos);
+                  }, 0))}
                 </span>
               </div>
               <div>
                 <span className="text-sm text-muted-foreground">Total a Pagar:</span>
                 <span className="ml-2 font-bold text-green-600">
-                  {formatCurrency(filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + p.valor_parcela_centavos, 0))}
+                  {formatCurrency(filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => {
+                    return acc + (paymentData[p.id]?.valor_pago_centavos || p.valor_parcela_centavos);
+                  }, 0))}
+                </span>
+              </div>
+              <div>
+                <span className="text-sm text-muted-foreground">Diferença Total:</span>
+                <span className={`ml-2 font-bold ${
+                  filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + (paymentData[p.id]?.valor_pago_centavos || p.valor_parcela_centavos), 0) !==
+                  filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + (paymentData[p.id]?.valor_original_centavos || p.valor_parcela_centavos), 0)
+                  ? 'text-orange-600' : 'text-muted-foreground'
+                }`}>
+                  {formatCurrency(Math.abs(
+                    filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + (paymentData[p.id]?.valor_pago_centavos || p.valor_parcela_centavos), 0) -
+                    filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + (paymentData[p.id]?.valor_original_centavos || p.valor_parcela_centavos), 0)
+                  ))}
                 </span>
               </div>
             </div>
