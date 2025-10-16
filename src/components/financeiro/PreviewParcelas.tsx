@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { CurrencyInput } from '@/components/ui/currency-input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { AlertCircle } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useCallback, useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatDateToISO, parseLocalDate, todayLocalDate } from "@/lib/date";
 
-interface Parcela {
+export interface PreviewParcela {
   numero: number;
   valor_centavos: number;
   vencimento: string;
@@ -20,87 +21,104 @@ interface PreviewParcelasProps {
   valorTotal: number;
   numParcelas: number;
   dataInicial: string;
-  onChange: (parcelas: Parcela[]) => void;
+  onChange: (parcelas: PreviewParcela[]) => void;
 }
 
 export function PreviewParcelas({ valorTotal, numParcelas, dataInicial, onChange }: PreviewParcelasProps) {
-  const [parcelas, setParcelas] = useState<Parcela[]>([]);
-  const [intervaloTipo, setIntervaloTipo] = useState<'mensal' | 'quinzenal' | 'semanal' | 'dias'>('mensal');
+  const [parcelas, setParcelas] = useState<PreviewParcela[]>([]);
+  const [intervaloTipo, setIntervaloTipo] = useState<"mensal" | "quinzenal" | "semanal" | "dias">("mensal");
   const [intervaloDias, setIntervaloDias] = useState(30);
 
-  // Recalcular parcelas quando mudarem os parâmetros
-  useEffect(() => {
-    if (numParcelas > 0 && valorTotal > 0 && dataInicial) {
-      gerarParcelas();
+  const gerarParcelas = useCallback(() => {
+    if (numParcelas <= 0 || valorTotal <= 0 || !dataInicial) {
+      setParcelas([]);
+      return;
     }
-  }, [numParcelas, valorTotal, dataInicial, intervaloTipo, intervaloDias]);
 
-  // Notificar mudanças
-  useEffect(() => {
-    onChange(parcelas);
-  }, [parcelas]);
-
-  const gerarParcelas = () => {
     const valorParcela = Math.floor(valorTotal / numParcelas);
-    const valorRestante = valorTotal - (valorParcela * numParcelas);
-    const baseDate = new Date(dataInicial);
+    const valorRestante = valorTotal - valorParcela * numParcelas;
+    const baseDate = dataInicial ? parseLocalDate(dataInicial) : todayLocalDate();
 
-    const novasParcelas: Parcela[] = [];
+    const novasParcelas: PreviewParcela[] = [];
 
     for (let i = 1; i <= numParcelas; i++) {
-      const vencimento = new Date(baseDate);
-      
+      const vencimento = new Date(baseDate.getTime());
+
       // Calcular data de vencimento baseado no tipo de intervalo
-      if (intervaloTipo === 'mensal') {
+      if (intervaloTipo === "mensal") {
         vencimento.setMonth(vencimento.getMonth() + (i - 1));
-      } else if (intervaloTipo === 'quinzenal') {
-        vencimento.setDate(vencimento.getDate() + ((i - 1) * 15));
-      } else if (intervaloTipo === 'semanal') {
-        vencimento.setDate(vencimento.getDate() + ((i - 1) * 7));
-      } else if (intervaloTipo === 'dias') {
-        vencimento.setDate(vencimento.getDate() + ((i - 1) * intervaloDias));
+      } else if (intervaloTipo === "quinzenal") {
+        vencimento.setDate(vencimento.getDate() + (i - 1) * 15);
+      } else if (intervaloTipo === "semanal") {
+        vencimento.setDate(vencimento.getDate() + (i - 1) * 7);
+      } else if (intervaloTipo === "dias") {
+        const dias = Number.isFinite(intervaloDias) && intervaloDias > 0 ? intervaloDias : 30;
+        vencimento.setDate(vencimento.getDate() + (i - 1) * dias);
       }
 
       novasParcelas.push({
         numero: i,
         valor_centavos: i === numParcelas ? valorParcela + valorRestante : valorParcela,
-        vencimento: vencimento.toISOString().split('T')[0]
+        vencimento: formatDateToISO(vencimento),
       });
     }
 
     setParcelas(novasParcelas);
-  };
+  }, [dataInicial, intervaloDias, intervaloTipo, numParcelas, valorTotal]);
 
-  const atualizarParcela = (index: number, campo: 'valor_centavos' | 'vencimento', valor: any) => {
-    const novasParcelas = [...parcelas];
-    novasParcelas[index] = {
-      ...novasParcelas[index],
-      [campo]: valor
-    };
-    setParcelas(novasParcelas);
+  useEffect(() => {
+    gerarParcelas();
+  }, [gerarParcelas]);
+
+  // Notificar mudanças
+  useEffect(() => {
+    onChange(parcelas);
+  }, [parcelas, onChange]);
+
+  const atualizarParcela = (index: number, campo: "valor_centavos" | "vencimento", valor: number | string) => {
+    setParcelas((prevParcelas) => {
+      const novasParcelas = [...prevParcelas];
+      const parcelaAtual = novasParcelas[index];
+
+      if (!parcelaAtual) {
+        return prevParcelas;
+      }
+
+      if (campo === "valor_centavos" && typeof valor === "number") {
+        const safeValue = Number.isFinite(valor) ? Math.max(0, Math.round(valor)) : 0;
+        novasParcelas[index] = { ...parcelaAtual, valor_centavos: safeValue };
+      } else if (campo === "vencimento" && typeof valor === "string") {
+        novasParcelas[index] = { ...parcelaAtual, vencimento: formatDateToISO(parseLocalDate(valor)) };
+      }
+
+      return novasParcelas;
+    });
   };
 
   const distribuirDiferenca = () => {
     const totalAtual = parcelas.reduce((sum, p) => sum + p.valor_centavos, 0);
     const diferenca = valorTotal - totalAtual;
-    
+
     if (diferenca !== 0 && parcelas.length > 0) {
-      const novasParcelas = [...parcelas];
-      novasParcelas[parcelas.length - 1].valor_centavos += diferenca;
-      setParcelas(novasParcelas);
+      setParcelas((prev) => {
+        if (prev.length === 0) {
+          return prev;
+        }
+
+        const novasParcelas = [...prev];
+        const ultimaParcela = novasParcelas[novasParcelas.length - 1];
+        const novoValor = Math.max(0, ultimaParcela.valor_centavos + diferenca);
+        novasParcelas[novasParcelas.length - 1] = { ...ultimaParcela, valor_centavos: novoValor };
+        return novasParcelas;
+      });
     }
   };
 
   const formatCurrency = (centavos: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
     }).format(centavos / 100);
-  };
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('pt-BR');
   };
 
   const totalParcelas = parcelas.reduce((sum, p) => sum + p.valor_centavos, 0);
@@ -126,7 +144,10 @@ export function PreviewParcelas({ valorTotal, numParcelas, dataInicial, onChange
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
             <Label>Intervalo entre Parcelas</Label>
-            <Select value={intervaloTipo} onValueChange={(v: any) => setIntervaloTipo(v)}>
+            <Select
+              value={intervaloTipo}
+              onValueChange={(value: "mensal" | "quinzenal" | "semanal" | "dias") => setIntervaloTipo(value)}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -146,7 +167,10 @@ export function PreviewParcelas({ valorTotal, numParcelas, dataInicial, onChange
                 type="number"
                 min="1"
                 value={intervaloDias}
-                onChange={(e) => setIntervaloDias(parseInt(e.target.value) || 30)}
+                onChange={(e) => {
+                  const parsed = Number.parseInt(e.target.value, 10);
+                  setIntervaloDias(Number.isFinite(parsed) && parsed > 0 ? parsed : 30);
+                }}
               />
             </div>
           )}
@@ -197,14 +221,14 @@ export function PreviewParcelas({ valorTotal, numParcelas, dataInicial, onChange
                     <Input
                       type="date"
                       value={parcela.vencimento}
-                      onChange={(e) => atualizarParcela(index, 'vencimento', e.target.value)}
+                      onChange={(e) => atualizarParcela(index, "vencimento", e.target.value)}
                       className="w-full"
                     />
                   </TableCell>
                   <TableCell>
                     <CurrencyInput
                       value={parcela.valor_centavos}
-                      onValueChange={(value) => atualizarParcela(index, 'valor_centavos', value)}
+                      onValueChange={(value) => atualizarParcela(index, "valor_centavos", value)}
                       className="w-full"
                     />
                   </TableCell>
@@ -217,7 +241,7 @@ export function PreviewParcelas({ valorTotal, numParcelas, dataInicial, onChange
         {/* Resumo */}
         <div className="flex justify-between items-center pt-4 border-t">
           <div className="text-sm text-muted-foreground">
-            {numParcelas} parcela{numParcelas > 1 ? 's' : ''} de {formatCurrency(Math.floor(valorTotal / numParcelas))} em média
+            {numParcelas} parcela{numParcelas > 1 ? "s" : ""} de {formatCurrency(Math.floor(valorTotal / numParcelas))} em média
           </div>
           <div className="text-right">
             <div className="text-sm text-muted-foreground">Total das Parcelas</div>
