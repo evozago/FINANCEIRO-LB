@@ -362,7 +362,7 @@ export function useXMLImport() {
       const novaConta = {
         descricao,
         fornecedor_id: fornecedorId,
-        categoria_id: 1, // Categoria padrão
+        categoria_id: null, // Categoria será definida depois
         filial_id: await buscarFilialPorCNPJ(xmlData.cnpjDestinatario),
         valor_total_centavos: Math.round(xmlData.valorTotal * 100),
         numero_nf: xmlData.numeroNFe,
