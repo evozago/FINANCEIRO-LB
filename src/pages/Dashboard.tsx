@@ -82,7 +82,16 @@ interface VendedoraPerformance {
 export function Dashboard() {
   const navigate = useNavigate();
   const [salesMetrics, setSalesMetrics] = useState<SalesMetrics>({
-
+    vencendo_hoje_valor: 0,
+    vencendo_hoje_qtd: 0,
+    pagas_hoje_valor: 0,
+    pagas_hoje_qtd: 0,
+    vence_ate_fim_mes_valor: 0,
+    vence_ate_fim_mes_qtd: 0,
+    vencidas_valor: 0,
+    vencidas_qtd: 0,
+    pendentes_nao_recorrentes_valor: 0,
+    pendentes_nao_recorrentes_qtd: 0,
     total_vendas_mes: 0,
     valor_vendas_mes: 0,
     ticket_medio_mes: 0,
@@ -266,11 +275,12 @@ export function Dashboard() {
       ) || 0;
       const ticketMedio = totalVendas > 0 ? valorVendasMes / totalVendas : 0;
 
-      setSalesMetrics({
+      setSalesMetrics(prev => ({
+        ...prev,
         total_vendas_mes: totalVendas,
         valor_vendas_mes: valorVendasMes,
         ticket_medio_mes: ticketMedio,
-      });
+      }));
     } catch (error) {
       console.error('Erro ao buscar métricas de vendas:', error);
     }
