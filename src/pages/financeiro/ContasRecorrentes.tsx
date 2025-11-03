@@ -18,6 +18,7 @@ interface ContaRecorrente {
   valor_esperado_centavos?: number;
   dia_vencimento: number;
   fornecedor_id?: number;
+  fornecedor_pf_id?: number;
   categoria_id: number;
   filial_id: number;
   ativa: boolean;
@@ -34,6 +35,11 @@ interface Fornecedor {
   razao_social: string;
 }
 
+interface FornecedorPF {
+  id: number;
+  nome_completo: string;
+}
+
 interface Categoria {
   id: number;
   nome: string;
@@ -47,6 +53,7 @@ interface Filial {
 export function ContasRecorrentes() {
   const [contas, setContas] = useState<ContaRecorrente[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [fornecedoresPF, setFornecedoresPF] = useState<FornecedorPF[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [filiais, setFiliais] = useState<Filial[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -61,6 +68,8 @@ export function ContasRecorrentes() {
     valor_total_centavos: 0,
     dia_vencimento: '1',
     fornecedor_id: '',
+    fornecedor_pf_id: '',
+    tipo_fornecedor: 'pj' as 'pj' | 'pf',
     categoria_id: '',
     filial_id: '',
     ativa: true,
@@ -79,6 +88,7 @@ export function ContasRecorrentes() {
       await Promise.all([
         fetchContas(),
         fetchFornecedores(),
+        fetchFornecedoresPF(),
         fetchCategorias(),
         fetchFiliais()
       ]);
@@ -123,6 +133,20 @@ export function ContasRecorrentes() {
       setFornecedores(data || []);
     } catch (error) {
       console.error('Erro ao buscar fornecedores:', error);
+    }
+  };
+
+  const fetchFornecedoresPF = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pessoas_fisicas')
+        .select('id, nome_completo')
+        .order('nome_completo');
+
+      if (error) throw error;
+      setFornecedoresPF(data || []);
+    } catch (error) {
+      console.error('Erro ao buscar fornecedores PF:', error);
     }
   };
 
@@ -199,7 +223,8 @@ export function ContasRecorrentes() {
         nome: formData.nome.trim(),
         valor_total_centavos: formData.valor_total_centavos,
         dia_vencimento: parseInt(formData.dia_vencimento),
-        fornecedor_id: formData.fornecedor_id ? parseInt(formData.fornecedor_id) : null,
+        fornecedor_id: formData.tipo_fornecedor === 'pj' && formData.fornecedor_id ? parseInt(formData.fornecedor_id) : null,
+        fornecedor_pf_id: formData.tipo_fornecedor === 'pf' && formData.fornecedor_pf_id ? parseInt(formData.fornecedor_pf_id) : null,
         categoria_id: parseInt(formData.categoria_id),
         filial_id: parseInt(formData.filial_id),
         ativa: formData.ativa,
@@ -254,6 +279,8 @@ export function ContasRecorrentes() {
       valor_total_centavos: conta.valor_total_centavos || conta.valor_esperado_centavos || 0,
       dia_vencimento: conta.dia_vencimento.toString(),
       fornecedor_id: conta.fornecedor_id?.toString() || '',
+      fornecedor_pf_id: conta.fornecedor_pf_id?.toString() || '',
+      tipo_fornecedor: conta.fornecedor_pf_id ? 'pf' : 'pj',
       categoria_id: conta.categoria_id.toString(),
       filial_id: conta.filial_id.toString(),
       ativa: conta.ativa,
@@ -359,20 +386,21 @@ export function ContasRecorrentes() {
             dataVencimento = new Date(anoAtual, mesAtual, 0);
           }
           
-          // Criar conta a pagar
-          const { data: novaConta, error: insertError } = await supabase
-            .from('contas_pagar')
-            .insert({
-              descricao: descricaoConta,
-              valor_total_centavos: valorConta,
-              fornecedor_id: conta.fornecedor_id,
-              categoria_id: conta.categoria_id,
-              filial_id: conta.filial_id,
-              num_parcelas: 1,
-              referencia: `REC-${conta.id}-${String(mesAtual).padStart(2, '0')}${anoAtual}`
-            })
-            .select('id')
-            .single();
+            // Criar conta a pagar
+            const { data: novaConta, error: insertError } = await supabase
+              .from('contas_pagar')
+              .insert({
+                descricao: descricaoConta,
+                valor_total_centavos: valorConta,
+                fornecedor_id: conta.fornecedor_id,
+                fornecedor_pf_id: conta.fornecedor_pf_id,
+                categoria_id: conta.categoria_id,
+                filial_id: conta.filial_id,
+                num_parcelas: 1,
+                referencia: `REC-${conta.id}-${String(mesAtual).padStart(2, '0')}${anoAtual}`
+              })
+              .select('id')
+              .single();
 
           if (!insertError && novaConta) {
             // Criar parcela
@@ -427,6 +455,7 @@ export function ContasRecorrentes() {
           descricao: descricaoConta,
           valor_total_centavos: valorConta,
           fornecedor_id: conta.fornecedor_id,
+          fornecedor_pf_id: conta.fornecedor_pf_id,
           categoria_id: conta.categoria_id,
           filial_id: conta.filial_id,
           num_parcelas: 1,
@@ -470,6 +499,8 @@ export function ContasRecorrentes() {
       valor_total_centavos: 0,
       dia_vencimento: '1',
       fornecedor_id: '',
+      fornecedor_pf_id: '',
+      tipo_fornecedor: 'pj',
       categoria_id: '',
       filial_id: '',
       ativa: true,
@@ -486,10 +517,16 @@ export function ContasRecorrentes() {
     }).format(centavos / 100);
   };
 
-  const getFornecedorNome = (fornecedorId?: number) => {
-    if (!fornecedorId) return 'Não definido';
-    const fornecedor = fornecedores.find(f => f.id === fornecedorId);
-    return fornecedor?.nome_fantasia || fornecedor?.razao_social || 'Não encontrado';
+  const getFornecedorNome = (conta: ContaRecorrente) => {
+    if (conta.fornecedor_pf_id) {
+      const fornecedorPF = fornecedoresPF.find(f => f.id === conta.fornecedor_pf_id);
+      return fornecedorPF?.nome_completo || 'Não encontrado';
+    }
+    if (conta.fornecedor_id) {
+      const fornecedor = fornecedores.find(f => f.id === conta.fornecedor_id);
+      return fornecedor?.nome_fantasia || fornecedor?.razao_social || 'Não encontrado';
+    }
+    return 'Não definido';
   };
 
   const getCategoriaNome = (categoriaId: number) => {
@@ -633,22 +670,75 @@ export function ContasRecorrentes() {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <Label htmlFor="fornecedor_id">Fornecedor (Opcional)</Label>
-                    <select 
-                      id="fornecedor_id"
-                      value={formData.fornecedor_id} 
-                      onChange={(e) => setFormData({ ...formData, fornecedor_id: e.target.value })}
-                      className="w-full p-2 border border-gray-300 rounded-md"
-                    >
-                      <option value="">Nenhum fornecedor</option>
-                      {fornecedores.map((fornecedor) => (
-                        <option key={fornecedor.id} value={fornecedor.id.toString()}>
-                          {fornecedor.nome_fantasia || fornecedor.razao_social}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="col-span-2">
+                    <Label>Tipo de Fornecedor</Label>
+                    <div className="flex gap-4 mt-2">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value="pj"
+                          checked={formData.tipo_fornecedor === 'pj'}
+                          onChange={(e) => setFormData({ 
+                            ...formData, 
+                            tipo_fornecedor: e.target.value as 'pj' | 'pf',
+                            fornecedor_id: '',
+                            fornecedor_pf_id: ''
+                          })}
+                        />
+                        Pessoa Jurídica
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value="pf"
+                          checked={formData.tipo_fornecedor === 'pf'}
+                          onChange={(e) => setFormData({ 
+                            ...formData, 
+                            tipo_fornecedor: e.target.value as 'pj' | 'pf',
+                            fornecedor_id: '',
+                            fornecedor_pf_id: ''
+                          })}
+                        />
+                        Pessoa Física
+                      </label>
+                    </div>
                   </div>
+                  
+                  {formData.tipo_fornecedor === 'pj' ? (
+                    <div className="col-span-2">
+                      <Label htmlFor="fornecedor_id">Fornecedor PJ (Opcional)</Label>
+                      <select 
+                        id="fornecedor_id"
+                        value={formData.fornecedor_id} 
+                        onChange={(e) => setFormData({ ...formData, fornecedor_id: e.target.value })}
+                        className="w-full p-2 border border-gray-300 rounded-md"
+                      >
+                        <option value="">Nenhum fornecedor</option>
+                        {fornecedores.map((fornecedor) => (
+                          <option key={fornecedor.id} value={fornecedor.id.toString()}>
+                            {fornecedor.nome_fantasia || fornecedor.razao_social}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="col-span-2">
+                      <Label htmlFor="fornecedor_pf_id">Fornecedor PF (Opcional)</Label>
+                      <select 
+                        id="fornecedor_pf_id"
+                        value={formData.fornecedor_pf_id} 
+                        onChange={(e) => setFormData({ ...formData, fornecedor_pf_id: e.target.value })}
+                        className="w-full p-2 border border-gray-300 rounded-md"
+                      >
+                        <option value="">Nenhum fornecedor</option>
+                        {fornecedoresPF.map((fornecedor) => (
+                          <option key={fornecedor.id} value={fornecedor.id.toString()}>
+                            {fornecedor.nome_completo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="space-y-3">
@@ -788,7 +878,7 @@ export function ContasRecorrentes() {
                       <Badge variant="outline" className="ml-2">Livre</Badge>
                     )}
                   </TableCell>
-                  <TableCell>{getFornecedorNome(conta.fornecedor_id)}</TableCell>
+                  <TableCell>{getFornecedorNome(conta)}</TableCell>
                   <TableCell>{getCategoriaNome(conta.categoria_id)}</TableCell>
                   <TableCell>{getFilialNome(conta.filial_id)}</TableCell>
                   <TableCell>{formatCurrency(conta.valor_total_centavos || conta.valor_esperado_centavos || 0)}</TableCell>
