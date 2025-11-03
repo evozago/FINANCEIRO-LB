@@ -620,7 +620,29 @@ export function ContasPagarSimple() {
                 <Edit className="h-4 w-4 mr-2" />
                 Editar em Massa ({selectedParcelas.length})
               </Button>
-              <Button size="sm" onClick={() => setShowPaymentModal(true)}>
+              <Button size="sm" onClick={() => {
+                // Inicializar todos os campos com valores padrão
+                const hoje = new Date();
+                const contaBancariaDefault = '13'; // Digital Kids Mercado Pago
+                const formaPagamentoDefault = '4'; // Boleto
+                
+                const initialPaymentData: typeof paymentData = {};
+                const selecionadas = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id));
+                
+                selecionadas.forEach(parcela => {
+                  initialPaymentData[parcela.id] = {
+                    data_pagamento: hoje,
+                    conta_bancaria_id: contaBancariaDefault,
+                    forma_pagamento_id: formaPagamentoDefault,
+                    codigo_identificador: '',
+                    valor_original_centavos: parcela.valor_parcela_centavos,
+                    valor_pago_centavos: parcela.valor_parcela_centavos
+                  };
+                });
+                
+                setPaymentData(initialPaymentData);
+                setShowPaymentModal(true);
+              }}>
                 <Check className="h-4 w-4 mr-2" />
                 Marcar como Pago
               </Button>
@@ -853,12 +875,39 @@ export function ContasPagarSimple() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-4 gap-4">
                   <div>
-                    <Label>Data de Pagamento</Label>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label>Data de Pagamento</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          const currentDate = paymentData[parcela.id]?.data_pagamento;
+                          if (!currentDate) return;
+                          const updatedData: typeof paymentData = {};
+                          selectedParcelas.forEach(id => {
+                            updatedData[id] = {
+                              ...paymentData[id],
+                              data_pagamento: currentDate,
+                              conta_bancaria_id: paymentData[id]?.conta_bancaria_id || '',
+                              forma_pagamento_id: paymentData[id]?.forma_pagamento_id || '',
+                              codigo_identificador: paymentData[id]?.codigo_identificador || '',
+                              valor_original_centavos: paymentData[id]?.valor_original_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0,
+                              valor_pago_centavos: paymentData[id]?.valor_pago_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0
+                            };
+                          });
+                          setPaymentData(updatedData);
+                          toast({ title: 'Data aplicada a todos' });
+                        }}
+                      >
+                        Aplicar a todos
+                      </Button>
+                    </div>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start">
                           <CalendarIcon className="mr-2 h-4 w-4" />
-
                           {paymentData[parcela.id]?.data_pagamento ? format(paymentData[parcela.id].data_pagamento as Date, 'dd/MM/yyyy') : 'Selecionar'}
                         </Button>
                       </PopoverTrigger>
@@ -883,7 +932,35 @@ export function ContasPagarSimple() {
                     </Popover>
                   </div>
                   <div>
-                    <Label>Banco Pagador</Label>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label>Banco Pagador</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          const currentBank = paymentData[parcela.id]?.conta_bancaria_id;
+                          if (!currentBank) return;
+                          const updatedData: typeof paymentData = {};
+                          selectedParcelas.forEach(id => {
+                            updatedData[id] = {
+                              ...paymentData[id],
+                              conta_bancaria_id: currentBank,
+                              data_pagamento: paymentData[id]?.data_pagamento || null,
+                              forma_pagamento_id: paymentData[id]?.forma_pagamento_id || '',
+                              codigo_identificador: paymentData[id]?.codigo_identificador || '',
+                              valor_original_centavos: paymentData[id]?.valor_original_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0,
+                              valor_pago_centavos: paymentData[id]?.valor_pago_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0
+                            };
+                          });
+                          setPaymentData(updatedData);
+                          toast({ title: 'Banco aplicado a todos' });
+                        }}
+                      >
+                        Aplicar a todos
+                      </Button>
+                    </div>
                       <Select
                         value={paymentData[parcela.id]?.conta_bancaria_id ? paymentData[parcela.id]!.conta_bancaria_id : 'none'}
                         onValueChange={(v) => setPaymentData({
@@ -913,7 +990,35 @@ export function ContasPagarSimple() {
                       </Select>
                   </div>
                   <div>
-                    <Label>Forma de Pagamento</Label>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label>Forma de Pagamento</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          const currentPaymentMethod = paymentData[parcela.id]?.forma_pagamento_id;
+                          if (!currentPaymentMethod) return;
+                          const updatedData: typeof paymentData = {};
+                          selectedParcelas.forEach(id => {
+                            updatedData[id] = {
+                              ...paymentData[id],
+                              forma_pagamento_id: currentPaymentMethod,
+                              data_pagamento: paymentData[id]?.data_pagamento || null,
+                              conta_bancaria_id: paymentData[id]?.conta_bancaria_id || '',
+                              codigo_identificador: paymentData[id]?.codigo_identificador || '',
+                              valor_original_centavos: paymentData[id]?.valor_original_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0,
+                              valor_pago_centavos: paymentData[id]?.valor_pago_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0
+                            };
+                          });
+                          setPaymentData(updatedData);
+                          toast({ title: 'Forma de pagamento aplicada a todos' });
+                        }}
+                      >
+                        Aplicar a todos
+                      </Button>
+                    </div>
                       <Select
                         value={paymentData[parcela.id]?.forma_pagamento_id ? paymentData[parcela.id]!.forma_pagamento_id : 'none'}
                         onValueChange={(v) => setPaymentData({
