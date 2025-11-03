@@ -42,10 +42,10 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
   const [formData, setFormData] = useState({
     mes: (currentDate.getMonth() + 1).toString(),
     ano: currentDate.getFullYear().toString(),
-    salario: '',
-    adiantamento: '',
-    vale_transporte: '',
-    descontos: '',
+    salario_centavos: 0,
+    adiantamento_centavos: 0,
+    vale_transporte_centavos: 0,
+    descontos_centavos: 0,
     observacoes: '',
   });
 
@@ -79,12 +79,29 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const salarioCentavos = Math.round(parseFloat(formData.salario || '0') * 100);
-    const adiantamentoCentavos = Math.round(parseFloat(formData.adiantamento || '0') * 100);
-    const valeTransporteCentavos = Math.round(parseFloat(formData.vale_transporte || '0') * 100);
-    const descontosCentavos = Math.round(parseFloat(formData.descontos || '0') * 100);
+    // Validações
+    const mes = parseInt(formData.mes);
+    const ano = parseInt(formData.ano);
+    
+    if (!mes || mes < 1 || mes > 12) {
+      toast({
+        title: 'Erro',
+        description: 'Selecione um mês válido.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    if (salarioCentavos <= 0) {
+    if (!ano || ano < 2000) {
+      toast({
+        title: 'Erro',
+        description: 'Informe um ano válido.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (formData.salario_centavos <= 0) {
       toast({
         title: 'Erro',
         description: 'Salário deve ser maior que zero.',
@@ -94,14 +111,25 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
     }
 
     try {
+      // Buscar categoria "Folha de Pagamento"
+      const { data: categoria, error: catError } = await supabase
+        .from('categorias_financeiras')
+        .select('id')
+        .ilike('nome', 'Folha de Pagamento')
+        .maybeSingle();
+
+      if (catError) {
+        console.error('Erro ao buscar categoria:', catError);
+      }
+
       const dataToSubmit = {
         pessoa_fisica_id: pessoaFisicaId,
-        mes: parseInt(formData.mes),
-        ano: parseInt(formData.ano),
-        salario_centavos: salarioCentavos,
-        adiantamento_centavos: adiantamentoCentavos,
-        vale_transporte_centavos: valeTransporteCentavos,
-        descontos_centavos: descontosCentavos,
+        mes,
+        ano,
+        salario_centavos: formData.salario_centavos,
+        adiantamento_centavos: formData.adiantamento_centavos,
+        vale_transporte_centavos: formData.vale_transporte_centavos,
+        descontos_centavos: formData.descontos_centavos,
         observacoes: formData.observacoes || null,
       };
 
@@ -118,15 +146,64 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
           description: 'Lançamento atualizado com sucesso.',
         });
       } else {
-        const { error } = await supabase
+        // Inserir lançamento e pegar o ID retornado
+        const { data: lancamento, error: lancError } = await supabase
           .from('folha_pagamento_lancamentos')
-          .insert([dataToSubmit]);
+          .insert([dataToSubmit])
+          .select()
+          .single();
 
-        if (error) throw error;
+        if (lancError) throw lancError;
+
+        // Calcular líquido e criar conta a pagar se houver categoria
+        const valorLiquido = dataToSubmit.salario_centavos 
+          - dataToSubmit.adiantamento_centavos 
+          - dataToSubmit.vale_transporte_centavos 
+          - dataToSubmit.descontos_centavos;
+
+        if (valorLiquido > 0 && categoria?.id) {
+          const descricao = `Folha ${getMesNome(mes)}/${ano} - ${pessoaNome}`;
+          
+          const { data: conta, error: contaError } = await supabase
+            .from('contas_pagar')
+            .insert({
+              descricao,
+              valor_total_centavos: valorLiquido,
+              fornecedor_pf_id: pessoaFisicaId,
+              categoria_id: categoria.id,
+              num_parcelas: 1,
+              referencia: `FOLHA-${mes}-${ano}-${pessoaFisicaId}`,
+            })
+            .select()
+            .single();
+
+          if (contaError) {
+            console.error('Erro ao criar conta a pagar:', contaError);
+          } else if (conta) {
+            // Criar parcela
+            const dataVencimento = new Date(ano, mes, 5); // Vencimento dia 5 do mês seguinte
+            await supabase
+              .from('contas_pagar_parcelas')
+              .insert({
+                conta_id: conta.id,
+                parcela_num: 1,
+                numero_parcela: 1,
+                valor_parcela_centavos: valorLiquido,
+                vencimento: dataVencimento.toISOString().split('T')[0],
+                pago: false,
+              });
+
+            // Atualizar lançamento com referência à conta
+            await supabase
+              .from('folha_pagamento_lancamentos')
+              .update({ conta_pagar_id: conta.id })
+              .eq('id', lancamento.id);
+          }
+        }
 
         toast({
           title: 'Sucesso',
-          description: 'Lançamento criado com sucesso.',
+          description: 'Lançamento e conta a pagar criados com sucesso.',
         });
       }
 
@@ -149,10 +226,10 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
     setFormData({
       mes: lancamento.mes.toString(),
       ano: lancamento.ano.toString(),
-      salario: (lancamento.salario_centavos / 100).toFixed(2),
-      adiantamento: (lancamento.adiantamento_centavos / 100).toFixed(2),
-      vale_transporte: (lancamento.vale_transporte_centavos / 100).toFixed(2),
-      descontos: (lancamento.descontos_centavos / 100).toFixed(2),
+      salario_centavos: lancamento.salario_centavos,
+      adiantamento_centavos: lancamento.adiantamento_centavos,
+      vale_transporte_centavos: lancamento.vale_transporte_centavos,
+      descontos_centavos: lancamento.descontos_centavos,
       observacoes: lancamento.observacoes || '',
     });
     setIsDialogOpen(true);
@@ -189,10 +266,10 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
     setFormData({
       mes: (currentDate.getMonth() + 1).toString(),
       ano: currentDate.getFullYear().toString(),
-      salario: '',
-      adiantamento: '',
-      vale_transporte: '',
-      descontos: '',
+      salario_centavos: 0,
+      adiantamento_centavos: 0,
+      vale_transporte_centavos: 0,
+      descontos_centavos: 0,
       observacoes: '',
     });
   };
@@ -250,10 +327,11 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="mes">Mês</Label>
+                    <Label htmlFor="mes">Mês Trabalhado (Competência) *</Label>
                     <Select
                       value={formData.mes}
                       onValueChange={(value) => setFormData({ ...formData, mes: value })}
+                      required
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione o mês" />
@@ -268,10 +346,11 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="ano">Ano</Label>
+                    <Label htmlFor="ano">Ano *</Label>
                     <Select
                       value={formData.ano}
                       onValueChange={(value) => setFormData({ ...formData, ano: value })}
+                      required
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione o ano" />
@@ -289,20 +368,21 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="salario">Salário</Label>
+                    <Label htmlFor="salario">Salário *</Label>
                     <CurrencyInput
                       id="salario"
-                      value={formData.salario}
-                      onValueChange={(value) => setFormData({ ...formData, salario: String(value || '') })}
+                      value={formData.salario_centavos}
+                      onValueChange={(value) => setFormData({ ...formData, salario_centavos: value })}
                       placeholder="R$ 0,00"
+                      required
                     />
                   </div>
                   <div>
                     <Label htmlFor="adiantamento">Adiantamento</Label>
                     <CurrencyInput
                       id="adiantamento"
-                      value={formData.adiantamento}
-                      onValueChange={(value) => setFormData({ ...formData, adiantamento: String(value || '') })}
+                      value={formData.adiantamento_centavos}
+                      onValueChange={(value) => setFormData({ ...formData, adiantamento_centavos: value })}
                       placeholder="R$ 0,00"
                     />
                   </div>
@@ -313,8 +393,8 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
                     <Label htmlFor="vale_transporte">Vale Transporte</Label>
                     <CurrencyInput
                       id="vale_transporte"
-                      value={formData.vale_transporte}
-                      onValueChange={(value) => setFormData({ ...formData, vale_transporte: String(value || '') })}
+                      value={formData.vale_transporte_centavos}
+                      onValueChange={(value) => setFormData({ ...formData, vale_transporte_centavos: value })}
                       placeholder="R$ 0,00"
                     />
                   </div>
@@ -322,8 +402,8 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
                     <Label htmlFor="descontos">Outros Descontos</Label>
                     <CurrencyInput
                       id="descontos"
-                      value={formData.descontos}
-                      onValueChange={(value) => setFormData({ ...formData, descontos: String(value || '') })}
+                      value={formData.descontos_centavos}
+                      onValueChange={(value) => setFormData({ ...formData, descontos_centavos: value })}
                       placeholder="R$ 0,00"
                     />
                   </div>
