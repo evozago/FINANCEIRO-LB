@@ -10,6 +10,12 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { calcularDiasUteisNoMes } from '@/lib/diasUteis';
+
+// Helper para calcular dias úteis de forma assíncrona (compatível com o código existente)
+async function calcularDiasUteisMes(mes: number, ano: number): Promise<number> {
+  return calcularDiasUteisNoMes(ano, mes);
+}
 
 interface ContaRecorrente {
   id: number;
@@ -359,11 +365,28 @@ export function ContasRecorrentes() {
         return;
       }
 
+      // Buscar informações das categorias para verificar se calculam por dias úteis
+      const { data: categoriasData } = await supabase
+        .from('categorias_financeiras')
+        .select('id, calcula_por_dias_uteis, valor_por_dia_centavos');
+
+      const categoriasMap = new Map(
+        (categoriasData || []).map(cat => [cat.id, cat])
+      );
+
       let contasGeradas = 0;
       let contasJaExistentes = 0;
 
       for (const conta of contasAtivas) {
-        const valorConta = conta.valor_total_centavos || conta.valor_esperado_centavos || 0;
+        const categoria = categoriasMap.get(conta.categoria_id);
+        let valorConta = conta.valor_total_centavos || conta.valor_esperado_centavos || 0;
+
+        // Se a categoria calcula por dias úteis, multiplicar valor/dia pelos dias úteis
+        if (categoria?.calcula_por_dias_uteis && categoria?.valor_por_dia_centavos) {
+          const diasUteis = await calcularDiasUteisMes(mesAtual, anoAtual);
+          valorConta = categoria.valor_por_dia_centavos * diasUteis;
+        }
+
         const descricaoConta = `${conta.nome} - ${String(mesAtual).padStart(2, '0')}/${anoAtual}`;
         
         // Verificar se já existe

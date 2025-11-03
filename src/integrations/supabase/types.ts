@@ -53,6 +53,7 @@ export type Database = {
       categorias_financeiras: {
         Row: {
           archived: boolean
+          calcula_por_dias_uteis: boolean | null
           categoria_pai_id: number | null
           cor: string
           created_at: string
@@ -64,9 +65,11 @@ export type Database = {
           slug: string | null
           tipo: Database["public"]["Enums"]["tipo_categoria"]
           updated_at: string
+          valor_por_dia_centavos: number | null
         }
         Insert: {
           archived?: boolean
+          calcula_por_dias_uteis?: boolean | null
           categoria_pai_id?: number | null
           cor?: string
           created_at?: string
@@ -78,9 +81,11 @@ export type Database = {
           slug?: string | null
           tipo?: Database["public"]["Enums"]["tipo_categoria"]
           updated_at?: string
+          valor_por_dia_centavos?: number | null
         }
         Update: {
           archived?: boolean
+          calcula_por_dias_uteis?: boolean | null
           categoria_pai_id?: number | null
           cor?: string
           created_at?: string
@@ -92,6 +97,7 @@ export type Database = {
           slug?: string | null
           tipo?: Database["public"]["Enums"]["tipo_categoria"]
           updated_at?: string
+          valor_por_dia_centavos?: number | null
         }
         Relationships: [
           {

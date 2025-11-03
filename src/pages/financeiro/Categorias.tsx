@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,6 +28,8 @@ type Categoria = {
   archived: boolean;
   slug: string | null;
   cor: string | null;
+  calcula_por_dias_uteis: boolean;
+  valor_por_dia_centavos: number;
 };
 
 type TreeNode = Categoria & { children: TreeNode[] };
@@ -66,6 +69,8 @@ function Categorias() {
     ordem: 0,
     archived: false,
     cor: "#E2E8F0",
+    calcula_por_dias_uteis: false,
+    valor_por_dia_centavos: 0,
   });
 
   const [moveOpen, setMoveOpen] = useState(false);
@@ -161,6 +166,8 @@ function Categorias() {
       ordem: form.ordem ?? 0,
       archived: !!form.archived,
       cor: form.cor ?? "#E2E8F0",
+      calcula_por_dias_uteis: !!form.calcula_por_dias_uteis,
+      valor_por_dia_centavos: form.valor_por_dia_centavos ?? 0,
     };
 
     const { archived, ...payloadNoArchived } = payloadFull as any;
@@ -258,7 +265,7 @@ function Categorias() {
 
   const resetForm = () => {
     setEditing(null);
-    setForm({ nome: "", tipo: "despesa", parent_id: null, ordem: 0, archived: false, cor: "#E2E8F0" });
+    setForm({ nome: "", tipo: "despesa", parent_id: null, ordem: 0, archived: false, cor: "#E2E8F0", calcula_por_dias_uteis: false, valor_por_dia_centavos: 0 });
   };
   const handleEdit = (c: Categoria, asChildOf?: number | null) => {
     setEditing(c);
@@ -269,6 +276,8 @@ function Categorias() {
       ordem: c.ordem ?? 0,
       archived: c.archived,
       cor: c.cor ?? "#E2E8F0",
+      calcula_por_dias_uteis: c.calcula_por_dias_uteis ?? false,
+      valor_por_dia_centavos: c.valor_por_dia_centavos ?? 0,
     });
   };
 
@@ -386,7 +395,7 @@ function Categorias() {
           <p className="text-muted-foreground">Organize suas categorias em árvore de forma simples.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => { setEditing(null); setForm({ nome:"",tipo:"despesa",parent_id:null,ordem:0,archived:false,cor:"#E2E8F0" }); }}>
+          <Button onClick={() => { setEditing(null); setForm({ nome:"",tipo:"despesa",parent_id:null,ordem:0,archived:false,cor:"#E2E8F0",calcula_por_dias_uteis:false,valor_por_dia_centavos:0 }); }}>
             <Plus className="h-4 w-4 mr-2" />
             Nova (raiz)
           </Button>
@@ -506,6 +515,37 @@ function Categorias() {
                 </p>
               </div>
 
+              <Separator />
+
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="calcula-dias-uteis" 
+                  checked={!!form.calcula_por_dias_uteis} 
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, calcula_por_dias_uteis: !!v }))} 
+                />
+                <Label htmlFor="calcula-dias-uteis" className="cursor-pointer">
+                  Calcular por dias úteis trabalhados
+                </Label>
+              </div>
+              
+              {form.calcula_por_dias_uteis && (
+                <div>
+                  <Label htmlFor="valor-por-dia">Valor por Dia (R$)</Label>
+                  <CurrencyInput
+                    id="valor-por-dia"
+                    value={form.valor_por_dia_centavos || 0}
+                    onValueChange={(value) => setForm((f) => ({ ...f, valor_por_dia_centavos: value }))}
+                    className="mt-1.5"
+                    placeholder="R$ 0,00"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Para categorias como Vale Transporte, será calculado: dias úteis × valor por dia
+                  </p>
+                </div>
+              )}
+
+              <Separator />
+
               <div className="flex items-center gap-2">
                 <Checkbox 
                   id="archived" 
@@ -523,7 +563,7 @@ function Categorias() {
                     variant="outline" 
                     onClick={() => { 
                       setEditing(null); 
-                      setForm({ nome:"",tipo:"despesa",parent_id:null,ordem:0,archived:false,cor:"#E2E8F0" }); 
+                      setForm({ nome:"",tipo:"despesa",parent_id:null,ordem:0,archived:false,cor:"#E2E8F0",calcula_por_dias_uteis:false,valor_por_dia_centavos:0 }); 
                     }}
                   >
                     Cancelar
