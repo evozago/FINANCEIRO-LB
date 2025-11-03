@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FolhaPagamento } from '@/components/cadastros/FolhaPagamento';
 
 interface PessoaFisica {
   id: number;
@@ -350,8 +351,9 @@ export function PessoaFisicaDetalhes() {
 
       {/* Tabs de Histórico */}
       <Tabs defaultValue="vendas" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="vendas">Histórico de Vendas</TabsTrigger>
+          <TabsTrigger value="folha">Folha de Pagamento</TabsTrigger>
           <TabsTrigger value="parcelas">Parcelas</TabsTrigger>
           <TabsTrigger value="alteracoes">Alterações</TabsTrigger>
         </TabsList>
@@ -396,6 +398,13 @@ export function PessoaFisicaDetalhes() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="folha" className="space-y-4">
+          <FolhaPagamento 
+            pessoaFisicaId={pessoa.id} 
+            pessoaNome={pessoa.nome_completo}
+          />
         </TabsContent>
 
         <TabsContent value="parcelas" className="space-y-4">

@@ -723,6 +723,7 @@ export type Database = {
           descricao: string
           dia_vencimento: number | null
           fornecedor_id: number | null
+          fornecedor_pf_id: number | null
           id: number
           observacoes: string | null
           proxima_geracao: string
@@ -736,6 +737,7 @@ export type Database = {
           descricao: string
           dia_vencimento?: number | null
           fornecedor_id?: number | null
+          fornecedor_pf_id?: number | null
           id?: number
           observacoes?: string | null
           proxima_geracao: string
@@ -749,6 +751,7 @@ export type Database = {
           descricao?: string
           dia_vencimento?: number | null
           fornecedor_id?: number | null
+          fornecedor_pf_id?: number | null
           id?: number
           observacoes?: string | null
           proxima_geracao?: string
@@ -783,6 +786,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vw_fin_resumo_por_fornecedor"
             referencedColumns: ["pessoa_juridica_id"]
+          },
+          {
+            foreignKeyName: "contas_recorrentes_fornecedor_pf_id_fkey"
+            columns: ["fornecedor_pf_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1024,6 +1034,73 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vw_fin_resumo_por_fornecedor"
             referencedColumns: ["pessoa_juridica_id"]
+          },
+        ]
+      }
+      folha_pagamento_lancamentos: {
+        Row: {
+          adiantamento_centavos: number
+          ano: number
+          conta_pagar_id: number | null
+          created_at: string
+          descontos_centavos: number
+          id: number
+          mes: number
+          observacoes: string | null
+          pessoa_fisica_id: number
+          salario_centavos: number
+          updated_at: string
+          vale_transporte_centavos: number
+        }
+        Insert: {
+          adiantamento_centavos?: number
+          ano: number
+          conta_pagar_id?: number | null
+          created_at?: string
+          descontos_centavos?: number
+          id?: never
+          mes: number
+          observacoes?: string | null
+          pessoa_fisica_id: number
+          salario_centavos?: number
+          updated_at?: string
+          vale_transporte_centavos?: number
+        }
+        Update: {
+          adiantamento_centavos?: number
+          ano?: number
+          conta_pagar_id?: number | null
+          created_at?: string
+          descontos_centavos?: number
+          id?: never
+          mes?: number
+          observacoes?: string | null
+          pessoa_fisica_id?: number
+          salario_centavos?: number
+          updated_at?: string
+          vale_transporte_centavos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folha_pagamento_lancamentos_conta_pagar_id_fkey"
+            columns: ["conta_pagar_id"]
+            isOneToOne: false
+            referencedRelation: "contas_pagar"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folha_pagamento_lancamentos_conta_pagar_id_fkey"
+            columns: ["conta_pagar_id"]
+            isOneToOne: false
+            referencedRelation: "contas_pagar_abertas"
+            referencedColumns: ["conta_id"]
+          },
+          {
+            foreignKeyName: "folha_pagamento_lancamentos_pessoa_fisica_id_fkey"
+            columns: ["pessoa_fisica_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1402,12 +1479,15 @@ export type Database = {
         Row: {
           ativo: boolean | null
           categoria: string | null
+          cor: string | null
           created_at: string | null
           descricao: string | null
-          faixa_etaria: string | null
+          estoque: number | null
           genero: string | null
           id: number
+          marca: string | null
           nome: string
+          tamanho: string | null
           tipo_manga: string | null
           unidade_medida: string | null
           updated_at: string | null
@@ -1415,12 +1495,15 @@ export type Database = {
         Insert: {
           ativo?: boolean | null
           categoria?: string | null
+          cor?: string | null
           created_at?: string | null
           descricao?: string | null
-          faixa_etaria?: string | null
+          estoque?: number | null
           genero?: string | null
           id?: number
+          marca?: string | null
           nome: string
+          tamanho?: string | null
           tipo_manga?: string | null
           unidade_medida?: string | null
           updated_at?: string | null
@@ -1428,12 +1511,15 @@ export type Database = {
         Update: {
           ativo?: boolean | null
           categoria?: string | null
+          cor?: string | null
           created_at?: string | null
           descricao?: string | null
-          faixa_etaria?: string | null
+          estoque?: number | null
           genero?: string | null
           id?: number
+          marca?: string | null
           nome?: string
+          tamanho?: string | null
           tipo_manga?: string | null
           unidade_medida?: string | null
           updated_at?: string | null
@@ -2036,7 +2122,7 @@ export type Database = {
         Returns: undefined
       }
       contas_recorrentes_vencidas: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           dia_vencimento: number
           meses_atrasados: number
@@ -2046,24 +2132,15 @@ export type Database = {
           valor_esperado_centavos: number
         }[]
       }
-      days_in_month: {
-        Args: { ano: number; mes: number }
-        Returns: number
-      }
+      days_in_month: { Args: { ano: number; mes: number }; Returns: number }
       ferias_dias_no_mes: {
         Args: { ano: number; mes: number; pf_id: number }
         Returns: number
       }
-      gen_numero_nf_like: {
-        Args: { categoria_id: number }
-        Returns: string
-      }
-      gera_parcelas_conta: {
-        Args: { conta_id: number }
-        Returns: undefined
-      }
+      gen_numero_nf_like: { Args: { categoria_id: number }; Returns: string }
+      gera_parcelas_conta: { Args: { conta_id: number }; Returns: undefined }
       gerar_contas_mes_atual: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           conta_id: number
           mensagem: string
@@ -2083,30 +2160,7 @@ export type Database = {
           valor_centavos: number
         }[]
       }
-      gtrgm_compress: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      gtrgm_decompress: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      gtrgm_in: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      gtrgm_options: {
-        Args: { "": unknown }
-        Returns: undefined
-      }
-      gtrgm_out: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      is_admin: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
+      is_admin: { Args: never; Returns: boolean }
       pagar_parcela: {
         Args: {
           conta_bancaria_id: number
@@ -2148,30 +2202,10 @@ export type Database = {
           valor_esperado_centavos: number
         }[]
       }
-      set_limit: {
-        Args: { "": number }
-        Returns: number
-      }
-      show_limit: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      show_trgm: {
-        Args: { "": string }
-        Returns: string[]
-      }
-      to_slug: {
-        Args: { txt: string }
-        Returns: string
-      }
-      unaccent: {
-        Args: { "": string }
-        Returns: string
-      }
-      unaccent_init: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
+      to_slug: { Args: { txt: string }; Returns: string }
+      unaccent: { Args: { "": string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "user" | "rh"
