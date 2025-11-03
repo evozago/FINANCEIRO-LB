@@ -1564,6 +1564,7 @@ export type Database = {
           dias_semana: number[] | null
           filial_id: number
           fornecedor_id: number | null
+          fornecedor_pf_id: number | null
           id: number
           intervalo_frequencia: number | null
           livre: boolean
@@ -1590,6 +1591,7 @@ export type Database = {
           dias_semana?: number[] | null
           filial_id: number
           fornecedor_id?: number | null
+          fornecedor_pf_id?: number | null
           id?: number
           intervalo_frequencia?: number | null
           livre?: boolean
@@ -1616,6 +1618,7 @@ export type Database = {
           dias_semana?: number[] | null
           filial_id?: number
           fornecedor_id?: number | null
+          fornecedor_pf_id?: number | null
           id?: number
           intervalo_frequencia?: number | null
           livre?: boolean
@@ -1664,6 +1667,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vw_fin_resumo_por_fornecedor"
             referencedColumns: ["pessoa_juridica_id"]
+          },
+          {
+            foreignKeyName: "recorrencias_fornecedor_pf_id_fkey"
+            columns: ["fornecedor_pf_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
           },
         ]
       }
