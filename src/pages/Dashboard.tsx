@@ -181,23 +181,29 @@ export function Dashboard() {
 
   const fetchFinancialAnalytics = async (from: string, to: string) => {
     try {
-      const { data: openData, error: openError } = await supabase
+      // ===== INÍCIO DA ALTERAÇÃO 1 =====
+      // A query é duplicada para buscar pagas e abertas
+      
+      const querySelect = `
+        id,
+        conta_id,
+        valor_parcela_centavos,
+        valor_pago_centavos,
+        vencimento,
+        pago_em,
+        contas_pagar!inner(
+          filial_id,
+          /*_SEU_NOVO_ID_*/, 
+          filiais(nome),
+          /*_SUA_NOVA_TABELA_*/(nome, /*_NOME_DA_COLUNA_COR_*/)
+        )
+      `;
+      // ===== FIM DA ALTERAÇÃO 1 =====
 
+
+      const { data: openData, error: openError } = await supabase
         .from('contas_pagar_parcelas')
-        .select(`
-          id,
-          conta_id,
-          valor_parcela_centavos,
-          valor_pago_centavos,
-          vencimento,
-          pago_em,
-          contas_pagar!inner(
-            filial_id,
-            categoria_id,
-            filiais(nome),
-            categorias_financeiras(nome, cor)
-          )
-        `)
+        .select(querySelect)
         .eq('pago', false)
         .gte('vencimento', from)
         .lte('vencimento', to);
@@ -206,26 +212,15 @@ export function Dashboard() {
 
       const { data: paidData, error: paidError } = await supabase
         .from('contas_pagar_parcelas')
-        .select(`
-          id,
-          conta_id,
-          valor_parcela_centavos,
-          valor_pago_centavos,
-          vencimento,
-          pago_em,
-          contas_pagar!inner(
-            filial_id,
-            categoria_id,
-            filiais(nome),
-            categorias_financeiras(nome, cor)
-          )
-        `)
+        .select(querySelect)
         .eq('pago', true)
         .gte('pago_em', from)
         .lte('pago_em', to);
 
       if (paidError) throw paidError;
 
+
+      // ===== INÍCIO DA ALTERAÇÃO 2 =====
       const mapToContext = (items: any[] | null) =>
         (items || []).map(item => ({
           contaId: item.conta_id,
@@ -235,10 +230,14 @@ export function Dashboard() {
           pagoEm: item.pago_em,
           filialId: item.contas_pagar?.filial_id ?? null,
           filialNome: item.contas_pagar?.filiais?.nome || 'Sem filial',
-          categoriaId: item.contas_pagar?.categoria_id ?? null,
-          categoriaNome: item.contas_pagar?.categorias_financeiras?.nome || 'Sem categoria',
-          categoriaCor: item.contas_pagar?.categorias_financeiras?.cor ?? null,
+          
+          // Campos alterados
+          categoriaId: item.contas_pagar?./*_SEU_NOVO_ID_*/ ?? null,
+          categoriaNome: item.contas_pagar?./*_SUA_NOVA_TABELA_*/?.nome || 'Sem categoria',
+          categoriaCor: item.contas_pagar?./*_SUA_NOVA_TABELA_*/?./*_NOME_DA_COLUNA_COR_*/ ?? null,
+
         })) as ParcelaWithContext[];
+      // ===== FIM DA ALTERAÇÃO 2 =====
 
       setOpenParcels(mapToContext(openData));
       setPaidParcels(mapToContext(paidData));
@@ -316,7 +315,7 @@ export function Dashboard() {
         conta_id: item.contas_pagar?.id || 0,
         descricao: item.contas_pagar?.descricao || '',
         fornecedor: item.contas_pagar?.pessoas_juridicas?.razao_social || 
-                   item.contas_pagar?.pessoas_juridicas?.nome_fantasia || 'Não informado',
+                      item.contas_pagar?.pessoas_juridicas?.nome_fantasia || 'Não informado',
         valor_em_aberto: item.valor_parcela_centavos,
         proximo_vencimento: item.vencimento
       })) || [];
