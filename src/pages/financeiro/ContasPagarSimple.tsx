@@ -18,7 +18,7 @@ import { EditarParcelaModal } from '@/components/financeiro/EditarParcelaModal';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import {
   Search, Filter, Edit, Check, Trash2, Settings2, CalendarIcon,
-  ArrowUpDown, X, Plus, RotateCcw, Edit2
+  ArrowUpDown, X, Plus, RotateCcw, Edit2, Copy
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -391,6 +391,64 @@ export function ContasPagarSimple() {
     }
   };
 
+  const handleDuplicarConta = async (contaId: number) => {
+    if (!confirm('Deseja duplicar esta conta?')) return;
+    try {
+      const { data: contaOriginal, error: fetchError } = await supabase
+        .from('contas_pagar')
+        .select('*')
+        .eq('id', contaId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const { descricao, valor_total_centavos, fornecedor_id, fornecedor_pf_id, categoria_id, 
+              filial_id, num_parcelas, referencia, numero_nota, chave_nfe } = contaOriginal;
+
+      const { data: novaConta, error: insertError } = await supabase
+        .from('contas_pagar')
+        .insert({
+          descricao: `${descricao} (cópia)`,
+          valor_total_centavos,
+          fornecedor_id,
+          fornecedor_pf_id,
+          categoria_id,
+          filial_id,
+          num_parcelas: num_parcelas || 1,
+          referencia: referencia ? `${referencia}-COPIA` : null,
+          numero_nota,
+          chave_nfe
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      const { data: parcelasOriginais } = await supabase
+        .from('contas_pagar_parcelas')
+        .select('*')
+        .eq('conta_id', contaId)
+        .order('numero_parcela');
+
+      if (parcelasOriginais && parcelasOriginais.length > 0) {
+        const novasParcelas = parcelasOriginais.map(p => ({
+          conta_id: novaConta.id,
+          parcela_num: p.parcela_num || p.numero_parcela || 1,
+          valor_parcela_centavos: p.valor_parcela_centavos,
+          vencimento: p.vencimento,
+          pago: false
+        }));
+
+        await supabase.from('contas_pagar_parcelas').insert(novasParcelas);
+      }
+
+      toast({ title: 'Conta duplicada com sucesso!' });
+      fetchParcelas();
+    } catch (error: any) {
+      toast({ title: 'Erro ao duplicar', description: error?.message || '', variant: 'destructive' });
+    }
+  };
+
   const handleMassPayment = async () => {
     try {
       const selecionadas = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id));
@@ -747,17 +805,29 @@ export function ContasPagarSimple() {
                       {visibleColumns.status && <TableCell>{getStatusBadge(parcela.vencimento, parcela.pago)}</TableCell>}
                       {visibleColumns.acoes && (
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingParcela(parcela as any);
-                              setShowEditModal(true);
-                            }}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingParcela(parcela as any);
+                                setShowEditModal(true);
+                              }}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDuplicarConta(parcela.conta_id);
+                              }}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>

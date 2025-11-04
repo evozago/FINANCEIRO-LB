@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, RefreshCw, Calendar, Play, Pause, DollarSign } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, RefreshCw, Calendar, Play, Pause, DollarSign, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
@@ -320,6 +320,45 @@ export function ContasRecorrentes() {
         description: 'Não foi possível excluir a conta recorrente.',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleDuplicarRecorrencia = async (recorrenciaId: number) => {
+    if (!confirm('Deseja duplicar esta recorrência?')) return;
+    try {
+      const { data: recorrenciaOriginal, error: fetchError } = await supabase
+        .from('recorrencias')
+        .select('*')
+        .eq('id', recorrenciaId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const { nome, valor_total_centavos, dia_vencimento, fornecedor_id, fornecedor_pf_id, 
+              categoria_id, filial_id, ativa, livre, sem_data_final, dia_fechamento } = recorrenciaOriginal;
+
+      const { error: insertError } = await supabase
+        .from('recorrencias')
+        .insert({
+          nome: `${nome} (cópia)`,
+          valor_total_centavos,
+          dia_vencimento,
+          fornecedor_id,
+          fornecedor_pf_id,
+          categoria_id,
+          filial_id,
+          ativa: false,
+          livre,
+          sem_data_final,
+          dia_fechamento
+        });
+
+      if (insertError) throw insertError;
+
+      toast({ title: 'Recorrência duplicada com sucesso!', description: 'A nova recorrência foi criada inativa.' });
+      fetchContas();
+    } catch (error: any) {
+      toast({ title: 'Erro ao duplicar', description: error?.message || '', variant: 'destructive' });
     }
   };
 
@@ -937,13 +976,23 @@ export function ContasRecorrentes() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleEdit(conta)}
+                        title="Editar"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handleDuplicarRecorrencia(conta.id)}
+                        title="Duplicar"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleDelete(conta.id)}
+                        title="Excluir"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
