@@ -2,8 +2,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Plus, FolderOpen, ChevronRight, ChevronDown,
-  Trash2, SquarePen, ArchiveRestore, Archive, ArrowRightLeft
+  Plus,
+  FolderOpen,
+  ChevronRight,
+  ChevronDown,
+  Trash2,
+  SquarePen,
+  ArchiveRestore,
+  Archive,
+  ArrowRightLeft,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -16,7 +23,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 
 type Categoria = {
@@ -40,7 +52,18 @@ const TIPOS: Array<{ value: Categoria["tipo"]; label: string }> = [
   { value: "transferencia", label: "Transferência" },
 ];
 
-const SWATCHES = ["#E2E8F0","#FDE68A","#FCA5A5","#BFDBFE","#D1FAE5","#F5D0FE","#E9D5FF","#F3F4F6","#FCD34D","#86EFAC"];
+const SWATCHES = [
+  "#E2E8F0",
+  "#FDE68A",
+  "#FCA5A5",
+  "#BFDBFE",
+  "#D1FAE5",
+  "#F5D0FE",
+  "#E9D5FF",
+  "#F3F4F6",
+  "#FCD34D",
+  "#86EFAC",
+];
 
 // Erros de schema cache (PostgREST)
 const hasSchemaCacheErrFor = (field: string, err: any) => {
@@ -112,7 +135,9 @@ function Categorias() {
       setLoading(false);
     }
   };
-  useEffect(() => { fetchCategorias(); }, []);
+  useEffect(() => {
+    fetchCategorias();
+  }, []);
 
   // ===== árvore
   const tree = useMemo<TreeNode[]>(() => {
@@ -135,7 +160,7 @@ function Categorias() {
   // ===== filtro
   const filteredTree = useMemo<TreeNode[]>(() => {
     const term = search.trim().toLowerCase();
-    const showNode = (n: TreeNode) => (showArchived || !n.archived);
+    const showNode = (n: TreeNode) => showArchived || !n.archived;
     if (!term) {
       const filterArchived = (nodes: TreeNode[]): TreeNode[] =>
         nodes.filter(showNode).map((n) => ({ ...n, children: filterArchived(n.children) }));
@@ -143,7 +168,8 @@ function Categorias() {
     }
     const match = (n: TreeNode) => n.nome.toLowerCase().includes(term) && showNode(n);
     const recurse = (nodes: TreeNode[]): TreeNode[] =>
-      nodes.map((n) => ({ ...n, children: recurse(n.children) }))
+      nodes
+        .map((n) => ({ ...n, children: recurse(n.children) }))
         .filter((n) => {
           if (match(n)) return true;
           const anyChild = (x: TreeNode): boolean => x.children.some((c) => match(c) || anyChild(c));
@@ -177,16 +203,11 @@ function Categorias() {
     const trySave = async (body: any) => {
       if (editing) {
         // returning:'minimal' evita que o supabase-js gere ?columns=... com colunas novas
-        const { error } = await supabase
-          .from("categorias_financeiras")
-          .update(body)
-          .eq("id", editing.id);
+        const { error } = await supabase.from("categorias_financeiras").update(body).eq("id", editing.id);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria atualizada." });
       } else {
-        const { error } = await supabase
-          .from("categorias_financeiras")
-          .insert([body]);
+        const { error } = await supabase.from("categorias_financeiras").insert([body]);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Categoria criada." });
       }
@@ -200,32 +221,53 @@ function Categorias() {
       if (hasSchemaCacheErrFor("cor", err)) {
         try {
           await trySave(payloadNoCor);
-          toast({ title: "Gravado sem 'cor' (fallback)", description: "Após o reload de schema, salve novamente para gravar a cor." });
+          toast({
+            title: "Gravado sem 'cor' (fallback)",
+            description: "Após o reload de schema, salve novamente para gravar a cor.",
+          });
           return;
         } catch (inner1: any) {
           if (hasSchemaCacheErrFor("archived", inner1)) {
             try {
               await trySave(payloadNoArchived);
-              toast({ title: "Gravado sem 'archived' (fallback)", description: "Schema ainda não enxergava a coluna." });
+              toast({
+                title: "Gravado sem 'archived' (fallback)",
+                description: "Schema ainda não enxergava a coluna.",
+              });
               return;
             } catch (inner2: any) {
               if (hasSchemaCacheErrFor("cor", inner2) || hasSchemaCacheErrFor("archived", inner2)) {
                 try {
                   await trySave(payloadSemCorSemArchived);
-                  toast({ title: "Gravado (fallback máximo)", description: "Sem 'cor' e 'archived' por cache de schema." });
+                  toast({
+                    title: "Gravado (fallback máximo)",
+                    description: "Sem 'cor' e 'archived' por cache de schema.",
+                  });
                   return;
                 } catch (inner3: any) {
                   console.error(inner3);
-                  toast({ title: "Erro ao salvar", description: inner3?.message || "Falha ao salvar.", variant: "destructive" });
+                  toast({
+                    title: "Erro ao salvar",
+                    description: inner3?.message || "Falha ao salvar.",
+                    variant: "destructive",
+                  });
                 }
               } else {
                 console.error(inner2);
-                toast({ title: "Erro ao salvar", description: inner2?.message || "Falha ao salvar.", variant: "destructive" });
+                toast({
+                  title: "Erro ao salvar",
+                  description: inner2?.message || "Falha ao salvar.",
+                  variant: "destructive",
+                });
               }
             }
           } else {
             console.error(inner1);
-            toast({ title: "Erro ao salvar", description: inner1?.message || "Falha ao salvar.", variant: "destructive" });
+            toast({
+              title: "Erro ao salvar",
+              description: inner1?.message || "Falha ao salvar.",
+              variant: "destructive",
+            });
           }
         }
       } else if (hasSchemaCacheErrFor("archived", err)) {
@@ -236,24 +278,42 @@ function Categorias() {
           if (hasSchemaCacheErrFor("cor", innerB)) {
             try {
               await trySave(payloadNoCor);
-              toast({ title: "Gravado sem 'cor' (fallback)", description: "Atualize o schema para usar o campo de cor." });
+              toast({
+                title: "Gravado sem 'cor' (fallback)",
+                description: "Atualize o schema para usar o campo de cor.",
+              });
             } catch (innerC: any) {
               if (hasSchemaCacheErrFor("cor", innerC) || hasSchemaCacheErrFor("archived", innerC)) {
                 try {
                   await trySave(payloadSemCorSemArchived);
-                  toast({ title: "Gravado (fallback máximo)", description: "Sem 'cor' e 'archived' por cache de schema." });
+                  toast({
+                    title: "Gravado (fallback máximo)",
+                    description: "Sem 'cor' e 'archived' por cache de schema.",
+                  });
                 } catch (innerD: any) {
                   console.error(innerD);
-                  toast({ title: "Erro ao salvar", description: innerD?.message || "Falha ao salvar.", variant: "destructive" });
+                  toast({
+                    title: "Erro ao salvar",
+                    description: innerD?.message || "Falha ao salvar.",
+                    variant: "destructive",
+                  });
                 }
               } else {
                 console.error(innerC);
-                toast({ title: "Erro ao salvar", description: innerC?.message || "Falha ao salvar.", variant: "destructive" });
+                toast({
+                  title: "Erro ao salvar",
+                  description: innerC?.message || "Falha ao salvar.",
+                  variant: "destructive",
+                });
               }
             }
           } else {
             console.error(innerB);
-            toast({ title: "Erro ao salvar", description: innerB?.message || "Falha ao salvar.", variant: "destructive" });
+            toast({
+              title: "Erro ao salvar",
+              description: innerB?.message || "Falha ao salvar.",
+              variant: "destructive",
+            });
           }
         }
       } else {
@@ -265,7 +325,16 @@ function Categorias() {
 
   const resetForm = () => {
     setEditing(null);
-    setForm({ nome: "", tipo: "despesa", parent_id: null, ordem: 0, archived: false, cor: "#E2E8F0", calcula_por_dias_uteis: false, valor_por_dia_centavos: 0 });
+    setForm({
+      nome: "",
+      tipo: "despesa",
+      parent_id: null,
+      ordem: 0,
+      archived: false,
+      cor: "#E2E8F0",
+      calcula_por_dias_uteis: false,
+      valor_por_dia_centavos: 0,
+    });
   };
   const handleEdit = (c: Categoria, asChildOf?: number | null) => {
     setEditing(c);
@@ -297,7 +366,11 @@ function Categorias() {
   const handleDelete = async (c: Categoria) => {
     const allowed = await canDelete(c.id);
     if (!allowed) {
-      toast({ title: "Não é possível excluir", description: "Possui subcategorias ou está em uso.", variant: "destructive" });
+      toast({
+        title: "Não é possível excluir",
+        description: "Possui subcategorias ou está em uso.",
+        variant: "destructive",
+      });
       return;
     }
     if (!confirm(`Excluir "${c.nome}"?`)) return;
@@ -315,13 +388,23 @@ function Categorias() {
 
   const toggleArchive = async (c: Categoria) => {
     try {
-      const { error } = await supabase.from("categorias_financeiras").update({ archived: !(c as any).archived } as any).eq("id", c.id);
-    if (error) throw error;
-      toast({ title: (c as any).archived ? "Ativada" : "Arquivada", description: `"${c.nome}" ${(c as any).archived ? "reativada" : "arquivada"}.` });
+      const { error } = await supabase
+        .from("categorias_financeiras")
+        .update({ archived: !(c as any).archived } as any)
+        .eq("id", c.id);
+      if (error) throw error;
+      toast({
+        title: (c as any).archived ? "Ativada" : "Arquivada",
+        description: `"${c.nome}" ${(c as any).archived ? "reativada" : "arquivada"}.`,
+      });
       fetchCategorias();
     } catch (err: any) {
       if (hasSchemaCacheErrFor("archived", err)) {
-        toast({ title: "Atualize o schema", description: "Rode a migration/notify para 'archived'.", variant: "destructive" });
+        toast({
+          title: "Atualize o schema",
+          description: "Rode a migration/notify para 'archived'.",
+          variant: "destructive",
+        });
       } else {
         console.error(err);
         toast({ title: "Erro", description: err?.message || "Falha ao alterar status.", variant: "destructive" });
@@ -354,16 +437,27 @@ function Categorias() {
       if (c.parent_id && map.has(c.parent_id)) map.get(c.parent_id)!.children.push(node);
     });
     if (newParentId === moveNode.id) {
-      toast({ title: "Não é possível mover", description: "Categoria pai não pode ser ela mesma.", variant: "destructive" });
+      toast({
+        title: "Não é possível mover",
+        description: "Categoria pai não pode ser ela mesma.",
+        variant: "destructive",
+      });
       return;
     }
     if (newParentId != null && isDescendant(moveNode.id, newParentId, map)) {
-      toast({ title: "Não é possível mover", description: "Não mova para um descendente da própria categoria.", variant: "destructive" });
+      toast({
+        title: "Não é possível mover",
+        description: "Não mova para um descendente da própria categoria.",
+        variant: "destructive",
+      });
       return;
     }
     try {
       setSavingMove(true);
-      const { error } = await supabase.from("categorias_financeiras").update({ categoria_pai_id: newParentId } as any).eq("id", moveNode.id);
+      const { error } = await supabase
+        .from("categorias_financeiras")
+        .update({ categoria_pai_id: newParentId } as any)
+        .eq("id", moveNode.id);
       if (error) throw error;
       toast({ title: "Movida", description: `"${moveNode.nome}" foi movida com sucesso.` });
       setMoveOpen(false);
@@ -395,7 +489,21 @@ function Categorias() {
           <p className="text-muted-foreground">Organize suas categorias em árvore de forma simples.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => { setEditing(null); setForm({ nome:"",tipo:"despesa",parent_id:null,ordem:0,archived:false,cor:"#E2E8F0",calcula_por_dias_uteis:false,valor_por_dia_centavos:0 }); }}>
+          <Button
+            onClick={() => {
+              setEditing(null);
+              setForm({
+                nome: "",
+                tipo: "despesa",
+                parent_id: null,
+                ordem: 0,
+                archived: false,
+                cor: "#E2E8F0",
+                calcula_por_dias_uteis: false,
+                valor_por_dia_centavos: 0,
+              });
+            }}
+          >
             <Plus className="h-4 w-4 mr-2" />
             Nova (raiz)
           </Button>
@@ -411,16 +519,18 @@ function Categorias() {
           <CardContent>
             <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
               <div className="relative flex-1 max-w-md">
-                <Input 
-                  placeholder="Buscar por nome..." 
-                  value={search} 
-                  onChange={(e) => setSearch(e.target.value)} 
+                <Input
+                  placeholder="Buscar por nome..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                   className="h-10"
                 />
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="showArchived" checked={showArchived} onCheckedChange={(v) => setShowArchived(!!v)} />
-                <Label htmlFor="showArchived" className="cursor-pointer">Mostrar arquivadas</Label>
+                <Label htmlFor="showArchived" className="cursor-pointer">
+                  Mostrar arquivadas
+                </Label>
               </div>
             </div>
             <Separator className="mb-4" />
@@ -432,10 +542,21 @@ function Categorias() {
             ) : (
               <div className="space-y-1">
                 {filteredTree.map((n) => (
-                  <NodeRow key={n.id} n={n} level={0}
-                    NodeRow={NodeRow} expanded={expanded} toggleExpand={toggleExpand}
-                    handleEdit={handleEdit} toggleArchive={toggleArchive}
-                    handleDelete={handleDelete} openMove={(c) => { setMoveNode(c); setMoveParentId(c.parent_id == null ? "null" : String(c.parent_id)); setMoveOpen(true); }}
+                  <NodeRow
+                    key={n.id}
+                    n={n}
+                    level={0}
+                    NodeRow={NodeRow}
+                    expanded={expanded}
+                    toggleExpand={toggleExpand}
+                    handleEdit={handleEdit}
+                    toggleArchive={toggleArchive}
+                    handleDelete={handleDelete}
+                    openMove={(c) => {
+                      setMoveNode(c);
+                      setMoveParentId(c.parent_id == null ? "null" : String(c.parent_id));
+                      setMoveOpen(true);
+                    }}
                   />
                 ))}
               </div>
@@ -469,25 +590,33 @@ function Categorias() {
             <div className="space-y-4">
               <div>
                 <Label htmlFor="categoria-nome">Nome da Categoria</Label>
-                <Input 
+                <Input
                   id="categoria-nome"
-                  value={form.nome || ""} 
-                  onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} 
-                  placeholder="Ex.: Despesas Operacionais" 
+                  value={form.nome || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
+                  placeholder="Ex.: Despesas Operacionais"
                   className="mt-1.5"
                 />
               </div>
 
               <div>
                 <Label htmlFor="categoria-tipo">Tipo</Label>
-                <Select value={(form.tipo as string) || "despesa"} onValueChange={(v) => setForm((f) => ({ ...f, tipo: v as Categoria["tipo"] }))}>
+                <Select
+                  value={(form.tipo as string) || "despesa"}
+                  onValueChange={(v) => setForm((f) => ({ ...f, tipo: v as Categoria["tipo"] }))}
+                >
                   <SelectTrigger id="categoria-tipo" className="mt-1.5">
                     <SelectValue placeholder="Selecione o tipo" />
                   </SelectTrigger>
                   <SelectContent>
                     {TIPOS.map((t) => (
                       <SelectItem key={t.value} value={t.value}>
-                        <Badge variant={t.value === "despesa" ? "destructive" : t.value === "receita" ? "default" : "secondary"} className="mr-2">
+                        <Badge
+                          variant={
+                            t.value === "despesa" ? "destructive" : t.value === "receita" ? "default" : "secondary"
+                          }
+                          className="mr-2"
+                        >
                           {t.label}
                         </Badge>
                       </SelectItem>
@@ -502,32 +631,37 @@ function Categorias() {
                   value={form.parent_id !== null && form.parent_id !== undefined ? String(form.parent_id) : "null"}
                   onValueChange={(v) => setForm((f) => ({ ...f, parent_id: v === "null" ? null : parseInt(v, 10) }))}
                 >
-                  <SelectTrigger><SelectValue placeholder="(raiz)" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="(raiz)" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="null">(raiz)</SelectItem>
                     {categorias.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)} disabled={editing?.id === c.id}>{c.nome}</SelectItem>
+                      <SelectItem key={c.id} value={String(c.id)} disabled={editing?.id === c.id}>
+                        {c.nome}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Para <strong>editar o “Categoria Pai”</strong>, escolha aqui um novo pai e clique em <em>{editing ? "Salvar alterações" : "Criar categoria"}</em>.
+                  Para <strong>editar o “Categoria Pai”</strong>, escolha aqui um novo pai e clique em{" "}
+                  <em>{editing ? "Salvar alterações" : "Criar categoria"}</em>.
                 </p>
               </div>
 
               <Separator />
 
               <div className="flex items-center gap-2">
-                <Checkbox 
-                  id="calcula-dias-uteis" 
-                  checked={!!form.calcula_por_dias_uteis} 
-                  onCheckedChange={(v) => setForm((f) => ({ ...f, calcula_por_dias_uteis: !!v }))} 
+                <Checkbox
+                  id="calcula-dias-uteis"
+                  checked={!!form.calcula_por_dias_uteis}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, calcula_por_dias_uteis: !!v }))}
                 />
                 <Label htmlFor="calcula-dias-uteis" className="cursor-pointer">
                   Calcular por dias úteis trabalhados
                 </Label>
               </div>
-              
+
               {form.calcula_por_dias_uteis && (
                 <div>
                   <Label htmlFor="valor-por-dia">Valor por Dia (R$)</Label>
@@ -547,10 +681,10 @@ function Categorias() {
               <Separator />
 
               <div className="flex items-center gap-2">
-                <Checkbox 
-                  id="archived" 
-                  checked={!!form.archived} 
-                  onCheckedChange={(v) => setForm((f) => ({ ...f, archived: !!v }))} 
+                <Checkbox
+                  id="archived"
+                  checked={!!form.archived}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, archived: !!v }))}
                 />
                 <Label htmlFor="archived" className="cursor-pointer">
                   Categoria arquivada
@@ -559,19 +693,26 @@ function Categorias() {
 
               <div className="flex justify-end gap-2 pt-4">
                 {editing && (
-                  <Button 
-                    variant="outline" 
-                    onClick={() => { 
-                      setEditing(null); 
-                      setForm({ nome:"",tipo:"despesa",parent_id:null,ordem:0,archived:false,cor:"#E2E8F0",calcula_por_dias_uteis:false,valor_por_dia_centavos:0 }); 
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditing(null);
+                      setForm({
+                        nome: "",
+                        tipo: "despesa",
+                        parent_id: null,
+                        ordem: 0,
+                        archived: false,
+                        cor: "#E2E8F0",
+                        calcula_por_dias_uteis: false,
+                        valor_por_dia_centavos: 0,
+                      });
                     }}
                   >
                     Cancelar
                   </Button>
                 )}
-                <Button onClick={handleSave}>
-                  {editing ? "Salvar Alterações" : "Criar Categoria"}
-                </Button>
+                <Button onClick={handleSave}>{editing ? "Salvar Alterações" : "Criar Categoria"}</Button>
               </div>
             </div>
           </CardContent>
@@ -583,24 +724,36 @@ function Categorias() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Mover categoria</DialogTitle>
-            <DialogDescription>Selecione um novo “Categoria Pai” para <strong>{moveNode?.nome}</strong>.</DialogDescription>
+            <DialogDescription>
+              Selecione um novo “Categoria Pai” para <strong>{moveNode?.nome}</strong>.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label>Novo pai</Label>
             <Select value={moveParentId} onValueChange={setMoveParentId}>
-              <SelectTrigger><SelectValue placeholder="(raiz)" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="(raiz)" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="null">(raiz)</SelectItem>
                 {categorias.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)} disabled={c.id === moveNode?.id}>{c.nome}</SelectItem>
+                  <SelectItem key={c.id} value={String(c.id)} disabled={c.id === moveNode?.id}>
+                    {c.nome}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">Dica: não é permitido mover para si mesma ou para um descendente.</p>
+            <p className="text-xs text-muted-foreground">
+              Dica: não é permitido mover para si mesma ou para um descendente.
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMoveOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmMove} disabled={savingMove}>{savingMove ? "Movendo..." : "Confirmar"}</Button>
+            <Button variant="outline" onClick={() => setMoveOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmMove} disabled={savingMove}>
+              {savingMove ? "Movendo..." : "Confirmar"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -626,31 +779,58 @@ const NodeRow: React.FC<{
       <div className="flex items-center gap-2">
         <div className="flex items-center" style={{ paddingLeft: level * 16 }}>
           {hasChildren ? (
-            <Button variant="ghost" size="icon" onClick={() => toggleExpand(n.id)} title={open ? "Recolher" : "Expandir"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => toggleExpand(n.id)}
+              title={open ? "Recolher" : "Expandir"}
+            >
               {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </Button>
-          ) : <span style={{ width: 40 }} />}
+          ) : (
+            <span style={{ width: 40 }} />
+          )}
           <FolderOpen className="h-4 w-4 text-primary mr-2" />
           <span className={`font-medium ${n.archived ? "line-through text-muted-foreground" : ""}`}>{n.nome}</span>
-          <Badge variant="outline" className="ml-2">{n.tipo}</Badge>
+          <Badge variant="outline" className="ml-2">
+            {n.tipo}
+          </Badge>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => openMove(n)} title="Mover"><ArrowRightLeft className="h-4 w-4 mr-1" /> Mover</Button>
-          <Button variant="outline" size="sm" onClick={() => handleEdit(n)} title="Editar"><SquarePen className="h-4 w-4 mr-1" /> Editar</Button>
-          <Button variant="outline" size="sm" onClick={() => toggleArchive(n)} title={n.archived ? "Ativar" : "Arquivar"}>
+          <Button variant="outline" size="sm" onClick={() => openMove(n)} title="Mover">
+            <ArrowRightLeft className="h-4 w-4 mr-1" /> Mover
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleEdit(n)} title="Editar">
+            <SquarePen className="h-4 w-4 mr-1" /> Editar
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleArchive(n)}
+            title={n.archived ? "Ativar" : "Arquivar"}
+          >
             {n.archived ? <ArchiveRestore className="h-4 w-4 mr-1" /> : <Archive className="h-4 w-4 mr-1" />}
             {n.archived ? "Ativar" : "Arquivar"}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => handleDelete(n)} title="Excluir"><Trash2 className="h-4 w-4 mr-1" /> Excluir</Button>
+          <Button variant="outline" size="sm" onClick={() => handleDelete(n)} title="Excluir">
+            <Trash2 className="h-4 w-4 mr-1" /> Excluir
+          </Button>
         </div>
       </div>
       {hasChildren && open && (
         <div className="mt-1">
           {n.children.map((c) => (
-            <NodeRow key={c.id} n={c} level={level + 1}
-              NodeRow={NodeRow} expanded={expanded} toggleExpand={toggleExpand}
-              handleEdit={handleEdit} toggleArchive={toggleArchive}
-              handleDelete={handleDelete} openMove={openMove}
+            <NodeRow
+              key={c.id}
+              n={c}
+              level={level + 1}
+              NodeRow={NodeRow}
+              expanded={expanded}
+              toggleExpand={toggleExpand}
+              handleEdit={handleEdit}
+              toggleArchive={toggleArchive}
+              handleDelete={handleDelete}
+              openMove={openMove}
             />
           ))}
         </div>
