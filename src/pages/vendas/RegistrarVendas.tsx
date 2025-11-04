@@ -125,15 +125,26 @@ export default function RegistrarVendas() {
     }
   }
 
+  function parseYearMonth(dateString: string) {
+    const [yearStr, monthStr] = dateString.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    return { year, month };
+  }
+
+  function getDateFromParts(year: number, month: number) {
+    return new Date(year, month - 1, 1);
+  }
+
   async function onSubmit(values: VendaFormData) {
     setLoading(true);
     try {
       // Converter mês/ano para o primeiro dia do mês (string YYYY-MM-01)
-      const mesFormatado = values.mes.toString().padStart(2, '0');
-const dataString = `${values.ano}-${mesFormatado}-01`;
+      const mesFormatado = values.mes.toString().padStart(2, "0");
+      const dataString = `${values.ano}-${mesFormatado}-01`;
 
-const vendaData = {
-  data: dataString,
+      const vendaData = {
+        data: dataString,
         vendedora_pf_id: parseInt(values.vendedora_pf_id),
         filial_id: parseInt(values.filial_id),
         valor_bruto_centavos: values.valor_bruto_centavos,
@@ -182,12 +193,10 @@ const vendaData = {
 
   function editVenda(venda: Venda) {
     setEditingId(venda.id);
-    // **Fix seguro de mês**: a data gravada é 'YYYY-MM-01', new Date() é suficiente aqui;
-    // se em algum ambiente surgir regressão de mês, você pode criar com meio-dia local.
-    const d = new Date(venda.data);
+    const { year, month } = parseYearMonth(venda.data);
     form.reset({
-      mes: d.getMonth() + 1,
-      ano: d.getFullYear(),
+      mes: month,
+      ano: year,
       vendedora_pf_id: venda.vendedora_pf_id.toString(),
       filial_id: venda.filial_id.toString(),
       valor_bruto_centavos: venda.valor_bruto_centavos,
@@ -234,8 +243,8 @@ const vendaData = {
     ];
 
     const rows = vendas.map((v) => {
-      const d = new Date(v.data);
-      const mesNome = format(d, "MMMM/yyyy", { locale: ptBR });
+      const { year, month } = parseYearMonth(v.data);
+      const mesNome = format(getDateFromParts(year, month), "MMMM/yyyy", { locale: ptBR });
       const liqR = v.valor_liquido_centavos / 100;
       const at = v.atendimentos ?? 0;
       const ticket = at > 0 ? (liqR / at) : 0;
@@ -545,8 +554,8 @@ const vendaData = {
             </TableHeader>
             <TableBody>
               {vendas.map((venda) => {
-                const vendaDate = new Date(venda.data);
-                const mesNome = format(vendaDate, "MMMM/yyyy", { locale: ptBR });
+                const { year, month } = parseYearMonth(venda.data);
+                const mesNome = format(getDateFromParts(year, month), "MMMM/yyyy", { locale: ptBR });
                 return (
                   <TableRow key={venda.id}>
                     <TableCell className="capitalize">{mesNome}</TableCell>
