@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, startOfMonth, differenceInCalendarDays } from "date-fns";
 import { DateRange } from "react-day-picker";
@@ -9,6 +9,14 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   DollarSign,
   TrendingUp,
@@ -23,6 +31,7 @@ import {
   BadgeDollarSign,
   ShoppingCart,
   Loader2,
+  Filter,
 } from "lucide-react";
 import {
   LineChart,
@@ -83,6 +92,12 @@ interface FilialOption {
   nome: string;
 }
 
+interface CategoriaOption {
+  id: number;
+  nome: string;
+  cor: string | null;
+}
+
 interface VendedoraPerformance {
   vendedora_nome: string;
   valor_liquido_total: number;
@@ -112,7 +127,9 @@ export function Dashboard() {
   const [openParcels, setOpenParcels] = useState<ParcelaWithContext[]>([]);
   const [paidParcels, setPaidParcels] = useState<ParcelaWithContext[]>([]);
   const [filiais, setFiliais] = useState<FilialOption[]>([]);
+  const [categoriaOptions, setCategoriaOptions] = useState<CategoriaOption[]>([]);
   const [selectedFilial, setSelectedFilial] = useState<string>("all");
+  const [selectedCategoriaIds, setSelectedCategoriaIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<DateRange>({
     from: startOfMonth(new Date()),
     to: new Date(),
@@ -125,6 +142,7 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchFiliais();
+    fetchCategorias();
   }, []);
 
   useEffect(() => {
@@ -183,6 +201,20 @@ export function Dashboard() {
       setFiliais(data || []);
     } catch (error) {
       console.error("Erro ao carregar filiais:", error);
+    }
+  };
+
+  const fetchCategorias = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("categorias_financeiras")
+        .select("id, nome, cor")
+        .order("nome", { ascending: true });
+
+      if (error) throw error;
+      setCategoriaOptions((data || []) as CategoriaOption[]);
+    } catch (error) {
+      console.error("Erro ao carregar categorias:", error);
     }
   };
 
@@ -399,25 +431,85 @@ export function Dashboard() {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("pt-BR");
   };
+  const categoriaFilterMatches = useCallback(
+    (categoriaId: number | null) => {
+      if (selectedCategoriaIds.length === 0) {
+        return true;
+      }
+      const value = categoriaId === null ? "null" : categoriaId.toString();
+      return selectedCategoriaIds.includes(value);
+    },
+    [selectedCategoriaIds],
+  );
+
   const filteredOpenParcels = useMemo(() => {
-    if (selectedFilial === "all") return openParcels;
+    let filtered = openParcels;
+
     if (selectedFilial === "unassigned") {
-      return openParcels.filter((parcel) => parcel.filialId === null);
+      filtered = filtered.filter((parcel) => parcel.filialId === null);
+    } else if (selectedFilial !== "all") {
+      const filialId = Number(selectedFilial);
+      if (!Number.isNaN(filialId)) {
+        filtered = filtered.filter((parcel) => parcel.filialId === filialId);
+      }
     }
-    const filialId = Number(selectedFilial);
-    if (Number.isNaN(filialId)) return openParcels;
-    return openParcels.filter((parcel) => parcel.filialId === filialId);
-  }, [openParcels, selectedFilial]);
+
+    return filtered.filter((parcel) => categoriaFilterMatches(parcel.categoriaId));
+  }, [openParcels, selectedFilial, categoriaFilterMatches]);
 
   const filteredPaidParcels = useMemo(() => {
-    if (selectedFilial === "all") return paidParcels;
+    let filtered = paidParcels;
+
     if (selectedFilial === "unassigned") {
-      return paidParcels.filter((parcel) => parcel.filialId === null);
+      filtered = filtered.filter((parcel) => parcel.filialId === null);
+    } else if (selectedFilial !== "all") {
+      const filialId = Number(selectedFilial);
+      if (!Number.isNaN(filialId)) {
+        filtered = filtered.filter((parcel) => parcel.filialId === filialId);
+      }
     }
-    const filialId = Number(selectedFilial);
-    if (Number.isNaN(filialId)) return paidParcels;
-    return paidParcels.filter((parcel) => parcel.filialId === filialId);
-  }, [paidParcels, selectedFilial]);
+
+    return filtered.filter((parcel) => categoriaFilterMatches(parcel.categoriaId));
+  }, [paidParcels, selectedFilial, categoriaFilterMatches]);
+
+  const categoriaFilterLabel = useMemo(() => {
+    if (selectedCategoriaIds.length === 0) {
+      return "Todas as categorias";
+    }
+
+    if (selectedCategoriaIds.length === 1) {
+      const value = selectedCategoriaIds[0];
+      if (value === "null") {
+        return "Sem categoria";
+      }
+      const categoria = categoriaOptions.find((option) => option.id.toString() === value);
+      return categoria?.nome ?? "Categoria selecionada";
+    }
+
+    return `${selectedCategoriaIds.length} categorias selecionadas`;
+  }, [selectedCategoriaIds, categoriaOptions]);
+
+  const toggleCategoriaSelection = useCallback(
+    (value: string, checked: boolean | "indeterminate") => {
+      setSelectedCategoriaIds((prev) => {
+        if (checked === true) {
+          if (prev.includes(value)) {
+            return prev;
+          }
+          return [...prev, value];
+        }
+        if (checked === false) {
+          return prev.filter((item) => item !== value);
+        }
+        return prev;
+      });
+    },
+    [],
+  );
+
+  const resetCategoriaSelection = useCallback(() => {
+    setSelectedCategoriaIds([]);
+  }, []);
 
   const financialOverview = useMemo(() => {
     const totalAberto = filteredOpenParcels.reduce((sum, parcela) => sum + parcela.valorParcelaCentavos, 0);
@@ -711,6 +803,47 @@ export function Dashboard() {
               <SelectItem value="unassigned">Sem filial vinculada</SelectItem>
             </SelectContent>
           </Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-[220px] justify-between">
+                <span className="truncate text-left">{categoriaFilterLabel}</span>
+                <Filter className="h-4 w-4 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-64 max-h-64 overflow-y-auto">
+              <DropdownMenuLabel>Filtrar categorias</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={selectedCategoriaIds.length === 0}
+                onCheckedChange={(checked) => {
+                  if (checked === true) {
+                    resetCategoriaSelection();
+                  }
+                }}
+              >
+                Todas as categorias
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              {categoriaOptions.map((categoria) => {
+                const value = categoria.id.toString();
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={value}
+                    checked={selectedCategoriaIds.includes(value)}
+                    onCheckedChange={(checked) => toggleCategoriaSelection(value, checked)}
+                  >
+                    {categoria.nome}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={selectedCategoriaIds.includes("null")}
+                onCheckedChange={(checked) => toggleCategoriaSelection("null", checked)}
+              >
+                Sem categoria
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           {periodoLabel && <span>Período: {periodoLabel}</span>}
