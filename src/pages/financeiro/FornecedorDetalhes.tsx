@@ -32,6 +32,8 @@ interface ContaFornecedor {
   parcelas_pendentes: number;
   valor_pago: number;
   valor_pendente: number;
+  ultima_data_pagamento?: string;
+  forma_pagamento?: string;
 }
 
 export function FornecedorDetalhes() {
@@ -82,20 +84,35 @@ export function FornecedorDetalhes() {
         contasData.map(async (conta) => {
           const { data: parcelas } = await supabase
             .from('contas_pagar_parcelas')
-            .select('pago, valor_parcela_centavos, valor_pago_centavos')
-            .eq('conta_id', conta.id);
+            .select(`
+              pago, 
+              valor_parcela_centavos, 
+              valor_pago_centavos,
+              pago_em,
+              forma_pagamento_id,
+              formas_pagamento(nome)
+            `)
+            .eq('conta_id', conta.id)
+            .order('pago_em', { ascending: false, nullsFirst: false });
 
           const parcelasPagas = parcelas?.filter(p => p.pago).length || 0;
           const parcelasPendentes = (conta.qtd_parcelas || 1) - parcelasPagas;
           const valorPago = parcelas?.filter(p => p.pago).reduce((sum, p) => sum + (p.valor_pago_centavos || p.valor_parcela_centavos), 0) || 0;
           const valorPendente = parcelas?.filter(p => !p.pago).reduce((sum, p) => sum + p.valor_parcela_centavos, 0) || 0;
+          
+          // Pegar a última data de pagamento
+          const ultimaParcelaPaga = parcelas?.find(p => p.pago && p.pago_em);
+          const ultimaDataPagamento = ultimaParcelaPaga?.pago_em;
+          const formaPagamento = ultimaParcelaPaga?.formas_pagamento?.nome;
 
           return {
             ...conta,
             parcelas_pagas: parcelasPagas,
             parcelas_pendentes: parcelasPendentes,
             valor_pago: valorPago,
-            valor_pendente: valorPendente
+            valor_pendente: valorPendente,
+            ultima_data_pagamento: ultimaDataPagamento,
+            forma_pagamento: formaPagamento
           };
         })
       );
@@ -241,13 +258,15 @@ export function FornecedorDetalhes() {
                       <TableHead>Pagas</TableHead>
                       <TableHead>Valor Pago</TableHead>
                       <TableHead>Valor Pendente</TableHead>
+                      <TableHead>Último Pagamento</TableHead>
+                      <TableHead>Forma Pagamento</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {contas.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground">
+                        <TableCell colSpan={10} className="text-center text-muted-foreground">
                           Nenhuma conta encontrada
                         </TableCell>
                       </TableRow>
@@ -271,6 +290,12 @@ export function FornecedorDetalhes() {
                           </TableCell>
                           <TableCell className="text-success">{formatCurrency(conta.valor_pago)}</TableCell>
                           <TableCell className="text-warning">{formatCurrency(conta.valor_pendente)}</TableCell>
+                          <TableCell>
+                            {conta.ultima_data_pagamento ? formatDate(conta.ultima_data_pagamento) : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {conta.forma_pagamento || '-'}
+                          </TableCell>
                           <TableCell>
                             <Button 
                               variant="ghost" 
