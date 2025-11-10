@@ -527,12 +527,15 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
                   {/* Forma de Pagamento */}
                   <div className="space-y-2">
                     <Label htmlFor="formaPagamento">Forma de Pagamento</Label>
-                    <Select value={formaPagamentoId} onValueChange={setFormaPagamentoId}>
+                    <Select 
+                      value={formaPagamentoId} 
+                      onValueChange={(value) => setFormaPagamentoId(value === "none" ? "" : value)}
+                    >
                       <SelectTrigger id="formaPagamento">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Nenhuma</SelectItem>
+                        <SelectItem value="none">Nenhuma</SelectItem>
                         {formasPagamento?.map((forma) => (
                           <SelectItem key={forma.id} value={forma.id.toString()}>
                             {forma.nome}
@@ -545,12 +548,15 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
                   {/* Conta Bancária */}
                   <div className="space-y-2">
                     <Label htmlFor="contaBancaria">Conta Bancária</Label>
-                    <Select value={contaBancariaId} onValueChange={setContaBancariaId}>
+                    <Select 
+                      value={contaBancariaId} 
+                      onValueChange={(value) => setContaBancariaId(value === "none" ? "" : value)}
+                    >
                       <SelectTrigger id="contaBancaria">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Nenhuma</SelectItem>
+                        <SelectItem value="none">Nenhuma</SelectItem>
                         {contasBancarias?.map((conta) => (
                           <SelectItem key={conta.id} value={conta.id.toString()}>
                             {conta.nome_conta} {conta.banco ? `- ${conta.banco}` : ""}
