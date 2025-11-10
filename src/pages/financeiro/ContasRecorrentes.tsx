@@ -437,11 +437,12 @@ export function ContasRecorrentes() {
 
         const descricaoConta = `${conta.nome} - ${String(mesAtual).padStart(2, '0')}/${anoAtual}`;
         
-        // Verificar se já existe
+        // Verificar se já existe (considerando filial para diferenciar contas com mesmo nome)
         const { data: contaExistente } = await supabase
           .from('contas_pagar')
           .select('id')
           .eq('descricao', descricaoConta)
+          .eq('filial_id', conta.filial_id)
           .limit(1);
 
         if (!contaExistente || contaExistente.length === 0) {
