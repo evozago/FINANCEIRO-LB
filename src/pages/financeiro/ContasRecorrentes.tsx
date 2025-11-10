@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { calcularDiasUteisNoMes } from '@/lib/diasUteis';
 import { NovoPJForm } from '@/components/financeiro/NovoPJForm';
 import { NovoPFForm } from '@/components/financeiro/NovoPFForm';
+import { formatDateToISO } from '@/lib/date';
 
 // Helper para calcular dias úteis de forma assíncrona (compatível com o código existente)
 async function calcularDiasUteisMes(mes: number, ano: number): Promise<number> {
@@ -395,8 +396,14 @@ export function ContasRecorrentes() {
       const mesAtual = hoje.getMonth() + 1;
       const anoAtual = hoje.getFullYear();
 
+      console.log('Gerando contas para:', { mesAtual, anoAtual });
+      console.log('Total de contas recorrentes:', contas.length);
+
       // Buscar contas ativas (excluindo contas livres)
       const contasAtivas = contas.filter(conta => conta.ativa && !conta.livre);
+
+      console.log('Contas ativas (não livres):', contasAtivas.length);
+      console.log('Contas ativas:', contasAtivas.map(c => ({ nome: c.nome, ativa: c.ativa, livre: c.livre })));
 
       if (contasAtivas.length === 0) {
         toast({
@@ -438,49 +445,67 @@ export function ContasRecorrentes() {
           .limit(1);
 
         if (!contaExistente || contaExistente.length === 0) {
-          // Calcular data de vencimento
+          // Calcular data de vencimento - usar componentes locais para evitar problemas de timezone
           let dataVencimento;
           try {
-            dataVencimento = new Date(anoAtual, mesAtual - 1, conta.dia_vencimento);
+            // Criar data local sem problemas de timezone
+            const year = anoAtual;
+            const month = mesAtual - 1;
+            const day = conta.dia_vencimento;
+            
+            dataVencimento = new Date(year, month, day);
+            
             // Se a data é inválida (ex: 31 de fevereiro), usar último dia do mês
-            if (dataVencimento.getMonth() !== mesAtual - 1) {
-              dataVencimento = new Date(anoAtual, mesAtual, 0); // Último dia do mês anterior
+            if (dataVencimento.getMonth() !== month) {
+              dataVencimento = new Date(year, month + 1, 0); // Último dia do mês
             }
           } catch {
             dataVencimento = new Date(anoAtual, mesAtual, 0);
           }
+
+          console.log(`Gerando conta: ${descricaoConta}, vencimento: ${formatDateToISO(dataVencimento)}`);
           
-            // Criar conta a pagar
-            const { data: novaConta, error: insertError } = await supabase
-              .from('contas_pagar')
-              .insert({
-                descricao: descricaoConta,
-                valor_total_centavos: valorConta,
-                fornecedor_id: conta.fornecedor_id,
-                fornecedor_pf_id: conta.fornecedor_pf_id,
-                categoria_id: conta.categoria_id,
-                filial_id: conta.filial_id,
-                num_parcelas: 1,
-                referencia: `REC-${conta.id}-${String(mesAtual).padStart(2, '0')}${anoAtual}`
-              })
-              .select('id')
-              .single();
+          // Criar conta a pagar
+          const { data: novaConta, error: insertError } = await supabase
+            .from('contas_pagar')
+            .insert({
+              descricao: descricaoConta,
+              valor_total_centavos: valorConta,
+              fornecedor_id: conta.fornecedor_id,
+              fornecedor_pf_id: conta.fornecedor_pf_id,
+              categoria_id: conta.categoria_id,
+              filial_id: conta.filial_id,
+              num_parcelas: 1,
+              referencia: `REC-${conta.id}-${String(mesAtual).padStart(2, '0')}${anoAtual}`
+            })
+            .select('id')
+            .single();
+
+          if (insertError) {
+            console.error('Erro ao inserir conta:', insertError);
+          }
 
           if (!insertError && novaConta) {
-            // Criar parcela
-            await supabase
+            // Criar parcela usando formatDateToISO para evitar problemas de timezone
+            const { error: parcelaError } = await supabase
               .from('contas_pagar_parcelas')
               .insert({
                 conta_id: novaConta.id,
                 parcela_num: 1,
+                numero_parcela: 1,
                 valor_parcela_centavos: valorConta,
-                vencimento: dataVencimento.toISOString().split('T')[0],
+                vencimento: formatDateToISO(dataVencimento),
                 pago: false
               });
 
-            contasGeradas++;
+            if (parcelaError) {
+              console.error('Erro ao inserir parcela:', parcelaError);
+            } else {
+              contasGeradas++;
+            }
           }
         } else {
+          console.log(`Conta já existe: ${descricaoConta}`);
           contasJaExistentes++;
         }
       }
