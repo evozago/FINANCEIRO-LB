@@ -42,7 +42,12 @@ export function PreviewParcelas({ valorTotal, numParcelas, dataInicial, onChange
     const novasParcelas: PreviewParcela[] = [];
 
     for (let i = 1; i <= numParcelas; i++) {
-      const vencimento = new Date(baseDate.getTime());
+      // Criar data sem timezone issues - usar componentes locais
+      const year = baseDate.getFullYear();
+      const month = baseDate.getMonth();
+      const day = baseDate.getDate();
+      
+      const vencimento = new Date(year, month, day);
 
       // Calcular data de vencimento baseado no tipo de intervalo
       if (intervaloTipo === "mensal") {

@@ -178,7 +178,12 @@ export default function NovaContaPagar() {
             const temp: NovaParcelaInsert[] = [];
 
             for (let i = 1; i <= numParcelas; i++) {
-              const vencimento = new Date(baseDate.getTime());
+              // Criar data sem timezone issues - usar componentes locais
+              const year = baseDate.getFullYear();
+              const month = baseDate.getMonth();
+              const day = baseDate.getDate();
+              
+              const vencimento = new Date(year, month, day);
               vencimento.setMonth(vencimento.getMonth() + (i - 1));
               
               temp.push({
