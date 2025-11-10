@@ -613,9 +613,27 @@ export function ContasRecorrentes() {
     return filial?.nome || 'Não encontrada';
   };
 
-  const filteredContas = contas.filter(conta =>
-    conta.nome.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredContas = contas.filter(conta => {
+    const searchLower = searchTerm.toLowerCase();
+    const fornecedorNome = getFornecedorNome(conta).toLowerCase();
+    const categoriaNome = getCategoriaNome(conta.categoria_id).toLowerCase();
+    const filialNome = getFilialNome(conta.filial_id).toLowerCase();
+    const valorStr = formatCurrency(conta.valor_total_centavos || conta.valor_esperado_centavos || 0).toLowerCase();
+    const diaVencimento = conta.livre ? 'dia atual' : `dia ${conta.dia_vencimento}`;
+    const status = conta.ativa ? 'ativa' : 'inativa';
+    const tipo = conta.livre ? 'livre' : '';
+    
+    return (
+      conta.nome.toLowerCase().includes(searchLower) ||
+      fornecedorNome.includes(searchLower) ||
+      categoriaNome.includes(searchLower) ||
+      filialNome.includes(searchLower) ||
+      valorStr.includes(searchLower) ||
+      diaVencimento.toLowerCase().includes(searchLower) ||
+      status.includes(searchLower) ||
+      tipo.includes(searchLower)
+    );
+  });
 
   const contasAtivas = contas.filter(conta => conta.ativa).length;
   const contasInativas = contas.filter(conta => !conta.ativa).length;
