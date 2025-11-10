@@ -135,9 +135,15 @@ export function Cargos() {
     });
   };
 
-  const filteredCargos = cargos.filter(cargo =>
-    cargo.nome.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCargos = cargos.filter(cargo => {
+    const searchLower = searchTerm.toLowerCase();
+    const dataCadastro = new Date(cargo.created_at).toLocaleDateString('pt-BR');
+    
+    return (
+      cargo.nome.toLowerCase().includes(searchLower) ||
+      dataCadastro.includes(searchLower)
+    );
+  });
 
   if (loading) {
     return <div>Carregando...</div>;

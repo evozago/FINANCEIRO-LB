@@ -243,10 +243,29 @@ export function ContasPagarSimple() {
   // filtros + ordenação
   const filteredAndSortedParcelas = React.useMemo(() => {
     let filtered = parcelas.filter(p => {
-      if (searchTerm &&
-          !p.fornecedor.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !p.descricao.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !p.numero_nota.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const fornecedorStr = p.fornecedor.toLowerCase();
+        const descricaoStr = p.descricao.toLowerCase();
+        const numeroNotaStr = p.numero_nota.toLowerCase();
+        const categoriaStr = p.categoria.toLowerCase();
+        const filialStr = p.filial.toLowerCase();
+        const valorStr = (p.valor_parcela_centavos / 100).toFixed(2).replace('.', ',');
+        const parcelaStr = `${p.numero_parcela}/${p.num_parcelas}`;
+        const vencimentoStr = new Date(p.vencimento).toLocaleDateString('pt-BR');
+        
+        const match = 
+          fornecedorStr.includes(searchLower) ||
+          descricaoStr.includes(searchLower) ||
+          numeroNotaStr.includes(searchLower) ||
+          categoriaStr.includes(searchLower) ||
+          filialStr.includes(searchLower) ||
+          valorStr.includes(searchLower) ||
+          parcelaStr.includes(searchLower) ||
+          vencimentoStr.includes(searchLower);
+        
+        if (!match) return false;
+      }
       if (filterFornecedor !== 'all' && p.fornecedor_id !== parseInt(filterFornecedor)) return false;
       if (filterFilial !== 'all' && p.filial_id !== parseInt(filterFilial)) return false;
       if (filterCategoria !== 'all' && p.categoria_id !== parseInt(filterCategoria)) return false;

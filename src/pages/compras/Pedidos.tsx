@@ -386,11 +386,24 @@ export function Pedidos() {
     );
   };
 
-  const filteredPedidos = pedidos.filter(pedido =>
-    pedido.numero_pedido.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pedido.pessoas_juridicas?.nome_fantasia.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pedido.marcas?.nome.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPedidos = pedidos.filter(pedido => {
+    const searchLower = searchTerm.toLowerCase();
+    const statusConfig = statusOptions.find(s => s.value === pedido.status);
+    const statusLabel = (statusConfig?.label || pedido.status).toLowerCase();
+    const valorStr = pedido.valor_liquido_centavos ? formatCurrency(pedido.valor_liquido_centavos).toLowerCase() : '';
+    const dataStr = new Date(pedido.data_pedido).toLocaleDateString('pt-BR');
+    const fornecedorStr = pedido.pessoas_juridicas?.nome_fantasia?.toLowerCase() || '';
+    const marcaStr = pedido.marcas?.nome?.toLowerCase() || '';
+    
+    return (
+      pedido.numero_pedido.toLowerCase().includes(searchLower) ||
+      fornecedorStr.includes(searchLower) ||
+      marcaStr.includes(searchLower) ||
+      statusLabel.includes(searchLower) ||
+      valorStr.includes(searchLower) ||
+      dataStr.includes(searchLower)
+    );
+  });
 
   if (loading) {
     return <div>Carregando...</div>;

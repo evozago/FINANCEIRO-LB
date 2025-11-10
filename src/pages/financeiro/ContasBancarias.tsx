@@ -245,11 +245,24 @@ export function ContasBancarias() {
     return tiposConta.find(t => t.value === tipo)?.label || tipo;
   };
 
-  const filteredContas = contas.filter(conta =>
-    conta.banco.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (conta.agencia && conta.agencia.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (conta.numero_conta && conta.numero_conta.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredContas = contas.filter(conta => {
+    const searchLower = searchTerm.toLowerCase();
+    const nomeContaStr = conta.nome_conta?.toLowerCase() || '';
+    const bancoStr = conta.banco?.toLowerCase() || '';
+    const agenciaStr = conta.agencia?.toLowerCase() || '';
+    const numeroContaStr = conta.numero_conta?.toLowerCase() || '';
+    const saldoStr = formatCurrency(conta.saldo_atual_centavos).toLowerCase();
+    const statusStr = conta.ativa ? 'ativa' : 'inativa';
+    
+    return (
+      nomeContaStr.includes(searchLower) ||
+      bancoStr.includes(searchLower) ||
+      agenciaStr.includes(searchLower) ||
+      numeroContaStr.includes(searchLower) ||
+      saldoStr.includes(searchLower) ||
+      statusStr.includes(searchLower)
+    );
+  });
 
   const totalSaldo = contas.reduce((sum, conta) => sum + conta.saldo_atual_centavos, 0);
 

@@ -166,7 +166,13 @@ function Categorias() {
         nodes.filter(showNode).map((n) => ({ ...n, children: filterArchived(n.children) }));
       return filterArchived(tree);
     }
-    const match = (n: TreeNode) => n.nome.toLowerCase().includes(term) && showNode(n);
+    const match = (n: TreeNode) => {
+      if (!showNode(n)) return false;
+      const nomeMatch = n.nome.toLowerCase().includes(term);
+      const tipoMatch = n.tipo?.toLowerCase().includes(term) || false;
+      const slugMatch = n.slug?.toLowerCase().includes(term) || false;
+      return nomeMatch || tipoMatch || slugMatch;
+    };
     const recurse = (nodes: TreeNode[]): TreeNode[] =>
       nodes
         .map((n) => ({ ...n, children: recurse(n.children) }))
