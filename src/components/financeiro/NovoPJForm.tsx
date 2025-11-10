@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
+import { toUpperCaseText } from "@/lib/utils";
 
 interface NovoPJFormProps {
   onSuccess: (newPJ: { id: number; razao_social: string; nome_fantasia?: string }) => void;
@@ -35,10 +36,10 @@ export function NovoPJForm({ onSuccess }: NovoPJFormProps) {
       const { data, error } = await supabase
         .from("pessoas_juridicas")
         .insert({
-          razao_social: formData.razao_social.trim(),
-          nome_fantasia: formData.nome_fantasia.trim() || null,
+          razao_social: toUpperCaseText(formData.razao_social.trim()),
+          nome_fantasia: toUpperCaseText(formData.nome_fantasia.trim()) || null,
           cnpj: formData.cnpj.trim() || null,
-          email: formData.email.trim() || null,
+          email: formData.email.trim().toLowerCase() || null,
           celular: formData.celular.trim() || null,
         })
         .select()
@@ -83,7 +84,7 @@ export function NovoPJForm({ onSuccess }: NovoPJFormProps) {
               <Input
                 id="razao_social"
                 value={formData.razao_social}
-                onChange={(e) => setFormData({ ...formData, razao_social: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, razao_social: toUpperCaseText(e.target.value) })}
                 placeholder="Empresa Ltda"
                 required
               />
@@ -93,7 +94,7 @@ export function NovoPJForm({ onSuccess }: NovoPJFormProps) {
               <Input
                 id="nome_fantasia"
                 value={formData.nome_fantasia}
-                onChange={(e) => setFormData({ ...formData, nome_fantasia: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, nome_fantasia: toUpperCaseText(e.target.value) })}
                 placeholder="Nome comercial"
               />
             </div>

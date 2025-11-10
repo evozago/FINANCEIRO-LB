@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { capitalizeWords } from '@/lib/utils';
+import { HighlightText } from '@/components/ui/highlight-text';
 
 interface Cargo {
   id: number;
@@ -56,10 +58,14 @@ export function Cargos() {
     e.preventDefault();
     
     try {
+      const dataToSubmit = {
+        nome: capitalizeWords(formData.nome.trim())
+      };
+      
       if (editingCargo) {
         const { error } = await supabase
           .from('cargos')
-          .update(formData)
+          .update(dataToSubmit)
           .eq('id', editingCargo.id);
 
         if (error) throw error;
@@ -71,7 +77,7 @@ export function Cargos() {
       } else {
         const { error } = await supabase
           .from('cargos')
-          .insert([formData]);
+          .insert([dataToSubmit]);
 
         if (error) throw error;
 
@@ -180,7 +186,7 @@ export function Cargos() {
                 <Input
                   id="nome"
                   value={formData.nome}
-                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, nome: capitalizeWords(e.target.value) })}
                   placeholder="Ex: Vendedora, Gerente, Assistente..."
                   required
                 />
@@ -239,7 +245,7 @@ export function Cargos() {
                   <TableCell className="font-medium">
                     <div className="flex items-center space-x-2">
                       <Briefcase className="h-4 w-4 text-muted-foreground" />
-                      <span>{cargo.nome}</span>
+                      <span><HighlightText text={cargo.nome} searchTerm={searchTerm} /></span>
                     </div>
                   </TableCell>
                   <TableCell>

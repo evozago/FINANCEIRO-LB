@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
+import { toUpperCaseText } from "@/lib/utils";
 
 interface NovoPFFormProps {
   onSuccess: (newPF: { id: number; nome_completo: string }) => void;
@@ -34,9 +35,9 @@ export function NovoPFForm({ onSuccess }: NovoPFFormProps) {
       const { data, error } = await supabase
         .from("pessoas_fisicas")
         .insert({
-          nome_completo: formData.nome_completo.trim(),
+          nome_completo: toUpperCaseText(formData.nome_completo.trim()),
           cpf: formData.cpf.trim() || null,
-          email: formData.email.trim() || null,
+          email: formData.email.trim().toLowerCase() || null,
           celular: formData.celular.trim() || null,
         })
         .select()
@@ -80,7 +81,7 @@ export function NovoPFForm({ onSuccess }: NovoPFFormProps) {
               <Input
                 id="nome_completo"
                 value={formData.nome_completo}
-                onChange={(e) => setFormData({ ...formData, nome_completo: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, nome_completo: toUpperCaseText(e.target.value) })}
                 placeholder="Nome completo"
                 required
               />
