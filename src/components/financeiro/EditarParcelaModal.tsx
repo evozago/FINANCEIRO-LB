@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useQuery } from "@tanstack/react-query";
+import { parseLocalDate, formatDateToISO } from "@/lib/date";
 
 interface Parcela {
   id: number;
@@ -150,11 +151,11 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
   // Carregar dados da conta e parcela quando abrir
   useEffect(() => {
     if (parcela && open) {
-      // Carregar dados da parcela
+      // Carregar dados da parcela - garantir formato correto de data
       setValorParcelaCentavos(parcela.valor_parcela_centavos);
-      setVencimento(parcela.vencimento);
+      setVencimento(formatDateToISO(parseLocalDate(parcela.vencimento)));
       setPago(parcela.pago);
-      setPagoEm(parcela.pago_em || "");
+      setPagoEm(parcela.pago_em ? formatDateToISO(parseLocalDate(parcela.pago_em)) : "");
       setValorPagoCentavos(parcela.valor_pago_centavos || parcela.valor_parcela_centavos);
       setFormaPagamentoId(parcela.forma_pagamento_id?.toString() || "");
       setContaBancariaId(parcela.conta_bancaria_id?.toString() || "");
@@ -236,14 +237,14 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
 
       if (contaError) throw contaError;
 
-      // Atualizar a parcela
+      // Atualizar a parcela - garantir formato correto de data
       const { error: parcelaError } = await supabase
         .from("contas_pagar_parcelas")
         .update({
           valor_parcela_centavos: valorParcelaCentavos,
-          vencimento,
+          vencimento: formatDateToISO(parseLocalDate(vencimento)),
           pago,
-          pago_em: pago ? pagoEm : null,
+          pago_em: pago && pagoEm ? formatDateToISO(parseLocalDate(pagoEm)) : null,
           valor_pago_centavos: pago ? valorPagoCentavos : null,
           forma_pagamento_id: pago && formaPagamentoId ? parseInt(formaPagamentoId) : null,
           conta_bancaria_id: pago && contaBancariaId ? parseInt(contaBancariaId) : null,
