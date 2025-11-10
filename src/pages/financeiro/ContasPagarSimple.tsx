@@ -21,6 +21,7 @@ import {
   ArrowUpDown, X, Plus, RotateCcw, Edit2, Copy
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { parseLocalDate } from '@/lib/date';
 
 interface ParcelaCompleta {
   id: number;
@@ -252,7 +253,7 @@ export function ContasPagarSimple() {
         const filialStr = p.filial.toLowerCase();
         const valorStr = (p.valor_parcela_centavos / 100).toFixed(2).replace('.', ',');
         const parcelaStr = `${p.numero_parcela}/${p.num_parcelas}`;
-        const vencimentoStr = new Date(p.vencimento).toLocaleDateString('pt-BR');
+        const vencimentoStr = parseLocalDate(p.vencimento).toLocaleDateString('pt-BR');
         
         const match = 
           fornecedorStr.includes(searchLower) ||
@@ -272,7 +273,7 @@ export function ContasPagarSimple() {
 
       if (filterStatus !== 'all') {
         const hoje = new Date(); hoje.setHours(0,0,0,0);
-        const dataVencimento = new Date(p.vencimento); dataVencimento.setHours(0,0,0,0);
+        const dataVencimento = parseLocalDate(p.vencimento); dataVencimento.setHours(0,0,0,0);
         if (filterStatus === 'pago' && !p.pago) return false;
         if (filterStatus === 'pendente' && p.pago) return false;
         if (filterStatus === 'vencido' && (p.pago || dataVencimento >= hoje)) return false;
@@ -283,11 +284,11 @@ export function ContasPagarSimple() {
       if (filterValorMax && p.valor_parcela_centavos > parseFloat(filterValorMax) * 100) return false;
 
       if (filterDataVencimentoInicio) {
-        const dataVenc = new Date(p.vencimento);
+        const dataVenc = parseLocalDate(p.vencimento);
         if (dataVenc < filterDataVencimentoInicio) return false;
       }
       if (filterDataVencimentoFim) {
-        const dataVenc = new Date(p.vencimento);
+        const dataVenc = parseLocalDate(p.vencimento);
         if (dataVenc > filterDataVencimentoFim) return false;
       }
       return true;
@@ -531,10 +532,10 @@ export function ContasPagarSimple() {
 
   const formatCurrency = (centavos: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(centavos / 100);
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pt-BR');
+  const formatDate = (dateString: string) => parseLocalDate(dateString).toLocaleDateString('pt-BR');
   const getStatusBadge = (vencimento: string, pago: boolean) => {
     if (pago) return <Badge className="bg-green-500">Pago</Badge>;
-    const hoje = new Date(); const dv = new Date(vencimento);
+    const hoje = new Date(); hoje.setHours(0,0,0,0); const dv = parseLocalDate(vencimento);
     if (dv < hoje) return <Badge variant="destructive">Vencido</Badge>;
     if (dv <= new Date(hoje.getTime() + 7 * 24 * 60 * 60 * 1000)) return <Badge variant="outline">Vence em 7 dias</Badge>;
     return <Badge variant="default">Pendente</Badge>;
