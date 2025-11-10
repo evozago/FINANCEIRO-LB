@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { calcularDiasUteisNoMes } from '@/lib/diasUteis';
+import { NovoPJForm } from '@/components/financeiro/NovoPJForm';
+import { NovoPFForm } from '@/components/financeiro/NovoPFForm';
 
 // Helper para calcular dias úteis de forma assíncrona (compatível com o código existente)
 async function calcularDiasUteisMes(mes: number, ano: number): Promise<number> {
@@ -572,6 +574,16 @@ export function ContasRecorrentes() {
     });
   };
 
+  const handleNovoPJ = (newPJ: { id: number; razao_social: string; nome_fantasia?: string }) => {
+    fetchFornecedores();
+    setFormData({ ...formData, fornecedor_id: newPJ.id.toString(), tipo_fornecedor: 'pj' });
+  };
+
+  const handleNovoPF = (newPF: { id: number; nome_completo: string }) => {
+    fetchFornecedoresPF();
+    setFormData({ ...formData, fornecedor_pf_id: newPF.id.toString(), tipo_fornecedor: 'pf' });
+  };
+
   const formatCurrency = (centavos: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -769,36 +781,42 @@ export function ContasRecorrentes() {
                   {formData.tipo_fornecedor === 'pj' ? (
                     <div className="col-span-2">
                       <Label htmlFor="fornecedor_id">Fornecedor PJ (Opcional)</Label>
-                      <select 
-                        id="fornecedor_id"
-                        value={formData.fornecedor_id} 
-                        onChange={(e) => setFormData({ ...formData, fornecedor_id: e.target.value })}
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                      >
-                        <option value="">Nenhum fornecedor</option>
-                        {fornecedores.map((fornecedor) => (
-                          <option key={fornecedor.id} value={fornecedor.id.toString()}>
-                            {fornecedor.nome_fantasia || fornecedor.razao_social}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex gap-2">
+                        <select 
+                          id="fornecedor_id"
+                          value={formData.fornecedor_id} 
+                          onChange={(e) => setFormData({ ...formData, fornecedor_id: e.target.value })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="">Nenhum fornecedor</option>
+                          {fornecedores.map((fornecedor) => (
+                            <option key={fornecedor.id} value={fornecedor.id.toString()}>
+                              {fornecedor.nome_fantasia || fornecedor.razao_social}
+                            </option>
+                          ))}
+                        </select>
+                        <NovoPJForm onSuccess={handleNovoPJ} />
+                      </div>
                     </div>
                   ) : (
                     <div className="col-span-2">
                       <Label htmlFor="fornecedor_pf_id">Fornecedor PF (Opcional)</Label>
-                      <select 
-                        id="fornecedor_pf_id"
-                        value={formData.fornecedor_pf_id} 
-                        onChange={(e) => setFormData({ ...formData, fornecedor_pf_id: e.target.value })}
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                      >
-                        <option value="">Nenhum fornecedor</option>
-                        {fornecedoresPF.map((fornecedor) => (
-                          <option key={fornecedor.id} value={fornecedor.id.toString()}>
-                            {fornecedor.nome_completo}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex gap-2">
+                        <select 
+                          id="fornecedor_pf_id"
+                          value={formData.fornecedor_pf_id} 
+                          onChange={(e) => setFormData({ ...formData, fornecedor_pf_id: e.target.value })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="">Nenhum fornecedor</option>
+                          {fornecedoresPF.map((fornecedor) => (
+                            <option key={fornecedor.id} value={fornecedor.id.toString()}>
+                              {fornecedor.nome_completo}
+                            </option>
+                          ))}
+                        </select>
+                        <NovoPFForm onSuccess={handleNovoPF} />
+                      </div>
                     </div>
                   )}
                 </div>

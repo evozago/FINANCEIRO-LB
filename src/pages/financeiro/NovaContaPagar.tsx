@@ -13,6 +13,8 @@ import { ArrowLeft } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { PreviewParcelas, type PreviewParcela } from "@/components/financeiro/PreviewParcelas";
 import { formatDateToISO, parseLocalDate, todayLocalDate } from "@/lib/date";
+import { NovoPJForm } from "@/components/financeiro/NovoPJForm";
+import { NovoPFForm } from "@/components/financeiro/NovoPFForm";
 
 export default function NovaContaPagar() {
   const navigate = useNavigate();
@@ -54,7 +56,7 @@ export default function NovaContaPagar() {
   };
 
   // Fetch fornecedores PJ
-  const { data: fornecedoresPJ } = useQuery({
+  const { data: fornecedoresPJ, refetch: refetchPJ } = useQuery({
     queryKey: ["fornecedores-pj"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -67,7 +69,7 @@ export default function NovaContaPagar() {
   });
 
   // Fetch fornecedores PF
-  const { data: fornecedoresPF } = useQuery({
+  const { data: fornecedoresPF, refetch: refetchPF } = useQuery({
     queryKey: ["fornecedores-pf"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -78,6 +80,18 @@ export default function NovaContaPagar() {
       return data;
     },
   });
+
+  const handleNovoPJ = (newPJ: { id: number; razao_social: string; nome_fantasia?: string }) => {
+    refetchPJ();
+    setFornecedorId(newPJ.id.toString());
+    setFornecedorTipo("pj");
+  };
+
+  const handleNovoPF = (newPF: { id: number; nome_completo: string }) => {
+    refetchPF();
+    setFornecedorId(newPF.id.toString());
+    setFornecedorTipo("pf");
+  };
 
   // Fetch categorias
   const { data: categorias } = useQuery({
@@ -253,25 +267,32 @@ export default function NovaContaPagar() {
             {/* Fornecedor */}
             <div className="grid gap-2">
               <Label htmlFor="fornecedor">Fornecedor *</Label>
-              <Select value={fornecedorId} onValueChange={setFornecedorId}>
-                <SelectTrigger id="fornecedor">
-                  <SelectValue placeholder="Selecione o fornecedor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {fornecedorTipo === "pj" 
-                    ? fornecedoresPJ?.map((f) => (
-                        <SelectItem key={f.id} value={f.id.toString()}>
-                          {f.nome_fantasia || f.razao_social}
-                        </SelectItem>
-                      ))
-                    : fornecedoresPF?.map((f) => (
-                        <SelectItem key={f.id} value={f.id.toString()}>
-                          {f.nome_completo}
-                        </SelectItem>
-                      ))
-                  }
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={fornecedorId} onValueChange={setFornecedorId}>
+                  <SelectTrigger id="fornecedor">
+                    <SelectValue placeholder="Selecione o fornecedor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {fornecedorTipo === "pj" 
+                      ? fornecedoresPJ?.map((f) => (
+                          <SelectItem key={f.id} value={f.id.toString()}>
+                            {f.nome_fantasia || f.razao_social}
+                          </SelectItem>
+                        ))
+                      : fornecedoresPF?.map((f) => (
+                          <SelectItem key={f.id} value={f.id.toString()}>
+                            {f.nome_completo}
+                          </SelectItem>
+                        ))
+                    }
+                  </SelectContent>
+                </Select>
+                {fornecedorTipo === "pj" ? (
+                  <NovoPJForm onSuccess={handleNovoPJ} />
+                ) : (
+                  <NovoPFForm onSuccess={handleNovoPF} />
+                )}
+              </div>
             </div>
 
             {/* Categoria */}
