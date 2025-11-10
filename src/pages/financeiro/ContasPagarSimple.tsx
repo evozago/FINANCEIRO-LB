@@ -519,7 +519,14 @@ export function ContasPagarSimple() {
     try {
       const { error } = await supabase
         .from('contas_pagar_parcelas')
-        .update({ pago: false, data_pagamento: null })
+        .update({ 
+          pago: false, 
+          pago_em: null,
+          forma_pagamento_id: null,
+          conta_bancaria_id: null,
+          valor_pago_centavos: null,
+          observacao: null
+        })
         .in('id', selectedParcelas);
       if (error) throw error;
       toast({ title: `${selectedParcelas.length} parcela(s) marcadas como NÃO pagas` });
