@@ -698,48 +698,80 @@ export function ContasPagarSimple() {
 
         <CardContent>
           {selectedParcelas.length > 0 && (
-            <div className="flex items-center gap-2 mb-4 p-3 bg-muted rounded-lg">
-              <span className="text-sm font-medium">{selectedParcelas.length} itens selecionados</span>
-              <div className="flex-1" />
-              <Button size="sm" variant="outline" onClick={() => setShowEditMassModal(true)}>
-                <Edit className="h-4 w-4 mr-2" />
-                Editar em Massa ({selectedParcelas.length})
-              </Button>
-              <Button size="sm" onClick={() => {
-                // Inicializar todos os campos com valores padrão
-                const hoje = new Date();
-                const contaBancariaDefault = '13'; // Digital Kids Mercado Pago
-                const formaPagamentoDefault = '4'; // Boleto
-                
-                const initialPaymentData: typeof paymentData = {};
-                const selecionadas = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id));
-                
-                selecionadas.forEach(parcela => {
-                  initialPaymentData[parcela.id] = {
-                    data_pagamento: hoje,
-                    conta_bancaria_id: contaBancariaDefault,
-                    forma_pagamento_id: formaPagamentoDefault,
-                    codigo_identificador: '',
-                    valor_original_centavos: parcela.valor_parcela_centavos,
-                    valor_pago_centavos: parcela.valor_parcela_centavos
-                  };
-                });
-                
-                setPaymentData(initialPaymentData);
-                setShowPaymentModal(true);
-              }}>
-                <Check className="h-4 w-4 mr-2" />
-                Marcar como Pago
-              </Button>
-              <Button size="sm" variant="outline" onClick={handleBulkUnmarkPaid}>
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Desfazer Pago
-              </Button>
-              <Button size="sm" variant="destructive" onClick={handleBulkDelete}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Excluir Selecionados
-              </Button>
-            </div>
+            <>
+              {/* Card de soma total */}
+              <Card className="mb-4 border-primary/50 bg-primary/5">
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">
+                        {selectedParcelas.length} {selectedParcelas.length === 1 ? 'parcela selecionada' : 'parcelas selecionadas'}
+                      </p>
+                      <p className="text-3xl font-bold text-primary">
+                        {(() => {
+                          const total = filteredAndSortedParcelas
+                            .filter(p => selectedParcelas.includes(p.id))
+                            .reduce((acc, p) => acc + p.valor_parcela_centavos, 0);
+                          return formatCurrency(total);
+                        })()}
+                      </p>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      onClick={() => setSelectedParcelas([])}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Limpar seleção
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Barra de ações */}
+              <div className="flex items-center gap-2 mb-4 p-3 bg-muted rounded-lg">
+                <div className="flex-1" />
+                <Button size="sm" variant="outline" onClick={() => setShowEditMassModal(true)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar em Massa ({selectedParcelas.length})
+                </Button>
+                <Button size="sm" onClick={() => {
+                  // Inicializar todos os campos com valores padrão
+                  const hoje = new Date();
+                  const contaBancariaDefault = '13'; // Digital Kids Mercado Pago
+                  const formaPagamentoDefault = '4'; // Boleto
+                  
+                  const initialPaymentData: typeof paymentData = {};
+                  const selecionadas = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id));
+                  
+                  selecionadas.forEach(parcela => {
+                    initialPaymentData[parcela.id] = {
+                      data_pagamento: hoje,
+                      conta_bancaria_id: contaBancariaDefault,
+                      forma_pagamento_id: formaPagamentoDefault,
+                      codigo_identificador: '',
+                      valor_original_centavos: parcela.valor_parcela_centavos,
+                      valor_pago_centavos: parcela.valor_parcela_centavos
+                    };
+                  });
+                  
+                  setPaymentData(initialPaymentData);
+                  setShowPaymentModal(true);
+                }}>
+                  <Check className="h-4 w-4 mr-2" />
+                  Marcar como Pago
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleBulkUnmarkPaid}>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Desfazer Pago
+                </Button>
+                <Button size="sm" variant="destructive" onClick={handleBulkDelete}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir Selecionados
+                </Button>
+              </div>
+            </>
           )}
 
           <div className="rounded-md border">
