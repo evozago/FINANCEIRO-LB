@@ -276,10 +276,13 @@ export function ContasPagarSimple() {
       if (filterStatus !== 'all') {
         const hoje = new Date(); hoje.setHours(0,0,0,0);
         const dataVencimento = parseLocalDate(p.vencimento); dataVencimento.setHours(0,0,0,0);
+        const seteDiasDepois = new Date(hoje); seteDiasDepois.setDate(hoje.getDate() + 7);
+        
         if (filterStatus === 'pago' && !p.pago) return false;
         if (filterStatus === 'pendente' && p.pago) return false;
         if (filterStatus === 'vencido' && (p.pago || dataVencimento >= hoje)) return false;
         if (filterStatus === 'a_vencer' && (p.pago || dataVencimento < hoje)) return false;
+        if (filterStatus === 'vence_7_dias' && (p.pago || dataVencimento < hoje || dataVencimento > seteDiasDepois)) return false;
       }
 
       if (filterValorMin && p.valor_parcela_centavos < parseFloat(filterValorMin) * 100) return false;
@@ -653,6 +656,7 @@ export function ContasPagarSimple() {
                   <SelectContent>
                     <SelectItem value="all">Todas</SelectItem>
                     <SelectItem value="a_vencer">A Vencer</SelectItem>
+                    <SelectItem value="vence_7_dias">Vence em até 7 dias</SelectItem>
                     <SelectItem value="vencido">Vencidas</SelectItem>
                     <SelectItem value="pago">Pagas</SelectItem>
                   </SelectContent>
