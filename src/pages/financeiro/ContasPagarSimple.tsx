@@ -31,6 +31,7 @@ interface ParcelaCompleta {
   valor_parcela_centavos: number;
   vencimento: string;
   pago: boolean;
+  pago_em: string | null;
   descricao: string;
   fornecedor: string;
   fornecedor_id: number;
@@ -115,7 +116,7 @@ export function ContasPagarSimple() {
   // visibilidade colunas
   const [visibleColumns, setVisibleColumns] = useState({
     fornecedor: true, descricao: true, numero_nota: true, categoria: true, filial: true,
-    valor_parcela: true, parcela: true, vencimento: true, status: true, acoes: true
+    valor_parcela: true, parcela: true, vencimento: true, data_pagamento: true, status: true, acoes: true
   });
 
   // ordenação
@@ -204,6 +205,7 @@ export function ContasPagarSimple() {
         valor_parcela_centavos: parcela.valor_parcela_centavos,
         vencimento: parcela.vencimento,
         pago: parcela.pago,
+        pago_em: parcela.pago_em || null,
         descricao: conta?.descricao || 'N/A',
         fornecedor: fornecedor?.nome_fantasia || fornecedor?.razao_social || 'N/A',
         fornecedor_id: conta?.fornecedor_id || 0,
@@ -808,6 +810,7 @@ export function ContasPagarSimple() {
                       Vencimento <ArrowUpDown className="inline h-4 w-4" />
                     </TableHead>
                   )}
+                  {visibleColumns.data_pagamento && <TableHead>Data Pagamento</TableHead>}
                   {visibleColumns.status && <TableHead>Status</TableHead>}
                   {visibleColumns.acoes && <TableHead className="w-24">Ações</TableHead>}
                 </TableRow>
@@ -861,6 +864,15 @@ export function ContasPagarSimple() {
                         </TableCell>
                       )}
                       {visibleColumns.vencimento && <TableCell>{formatDate(parcela.vencimento)}</TableCell>}
+                      {visibleColumns.data_pagamento && (
+                        <TableCell>
+                          {parcela.pago && parcela.pago_em ? (
+                            <span className="text-sm">{formatDate(parcela.pago_em)}</span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                        </TableCell>
+                      )}
                       {visibleColumns.status && <TableCell>{getStatusBadge(parcela.vencimento, parcela.pago)}</TableCell>}
                       {visibleColumns.acoes && (
                         <TableCell>
@@ -1307,7 +1319,7 @@ export function ContasPagarSimple() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setVisibleColumns({
               fornecedor: true, descricao: true, numero_nota: true, categoria: true,
-              filial: true, valor_parcela: true, parcela: true, vencimento: true, status: true, acoes: true
+              filial: true, valor_parcela: true, parcela: true, vencimento: true, data_pagamento: true, status: true, acoes: true
             })}>Restaurar Padrão</Button>
             <Button onClick={() => setShowColumnsModal(false)}>Aplicar</Button>
           </DialogFooter>
