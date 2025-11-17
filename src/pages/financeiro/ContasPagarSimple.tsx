@@ -800,22 +800,46 @@ export function ContasPagarSimple() {
                       Descrição <ArrowUpDown className="inline h-4 w-4" />
                     </TableHead>
                   )}
-                  {visibleColumns.numero_nota && <TableHead>Nº Nota Fiscal</TableHead>}
-                  {visibleColumns.categoria && <TableHead>Categoria</TableHead>}
-                  {visibleColumns.filial && <TableHead>Filial</TableHead>}
+                  {visibleColumns.numero_nota && (
+                    <TableHead onClick={() => handleSort('numero_nota')} className="cursor-pointer">
+                      Nº Nota Fiscal <ArrowUpDown className="inline h-4 w-4" />
+                    </TableHead>
+                  )}
+                  {visibleColumns.categoria && (
+                    <TableHead onClick={() => handleSort('categoria')} className="cursor-pointer">
+                      Categoria <ArrowUpDown className="inline h-4 w-4" />
+                    </TableHead>
+                  )}
+                  {visibleColumns.filial && (
+                    <TableHead onClick={() => handleSort('filial')} className="cursor-pointer">
+                      Filial <ArrowUpDown className="inline h-4 w-4" />
+                    </TableHead>
+                  )}
                   {visibleColumns.valor_parcela && (
                     <TableHead onClick={() => handleSort('valor_parcela_centavos')} className="cursor-pointer">
                       Valor <ArrowUpDown className="inline h-4 w-4" />
                     </TableHead>
                   )}
-                  {visibleColumns.parcela && <TableHead>Parcela</TableHead>}
+                  {visibleColumns.parcela && (
+                    <TableHead onClick={() => handleSort('numero_parcela')} className="cursor-pointer">
+                      Parcela <ArrowUpDown className="inline h-4 w-4" />
+                    </TableHead>
+                  )}
                   {visibleColumns.vencimento && (
                     <TableHead onClick={() => handleSort('vencimento')} className="cursor-pointer">
                       Vencimento <ArrowUpDown className="inline h-4 w-4" />
                     </TableHead>
                   )}
-                  {visibleColumns.data_pagamento && <TableHead>Data Pagamento</TableHead>}
-                  {visibleColumns.status && <TableHead>Status</TableHead>}
+                  {visibleColumns.data_pagamento && (
+                    <TableHead onClick={() => handleSort('pago_em')} className="cursor-pointer">
+                      Data Pagamento <ArrowUpDown className="inline h-4 w-4" />
+                    </TableHead>
+                  )}
+                  {visibleColumns.status && (
+                    <TableHead onClick={() => handleSort('pago')} className="cursor-pointer">
+                      Status <ArrowUpDown className="inline h-4 w-4" />
+                    </TableHead>
+                  )}
                   {visibleColumns.acoes && <TableHead className="w-24">Ações</TableHead>}
                 </TableRow>
               </TableHeader>
