@@ -34,7 +34,8 @@ interface ParcelaCompleta {
   pago_em: string | null;
   descricao: string;
   fornecedor: string;
-  fornecedor_id: number;
+  fornecedor_id: number | null;
+  fornecedor_pf_id: number | null;
   categoria: string;
   categoria_id: number | null;
   filial: string;
@@ -44,7 +45,7 @@ interface ParcelaCompleta {
   conta_bancaria_id: number | null;
 }
 
-interface Fornecedor { id: number; nome_fantasia: string; razao_social: string; }
+interface Fornecedor { id: number; nome_fantasia?: string; razao_social?: string; nome_completo?: string; tipo: 'PJ' | 'PF'; }
 interface Categoria { id: number; nome: string; }
 interface Filial { id: number; nome: string; }
 interface ContaBancaria { id: number; nome_conta: string; banco: string; }
@@ -168,6 +169,7 @@ export function ContasPagarSimple() {
     }
 
     const fornecedorIds = [...new Set(allContas.map(c => c.fornecedor_id).filter(Boolean))];
+    const fornecedorPfIds = [...new Set(allContas.map(c => c.fornecedor_pf_id).filter(Boolean))];
     const categoriaIds  = [...new Set(allContas.map(c => c.categoria_id).filter(Boolean))];
     const filialIds     = [...new Set(allContas.map(c => c.filial_id).filter(Boolean))];
 
@@ -176,6 +178,13 @@ export function ContasPagarSimple() {
       const batch = fornecedorIds.slice(i, i + 1000);
       const { data } = await supabase.from('pessoas_juridicas').select('id, nome_fantasia, razao_social').in('id', batch);
       if (data) fornecedoresData = [...fornecedoresData, ...data];
+    }
+
+    let fornecedoresPfData: any[] = [];
+    for (let i = 0; i < fornecedorPfIds.length; i += 1000) {
+      const batch = fornecedorPfIds.slice(i, i + 1000);
+      const { data } = await supabase.from('pessoas_fisicas').select('id, nome_completo').in('id', batch);
+      if (data) fornecedoresPfData = [...fornecedoresPfData, ...data];
     }
 
     let categoriasData: any[] = [];
@@ -195,8 +204,14 @@ export function ContasPagarSimple() {
     const parcelasCompletas = allParcelas.map(parcela => {
       const conta = allContas.find(c => c.id === parcela.conta_id);
       const fornecedor = fornecedoresData.find((f: any) => f.id === conta?.fornecedor_id);
+      const fornecedorPf = fornecedoresPfData.find((f: any) => f.id === conta?.fornecedor_pf_id);
       const categoria = categoriasData.find((c: any) => c.id === conta?.categoria_id);
       const filial = filiaisData.find((f: any) => f.id === conta?.filial_id);
+      
+      // Prioriza PJ, depois PF
+      const nomeFornecedor = fornecedor?.nome_fantasia || fornecedor?.razao_social || 
+                             fornecedorPf?.nome_completo || 'N/A';
+      
       return {
         id: parcela.id,
         conta_id: parcela.conta_id,
@@ -207,8 +222,9 @@ export function ContasPagarSimple() {
         pago: parcela.pago,
         pago_em: parcela.pago_em || null,
         descricao: conta?.descricao || 'N/A',
-        fornecedor: fornecedor?.nome_fantasia || fornecedor?.razao_social || 'N/A',
-        fornecedor_id: conta?.fornecedor_id || 0,
+        fornecedor: nomeFornecedor,
+        fornecedor_id: conta?.fornecedor_id || null,
+        fornecedor_pf_id: conta?.fornecedor_pf_id || null,
         categoria: categoria?.nome || 'N/A',
         categoria_id: conta?.categoria_id || null,
         filial: filial?.nome || 'N/A',
@@ -223,8 +239,20 @@ export function ContasPagarSimple() {
   };
 
   const fetchFornecedores = async () => {
-    const { data } = await supabase.from('pessoas_juridicas').select('id, nome_fantasia, razao_social');
-    setFornecedores(data || []);
+    // Busca PJs
+    const { data: pjData } = await supabase
+      .from('pessoas_juridicas')
+      .select('id, nome_fantasia, razao_social');
+    
+    // Busca PFs
+    const { data: pfData } = await supabase
+      .from('pessoas_fisicas')
+      .select('id, nome_completo');
+    
+    const fornecedoresPJ = (pjData || []).map(f => ({ ...f, tipo: 'PJ' as const }));
+    const fornecedoresPF = (pfData || []).map(f => ({ ...f, tipo: 'PF' as const }));
+    
+    setFornecedores([...fornecedoresPJ, ...fornecedoresPF]);
   };
   const fetchCategorias = async () => {
     const { data } = await supabase.from('categorias_financeiras').select('id, nome');
@@ -269,7 +297,12 @@ export function ContasPagarSimple() {
         
         if (!match) return false;
       }
-      if (filterFornecedor !== 'all' && p.fornecedor_id !== parseInt(filterFornecedor)) return false;
+      if (filterFornecedor !== 'all') {
+        const [tipo, id] = filterFornecedor.split('-');
+        const fornecedorIdNum = parseInt(id);
+        if (tipo === 'PJ' && p.fornecedor_id !== fornecedorIdNum) return false;
+        if (tipo === 'PF' && p.fornecedor_pf_id !== fornecedorIdNum) return false;
+      }
       if (filterFilial !== 'all' && p.filial_id !== parseInt(filterFilial)) return false;
       if (filterCategoria !== 'all' && p.categoria_id !== parseInt(filterCategoria)) return false;
 
@@ -622,8 +655,10 @@ export function ContasPagarSimple() {
                   <SelectContent>
                     <SelectItem value="all">Todos os fornecedores</SelectItem>
                     {fornecedores.map(f => (
-                      <SelectItem key={f.id} value={f.id.toString()}>
-                        {f.nome_fantasia || f.razao_social}
+                      <SelectItem key={`${f.tipo}-${f.id}`} value={`${f.tipo}-${f.id}`}>
+                        {f.tipo === 'PJ' 
+                          ? (f.nome_fantasia || f.razao_social)
+                          : f.nome_completo} ({f.tipo})
                       </SelectItem>
                     ))}
                   </SelectContent>
