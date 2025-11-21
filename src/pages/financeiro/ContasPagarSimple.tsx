@@ -105,6 +105,7 @@ export function ContasPagarSimple() {
       codigo_identificador: string;
       valor_original_centavos: number;
       valor_pago_centavos: number;
+      desconto_percentual: number;
     } | undefined
   }>({});
   const [paymentObservacao, setPaymentObservacao] = useState('');
@@ -793,7 +794,8 @@ export function ContasPagarSimple() {
                       forma_pagamento_id: formaPagamentoDefault,
                       codigo_identificador: '',
                       valor_original_centavos: parcela.valor_parcela_centavos,
-                      valor_pago_centavos: parcela.valor_parcela_centavos
+                      valor_pago_centavos: parcela.valor_parcela_centavos,
+                      desconto_percentual: 0
                     };
                   });
                   
@@ -1098,7 +1100,8 @@ export function ContasPagarSimple() {
                               forma_pagamento_id: paymentData[id]?.forma_pagamento_id || '',
                               codigo_identificador: paymentData[id]?.codigo_identificador || '',
                               valor_original_centavos: paymentData[id]?.valor_original_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0,
-                              valor_pago_centavos: paymentData[id]?.valor_pago_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0
+                              valor_pago_centavos: paymentData[id]?.valor_pago_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0,
+                              desconto_percentual: paymentData[id]?.desconto_percentual || 0
                             };
                           });
                           setPaymentData(updatedData);
@@ -1127,7 +1130,8 @@ export function ContasPagarSimple() {
                               forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
                               codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
                               valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
-                              valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
+                              valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos,
+                              desconto_percentual: paymentData[parcela.id]?.desconto_percentual || 0
                             }
                           })}
                           className="pointer-events-auto"
@@ -1155,7 +1159,8 @@ export function ContasPagarSimple() {
                               forma_pagamento_id: paymentData[id]?.forma_pagamento_id || '',
                               codigo_identificador: paymentData[id]?.codigo_identificador || '',
                               valor_original_centavos: paymentData[id]?.valor_original_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0,
-                              valor_pago_centavos: paymentData[id]?.valor_pago_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0
+                              valor_pago_centavos: paymentData[id]?.valor_pago_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0,
+                              desconto_percentual: paymentData[id]?.desconto_percentual || 0
                             };
                           });
                           setPaymentData(updatedData);
@@ -1175,7 +1180,8 @@ export function ContasPagarSimple() {
                             forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
                             codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
                             valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
-                            valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
+                            valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos,
+                            desconto_percentual: paymentData[parcela.id]?.desconto_percentual || 0
                           }
                         })}
                       >
@@ -1213,7 +1219,8 @@ export function ContasPagarSimple() {
                               conta_bancaria_id: paymentData[id]?.conta_bancaria_id || '',
                               codigo_identificador: paymentData[id]?.codigo_identificador || '',
                               valor_original_centavos: paymentData[id]?.valor_original_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0,
-                              valor_pago_centavos: paymentData[id]?.valor_pago_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0
+                              valor_pago_centavos: paymentData[id]?.valor_pago_centavos || filteredAndSortedParcelas.find(p => p.id === id)?.valor_parcela_centavos || 0,
+                              desconto_percentual: paymentData[id]?.desconto_percentual || 0
                             };
                           });
                           setPaymentData(updatedData);
@@ -1233,7 +1240,8 @@ export function ContasPagarSimple() {
                             forma_pagamento_id: v === 'none' ? '' : v,
                             codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
                             valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
-                            valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
+                            valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos,
+                            desconto_percentual: paymentData[parcela.id]?.desconto_percentual || 0
                           }
                         })}
                       >
@@ -1263,9 +1271,70 @@ export function ContasPagarSimple() {
                           forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
                           codigo_identificador: e.target.value,
                           valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
-                          valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos
+                          valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos,
+                          desconto_percentual: paymentData[parcela.id]?.desconto_percentual || 0
                         }
                       })}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label>Desconto (%)</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          const currentDesconto = paymentData[parcela.id]?.desconto_percentual;
+                          if (currentDesconto === undefined) return;
+                          const updatedData: typeof paymentData = {};
+                          selectedParcelas.forEach(id => {
+                            const parcelaAtual = filteredAndSortedParcelas.find(p => p.id === id);
+                            const valorOriginal = paymentData[id]?.valor_original_centavos || parcelaAtual?.valor_parcela_centavos || 0;
+                            const valorComDesconto = Math.round(valorOriginal * (1 - currentDesconto / 100));
+                            updatedData[id] = {
+                              ...paymentData[id],
+                              data_pagamento: paymentData[id]?.data_pagamento || null,
+                              conta_bancaria_id: paymentData[id]?.conta_bancaria_id || '',
+                              forma_pagamento_id: paymentData[id]?.forma_pagamento_id || '',
+                              codigo_identificador: paymentData[id]?.codigo_identificador || '',
+                              valor_original_centavos: valorOriginal,
+                              valor_pago_centavos: valorComDesconto,
+                              desconto_percentual: currentDesconto
+                            };
+                          });
+                          setPaymentData(updatedData);
+                          toast({ title: 'Desconto aplicado a todos' });
+                        }}
+                      >
+                        Aplicar a todos
+                      </Button>
+                    </div>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={paymentData[parcela.id]?.desconto_percentual || 0}
+                      onChange={(e) => {
+                        const desconto = parseFloat(e.target.value) || 0;
+                        const valorOriginal = paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos;
+                        const valorComDesconto = Math.round(valorOriginal * (1 - desconto / 100));
+                        setPaymentData({
+                          ...paymentData,
+                          [parcela.id]: {
+                            data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
+                            conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
+                            forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
+                            codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
+                            valor_original_centavos: valorOriginal,
+                            valor_pago_centavos: valorComDesconto,
+                            desconto_percentual: desconto
+                          }
+                        });
+                      }}
                     />
                   </div>
                   <div className="col-span-2">
@@ -1281,17 +1350,22 @@ export function ContasPagarSimple() {
                     <Label>Valor Pago (editável)</Label>
                     <CurrencyInput
                       value={paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos}
-                      onValueChange={(valorCentavos) => setPaymentData({
-                        ...paymentData,
-                        [parcela.id]: {
-                          data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
-                          conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
-                          forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
-                          codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
-                          valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
-                          valor_pago_centavos: valorCentavos
-                        }
-                      })}
+                      onValueChange={(valorCentavos) => {
+                        const valorOriginal = paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos;
+                        const novoDesconto = ((valorOriginal - valorCentavos) / valorOriginal) * 100;
+                        setPaymentData({
+                          ...paymentData,
+                          [parcela.id]: {
+                            data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
+                            conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
+                            forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
+                            codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
+                            valor_original_centavos: valorOriginal,
+                            valor_pago_centavos: valorCentavos,
+                            desconto_percentual: novoDesconto > 0 ? novoDesconto : 0
+                          }
+                        });
+                      }}
                       placeholder="0,00"
                     />
                   </div>
@@ -1353,6 +1427,23 @@ export function ContasPagarSimple() {
                     filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + (paymentData[p.id]?.valor_pago_centavos || p.valor_parcela_centavos), 0) -
                     filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + (paymentData[p.id]?.valor_original_centavos || p.valor_parcela_centavos), 0)
                   ))}
+                </span>
+              </div>
+              <div>
+                <span className="text-sm text-muted-foreground">Desconto Total:</span>
+                <span className={`ml-2 font-bold ${
+                  (() => {
+                    const totalOriginal = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + (paymentData[p.id]?.valor_original_centavos || p.valor_parcela_centavos), 0);
+                    const totalPago = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + (paymentData[p.id]?.valor_pago_centavos || p.valor_parcela_centavos), 0);
+                    return totalPago < totalOriginal ? 'text-orange-600' : 'text-muted-foreground';
+                  })()
+                }`}>
+                  {(() => {
+                    const totalOriginal = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + (paymentData[p.id]?.valor_original_centavos || p.valor_parcela_centavos), 0);
+                    const totalPago = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id)).reduce((acc, p) => acc + (paymentData[p.id]?.valor_pago_centavos || p.valor_parcela_centavos), 0);
+                    const percentualDesconto = totalOriginal > 0 ? ((totalOriginal - totalPago) / totalOriginal) * 100 : 0;
+                    return `${percentualDesconto.toFixed(2)}%`;
+                  })()}
                 </span>
               </div>
             </div>
