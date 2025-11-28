@@ -31,6 +31,7 @@ import { Pedidos } from "@/pages/compras/Pedidos";
 import ImportarXML from "@/pages/compras/ImportarXMLNew";
 // import { Produtos } from "@/pages/produtos/Produtos";
 import { Relatorios } from "@/pages/Relatorios";
+import TesteGemini from "./pages/TesteGemini";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -91,6 +92,9 @@ const App = () => (
             {/* Relatórios / Produtos */}
             {/* <Route path="produtos" element={<Produtos />} /> */}
             <Route path="relatorios" element={<Relatorios />} />
+            
+            {/* Teste IA */}
+            <Route path="teste-gemini" element={<TesteGemini />} />
           </Route>
 
           {/* Página antiga / teste */}
