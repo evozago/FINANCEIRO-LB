@@ -1,1 +1,7 @@
 project_id = "tntvymprraevwhmrcjio"
+
+[functions.processar-audio-despesa]
+verify_jwt = false
+
+[functions.gemini-chat]
+verify_jwt = false
