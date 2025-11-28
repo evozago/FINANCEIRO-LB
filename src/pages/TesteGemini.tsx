@@ -4,11 +4,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, DollarSign, Calendar, Building2, Tag, User } from "lucide-react";
+import { Label } from "@/components/ui/label";
+
+interface ExtractedData {
+  descricao?: string;
+  valor_total?: number;
+  data_vencimento?: string;
+  nome_fornecedor_sugerido?: string;
+  nome_empresa_sugerida?: string;
+  nome_categoria_sugerida?: string;
+  raw?: string;
+  error?: string;
+}
 
 const TesteGemini = () => {
   const [prompt, setPrompt] = useState("");
-  const [response, setResponse] = useState("");
+  const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -25,7 +37,7 @@ const TesteGemini = () => {
     }
 
     setLoading(true);
-    setResponse("");
+    setExtractedData(null);
 
     try {
       const { data, error } = await supabase.functions.invoke('gemini-chat', {
@@ -34,10 +46,10 @@ const TesteGemini = () => {
 
       if (error) throw error;
 
-      setResponse(data.response);
+      setExtractedData(data as ExtractedData);
       toast({
         title: "Sucesso!",
-        description: "Resposta recebida do Gemini"
+        description: "Dados extraídos com sucesso"
       });
     } catch (error) {
       console.error('Error:', error);
@@ -94,12 +106,86 @@ const TesteGemini = () => {
             </Button>
           </form>
 
-          {response && (
-            <div className="mt-6 space-y-2">
-              <label className="text-sm font-medium">Resposta da IA:</label>
-              <div className="p-4 rounded-md bg-muted whitespace-pre-wrap">
-                {response}
-              </div>
+          {extractedData && (
+            <div className="mt-6 space-y-4">
+              <Label className="text-lg font-semibold">Dados Extraídos:</Label>
+              
+              {extractedData.error ? (
+                <div className="p-4 rounded-md bg-destructive/10 text-destructive">
+                  <p className="font-medium">Erro ao processar:</p>
+                  <p className="text-sm mt-1">{extractedData.error}</p>
+                  {extractedData.raw && (
+                    <p className="text-xs mt-2 opacity-70">{extractedData.raw}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {extractedData.descricao && (
+                    <div className="flex items-start gap-3 p-3 rounded-md bg-muted">
+                      <Tag className="h-5 w-5 mt-0.5 text-primary" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Descrição</p>
+                        <p className="font-medium">{extractedData.descricao}</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {extractedData.valor_total !== undefined && (
+                    <div className="flex items-start gap-3 p-3 rounded-md bg-muted">
+                      <DollarSign className="h-5 w-5 mt-0.5 text-success" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Valor Total</p>
+                        <p className="font-medium">
+                          {new Intl.NumberFormat('pt-BR', { 
+                            style: 'currency', 
+                            currency: 'BRL' 
+                          }).format(extractedData.valor_total / 100)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {extractedData.data_vencimento && (
+                    <div className="flex items-start gap-3 p-3 rounded-md bg-muted">
+                      <Calendar className="h-5 w-5 mt-0.5 text-info" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Data de Vencimento</p>
+                        <p className="font-medium">{extractedData.data_vencimento}</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {extractedData.nome_fornecedor_sugerido && (
+                    <div className="flex items-start gap-3 p-3 rounded-md bg-muted">
+                      <User className="h-5 w-5 mt-0.5 text-warning" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Fornecedor Sugerido</p>
+                        <p className="font-medium">{extractedData.nome_fornecedor_sugerido}</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {extractedData.nome_empresa_sugerida && (
+                    <div className="flex items-start gap-3 p-3 rounded-md bg-muted">
+                      <Building2 className="h-5 w-5 mt-0.5 text-purple" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Empresa Sugerida</p>
+                        <p className="font-medium">{extractedData.nome_empresa_sugerida}</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {extractedData.nome_categoria_sugerida && (
+                    <div className="flex items-start gap-3 p-3 rounded-md bg-muted">
+                      <Tag className="h-5 w-5 mt-0.5 text-primary" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Categoria Sugerida</p>
+                        <p className="font-medium">{extractedData.nome_categoria_sugerida}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </CardContent>
