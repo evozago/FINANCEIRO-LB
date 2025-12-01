@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EditarParcelaModal } from '@/components/financeiro/EditarParcelaModal';
@@ -72,10 +73,10 @@ export function ContasPagarSimple() {
 
   // filtros
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterFornecedor, setFilterFornecedor] = useState<string>('all');
-  const [filterFilial, setFilterFilial] = useState<string>('all');
-  const [filterCategoria, setFilterCategoria] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterFornecedor, setFilterFornecedor] = useState<string[]>([]);
+  const [filterFilial, setFilterFilial] = useState<string[]>([]);
+  const [filterCategoria, setFilterCategoria] = useState<string[]>([]);
+  const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterValorMin, setFilterValorMin] = useState('');
   const [filterValorMax, setFilterValorMax] = useState('');
   const [filterDataVencimentoInicio, setFilterDataVencimentoInicio] = useState<Date | null>(null);
@@ -298,25 +299,33 @@ export function ContasPagarSimple() {
         
         if (!match) return false;
       }
-      if (filterFornecedor !== 'all') {
-        const [tipo, id] = filterFornecedor.split('-');
-        const fornecedorIdNum = parseInt(id);
-        if (tipo === 'PJ' && p.fornecedor_id !== fornecedorIdNum) return false;
-        if (tipo === 'PF' && p.fornecedor_pf_id !== fornecedorIdNum) return false;
+      if (filterFornecedor.length > 0) {
+        const fornecedorMatch = filterFornecedor.some(f => {
+          const [tipo, id] = f.split('-');
+          const fornecedorIdNum = parseInt(id);
+          if (tipo === 'PJ') return p.fornecedor_id === fornecedorIdNum;
+          if (tipo === 'PF') return p.fornecedor_pf_id === fornecedorIdNum;
+          return false;
+        });
+        if (!fornecedorMatch) return false;
       }
-      if (filterFilial !== 'all' && p.filial_id !== parseInt(filterFilial)) return false;
-      if (filterCategoria !== 'all' && p.categoria_id !== parseInt(filterCategoria)) return false;
+      if (filterFilial.length > 0 && !filterFilial.includes(p.filial_id?.toString() || '')) return false;
+      if (filterCategoria.length > 0 && !filterCategoria.includes(p.categoria_id?.toString() || '')) return false;
 
-      if (filterStatus !== 'all') {
+      if (filterStatus.length > 0) {
         const hoje = new Date(); hoje.setHours(0,0,0,0);
         const dataVencimento = parseLocalDate(p.vencimento); dataVencimento.setHours(0,0,0,0);
         const seteDiasDepois = new Date(hoje); seteDiasDepois.setDate(hoje.getDate() + 7);
         
-        if (filterStatus === 'pago' && !p.pago) return false;
-        if (filterStatus === 'pendente' && p.pago) return false;
-        if (filterStatus === 'vencido' && (p.pago || dataVencimento >= hoje)) return false;
-        if (filterStatus === 'a_vencer' && (p.pago || dataVencimento < hoje)) return false;
-        if (filterStatus === 'vence_7_dias' && (p.pago || dataVencimento < hoje || dataVencimento > seteDiasDepois)) return false;
+        const statusMatch = filterStatus.some(status => {
+          if (status === 'pago') return p.pago;
+          if (status === 'pendente') return !p.pago;
+          if (status === 'vencido') return !p.pago && dataVencimento < hoje;
+          if (status === 'a_vencer') return !p.pago && dataVencimento >= hoje;
+          if (status === 'vence_7_dias') return !p.pago && dataVencimento >= hoje && dataVencimento <= seteDiasDepois;
+          return false;
+        });
+        if (!statusMatch) return false;
       }
 
       if (filterValorMin && p.valor_parcela_centavos < parseFloat(filterValorMin) * 100) return false;
@@ -588,7 +597,7 @@ export function ContasPagarSimple() {
   };
 
   const clearFilters = () => {
-    setSearchTerm(''); setFilterFornecedor('all'); setFilterFilial('all'); setFilterCategoria('all'); setFilterStatus('all');
+    setSearchTerm(''); setFilterFornecedor([]); setFilterFilial([]); setFilterCategoria([]); setFilterStatus([]);
     setFilterValorMin(''); setFilterValorMax(''); setFilterDataVencimentoInicio(null); setFilterDataVencimentoFim(null);
   };
 
@@ -624,15 +633,15 @@ export function ContasPagarSimple() {
               <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
                 <Filter className="h-4 w-4 mr-2" />
                 Filtros {[
-                  filterFornecedor !== 'all', filterFilial !== 'all', filterCategoria !== 'all', filterStatus !== 'all',
+                  filterFornecedor.length > 0, filterFilial.length > 0, filterCategoria.length > 0, filterStatus.length > 0,
                   filterValorMin, filterValorMax, filterDataVencimentoInicio, filterDataVencimentoFim
                 ].filter(Boolean).length > 0 && `(${
-                  [filterFornecedor !== 'all', filterFilial !== 'all', filterCategoria !== 'all', filterStatus !== 'all',
+                  [filterFornecedor.length > 0, filterFilial.length > 0, filterCategoria.length > 0, filterStatus.length > 0,
                    filterValorMin, filterValorMax, filterDataVencimentoInicio, filterDataVencimentoFim].filter(Boolean).length
                 })`}
               </Button>
               {(
-                filterFornecedor !== 'all' || filterFilial !== 'all' || filterCategoria !== 'all' || filterStatus !== 'all' ||
+                filterFornecedor.length > 0 || filterFilial.length > 0 || filterCategoria.length > 0 || filterStatus.length > 0 ||
                 filterValorMin || filterValorMax || filterDataVencimentoInicio || filterDataVencimentoFim
               ) && (
                 <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -649,54 +658,98 @@ export function ContasPagarSimple() {
 
           {showFilters && (
             <div className="grid grid-cols-3 gap-4 mt-4 p-4 border rounded-lg bg-muted/50">
-              <div>
-                <Label>Fornecedor</Label>
-                <Select value={filterFornecedor} onValueChange={setFilterFornecedor}>
-                  <SelectTrigger><SelectValue placeholder="Todos os fornecedores" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os fornecedores</SelectItem>
-                    {fornecedores.map(f => (
-                      <SelectItem key={`${f.tipo}-${f.id}`} value={`${f.tipo}-${f.id}`}>
-                        {f.tipo === 'PJ' 
-                          ? (f.nome_fantasia || f.razao_social)
-                          : f.nome_completo} ({f.tipo})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <Label>Fornecedor ({filterFornecedor.length} selecionados)</Label>
+                <ScrollArea className="h-[200px] border rounded-md p-2 bg-background">
+                  {fornecedores.map(f => {
+                    const value = `${f.tipo}-${f.id}`;
+                    return (
+                      <div key={value} className="flex items-center space-x-2 py-1.5">
+                        <Checkbox
+                          id={`fornecedor-${value}`}
+                          checked={filterFornecedor.includes(value)}
+                          onCheckedChange={(checked) => {
+                            setFilterFornecedor(prev => 
+                              checked ? [...prev, value] : prev.filter(v => v !== value)
+                            );
+                          }}
+                        />
+                        <label htmlFor={`fornecedor-${value}`} className="text-sm cursor-pointer flex-1">
+                          {f.tipo === 'PJ' ? (f.nome_fantasia || f.razao_social) : f.nome_completo} ({f.tipo})
+                        </label>
+                      </div>
+                    );
+                  })}
+                </ScrollArea>
               </div>
-              <div>
-                <Label>Filial</Label>
-                <Select value={filterFilial} onValueChange={setFilterFilial}>
-                  <SelectTrigger><SelectValue placeholder="Todas as filiais" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as filiais</SelectItem>
-                    {filiais.map(f => (<SelectItem key={f.id} value={f.id.toString()}>{f.nome}</SelectItem>))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <Label>Filial ({filterFilial.length} selecionadas)</Label>
+                <ScrollArea className="h-[200px] border rounded-md p-2 bg-background">
+                  {filiais.map(f => (
+                    <div key={f.id} className="flex items-center space-x-2 py-1.5">
+                      <Checkbox
+                        id={`filial-${f.id}`}
+                        checked={filterFilial.includes(f.id.toString())}
+                        onCheckedChange={(checked) => {
+                          setFilterFilial(prev => 
+                            checked ? [...prev, f.id.toString()] : prev.filter(v => v !== f.id.toString())
+                          );
+                        }}
+                      />
+                      <label htmlFor={`filial-${f.id}`} className="text-sm cursor-pointer flex-1">
+                        {f.nome}
+                      </label>
+                    </div>
+                  ))}
+                </ScrollArea>
               </div>
-              <div>
-                <Label>Categoria</Label>
-                <Select value={filterCategoria} onValueChange={setFilterCategoria}>
-                  <SelectTrigger><SelectValue placeholder="Todas as categorias" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as categorias</SelectItem>
-                    {categorias.map(c => (<SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <Label>Categoria ({filterCategoria.length} selecionadas)</Label>
+                <ScrollArea className="h-[200px] border rounded-md p-2 bg-background">
+                  {categorias.map(c => (
+                    <div key={c.id} className="flex items-center space-x-2 py-1.5">
+                      <Checkbox
+                        id={`categoria-${c.id}`}
+                        checked={filterCategoria.includes(c.id.toString())}
+                        onCheckedChange={(checked) => {
+                          setFilterCategoria(prev => 
+                            checked ? [...prev, c.id.toString()] : prev.filter(v => v !== c.id.toString())
+                          );
+                        }}
+                      />
+                      <label htmlFor={`categoria-${c.id}`} className="text-sm cursor-pointer flex-1">
+                        {c.nome}
+                      </label>
+                    </div>
+                  ))}
+                </ScrollArea>
               </div>
-              <div>
-                <Label>Status</Label>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    <SelectItem value="a_vencer">A Vencer</SelectItem>
-                    <SelectItem value="vence_7_dias">Vence em até 7 dias</SelectItem>
-                    <SelectItem value="vencido">Vencidas</SelectItem>
-                    <SelectItem value="pago">Pagas</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <Label>Status ({filterStatus.length} selecionados)</Label>
+                <div className="border rounded-md p-2 bg-background space-y-1.5">
+                  {[
+                    { value: 'a_vencer', label: 'A Vencer' },
+                    { value: 'vence_7_dias', label: 'Vence em até 7 dias' },
+                    { value: 'vencido', label: 'Vencidas' },
+                    { value: 'pago', label: 'Pagas' },
+                    { value: 'pendente', label: 'Pendentes' }
+                  ].map(status => (
+                    <div key={status.value} className="flex items-center space-x-2 py-1.5">
+                      <Checkbox
+                        id={`status-${status.value}`}
+                        checked={filterStatus.includes(status.value)}
+                        onCheckedChange={(checked) => {
+                          setFilterStatus(prev => 
+                            checked ? [...prev, status.value] : prev.filter(v => v !== status.value)
+                          );
+                        }}
+                      />
+                      <label htmlFor={`status-${status.value}`} className="text-sm cursor-pointer flex-1">
+                        {status.label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div>
                 <Label>Valor Mínimo</Label>
