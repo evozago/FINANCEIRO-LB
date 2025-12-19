@@ -243,7 +243,7 @@ export function useXMLImport() {
     }
   };
 
-  // Criar conta principal e parcela com logs detalhados
+  // Criar conta principal e parcela com logs detalhados e verificação robusta
   const criarContaPrincipal = async (xmlData: XMLData, fornecedorId: number): Promise<boolean> => {
     try {
       console.log('📝 Iniciando criação da conta a pagar...');
@@ -276,34 +276,70 @@ export function useXMLImport() {
         throw new Error(`Erro ao criar conta: ${contaError.message}`);
       }
 
+      // CORREÇÃO: Verificação explícita se a conta foi realmente criada
       if (!contaCriada || !contaCriada.id) {
-        throw new Error('ID da conta não retornado');
+        console.error('❌ Conta não foi criada - inserção retornou vazio (possível bloqueio por RLS)');
+        throw new Error('Falha ao criar conta: inserção retornou vazio. Verifique permissões de usuário.');
       }
 
       console.log(`✅ Conta a pagar criada com sucesso: ID ${contaCriada.id}`);
 
-      // Criar parcela única com vencimento = data de emissão (quando não há faturas no XML)
+      // CORREÇÃO: Verificar se a conta realmente existe no banco
+      const { data: verificaConta, error: verificaContaError } = await supabase
+        .from('contas_pagar')
+        .select('id')
+        .eq('id', contaCriada.id)
+        .maybeSingle();
+
+      if (verificaContaError || !verificaConta) {
+        console.error('❌ Conta não encontrada após inserção:', verificaContaError);
+        throw new Error('Falha na verificação: conta não persistida no banco de dados');
+      }
+
+      console.log(`✅ Conta verificada no banco: ID ${verificaConta.id}`);
+
+      // Criar parcela única com vencimento = data de emissão
       const parcelaData = {
         conta_id: contaCriada.id,
         parcela_num: 1,
         numero_parcela: 1,
         valor_parcela_centavos: Math.round(xmlData.valorTotal * 100),
-        vencimento: xmlData.dataEmissao, // Data de emissão como vencimento
+        vencimento: xmlData.dataEmissao,
         pago: false
       };
 
       console.log('📝 Criando parcela única:', parcelaData);
 
-      const { error: parcelaError } = await supabase
+      const { data: parcelaCriada, error: parcelaError } = await supabase
         .from('contas_pagar_parcelas')
-        .insert([parcelaData]);
+        .insert([parcelaData])
+        .select('id')
+        .single();
 
       if (parcelaError) {
         console.error('❌ Erro ao criar parcela:', parcelaError);
         throw new Error(`Erro ao criar parcela: ${parcelaError.message}`);
       }
 
-      console.log(`✅ Parcela criada com vencimento em ${xmlData.dataEmissao}`);
+      // CORREÇÃO: Verificar se a parcela foi realmente criada
+      if (!parcelaCriada || !parcelaCriada.id) {
+        console.error('❌ Parcela não foi criada - inserção retornou vazio (possível bloqueio por RLS)');
+        throw new Error('Falha ao criar parcela: inserção retornou vazio. Verifique permissões de usuário.');
+      }
+
+      // CORREÇÃO: Verificar se a parcela realmente existe no banco
+      const { data: verificaParcela, error: verificaParcelaError } = await supabase
+        .from('contas_pagar_parcelas')
+        .select('id')
+        .eq('id', parcelaCriada.id)
+        .maybeSingle();
+
+      if (verificaParcelaError || !verificaParcela) {
+        console.error('❌ Parcela não encontrada após inserção:', verificaParcelaError);
+        throw new Error('Falha na verificação: parcela não persistida no banco de dados');
+      }
+
+      console.log(`✅ Parcela ID ${parcelaCriada.id} criada e verificada com vencimento em ${xmlData.dataEmissao}`);
       return true;
 
     } catch (error) {
