@@ -19,8 +19,10 @@ import { EditarParcelaModal } from '@/components/financeiro/EditarParcelaModal';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import {
   Search, Filter, Edit, Check, Trash2, Settings2, CalendarIcon,
-  ArrowUpDown, X, Plus, RotateCcw, Edit2, Copy
+  ArrowUpDown, X, Plus, RotateCcw, Edit2, Copy, Upload, FileText, Loader2
 } from 'lucide-react';
+import { useXMLImport } from '@/hooks/useXMLImport';
+import { Progress } from '@/components/ui/progress';
 import { format } from 'date-fns';
 import { parseLocalDate } from '@/lib/date';
 
@@ -55,10 +57,12 @@ interface FormaPagamento { id: number; nome: string; }
 export function ContasPagarSimple() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { importFiles, processing: xmlProcessing, progress: xmlProgress } = useXMLImport();
   const [parcelas, setParcelas] = useState<ParcelaCompleta[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedParcelas, setSelectedParcelas] = useState<number[]>([]);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -620,8 +624,76 @@ export function ContasPagarSimple() {
     );
   }
 
+  const handleXMLImport = async (files: FileList | File[]) => {
+    const xmlFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.xml'));
+    if (xmlFiles.length === 0) {
+      toast({ title: "Arquivo inválido", description: "Selecione apenas arquivos XML.", variant: "destructive" });
+      return;
+    }
+    await importFiles(xmlFiles);
+    fetchAllData(); // Recarregar dados após importação
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files.length > 0) {
+      handleXMLImport(e.dataTransfer.files);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Campo rápido de importação de XML */}
+      <div
+        className={`border-2 border-dashed rounded-lg p-4 transition-colors ${
+          isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'
+        } ${xmlProcessing ? 'pointer-events-none opacity-60' : ''}`}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+      >
+        <div className="flex items-center justify-center gap-4">
+          {xmlProcessing ? (
+            <div className="flex items-center gap-3 w-full max-w-md">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Importando XMLs...</p>
+                <Progress value={xmlProgress} className="h-2 mt-1" />
+              </div>
+            </div>
+          ) : (
+            <>
+              <Upload className="h-5 w-5 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Arraste arquivos XML aqui ou{' '}
+                <label className="text-primary hover:underline cursor-pointer">
+                  clique para selecionar
+                  <input
+                    type="file"
+                    accept=".xml"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => e.target.files && handleXMLImport(e.target.files)}
+                  />
+                </label>
+              </p>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
