@@ -79,6 +79,7 @@ export function ContasPagarSimple() {
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterValorMin, setFilterValorMin] = useState('');
   const [filterValorMax, setFilterValorMax] = useState('');
+  const [filterValorExato, setFilterValorExato] = useState('');
   const [filterDataVencimentoInicio, setFilterDataVencimentoInicio] = useState<Date | null>(null);
   const [filterDataVencimentoFim, setFilterDataVencimentoFim] = useState<Date | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -330,6 +331,16 @@ export function ContasPagarSimple() {
 
       if (filterValorMin && p.valor_parcela_centavos < parseFloat(filterValorMin) * 100) return false;
       if (filterValorMax && p.valor_parcela_centavos > parseFloat(filterValorMax) * 100) return false;
+      
+      // Filtro de valor exato (pesquisa parcial no valor formatado)
+      if (filterValorExato) {
+        const valorFormatado = (p.valor_parcela_centavos / 100).toFixed(2).replace('.', ',');
+        const valorSemVirgula = (p.valor_parcela_centavos / 100).toFixed(2);
+        const searchValor = filterValorExato.replace(',', '.');
+        if (!valorFormatado.includes(filterValorExato) && !valorSemVirgula.includes(searchValor)) {
+          return false;
+        }
+      }
 
       if (filterDataVencimentoInicio) {
         const dataVenc = parseLocalDate(p.vencimento);
@@ -353,7 +364,7 @@ export function ContasPagarSimple() {
     return filtered;
   }, [
     parcelas, searchTerm, filterFornecedor, filterFilial, filterCategoria,
-    filterStatus, filterValorMin, filterValorMax,
+    filterStatus, filterValorMin, filterValorMax, filterValorExato,
     filterDataVencimentoInicio, filterDataVencimentoFim, sortField, sortDirection
   ]);
 
@@ -378,7 +389,7 @@ export function ContasPagarSimple() {
 
   useEffect(() => { setCurrentPage(1); }, [
     searchTerm, filterFornecedor, filterFilial, filterCategoria, filterStatus,
-    filterValorMin, filterValorMax, filterDataVencimentoInicio, filterDataVencimentoFim
+    filterValorMin, filterValorMax, filterValorExato, filterDataVencimentoInicio, filterDataVencimentoFim
   ]);
 
   const toggleSelectAll = () => {
@@ -598,7 +609,7 @@ export function ContasPagarSimple() {
 
   const clearFilters = () => {
     setSearchTerm(''); setFilterFornecedor([]); setFilterFilial([]); setFilterCategoria([]); setFilterStatus([]);
-    setFilterValorMin(''); setFilterValorMax(''); setFilterDataVencimentoInicio(null); setFilterDataVencimentoFim(null);
+    setFilterValorMin(''); setFilterValorMax(''); setFilterValorExato(''); setFilterDataVencimentoInicio(null); setFilterDataVencimentoFim(null);
   };
 
   if (loading) {
@@ -629,6 +640,15 @@ export function ContasPagarSimple() {
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input placeholder="Buscar por fornecedor, descrição ou ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+              </div>
+              <div className="relative max-w-[160px]">
+                <Input
+                  type="text"
+                  placeholder="Pesquisar valor..."
+                  value={filterValorExato}
+                  onChange={(e) => setFilterValorExato(e.target.value)}
+                  className="pl-3"
+                />
               </div>
               <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
                 <Filter className="h-4 w-4 mr-2" />
