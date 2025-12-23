@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { Navigation } from './Navigation';
+import { GlobalAIActions } from './GlobalAIActions';
 import { Bell, Search, User } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -61,6 +62,9 @@ export function Layout() {
                 />
               </div>
             </div>
+
+            {/* AI Actions */}
+            <GlobalAIActions />
 
             {/* Actions */}
             <div className="flex items-center gap-2">
