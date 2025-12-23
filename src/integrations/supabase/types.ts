@@ -1128,6 +1128,33 @@ export type Database = {
         }
         Relationships: []
       }
+      ia_conhecimento: {
+        Row: {
+          ativa: boolean
+          created_at: string
+          descricao: string | null
+          id: number
+          regra: string
+          updated_at: string
+        }
+        Insert: {
+          ativa?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: never
+          regra: string
+          updated_at?: string
+        }
+        Update: {
+          ativa?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: never
+          regra?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       marcas: {
         Row: {
           created_at: string
