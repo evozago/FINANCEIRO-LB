@@ -5,59 +5,36 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Schema JSON exato para Structured Output do Gemini 3
-const RESPONSE_SCHEMA = {
-  type: "object",
-  properties: {
-    conta_pagar: {
-      type: "object",
-      properties: {
-        descricao: { type: "string", description: "Descrição do documento/serviço" },
-        numero_nota: { type: "string", nullable: true, description: "Número da nota/fatura/boleto" },
-        chave_nfe: { type: "string", nullable: true, description: "Chave NFe (44 dígitos)" },
-        valor_total_centavos: { type: "integer", description: "Valor total em CENTAVOS (R$ 150,00 = 15000)" },
-        data_emissao: { type: "string", nullable: true, description: "Data de emissão no formato YYYY-MM-DD" },
-        referencia: { type: "string", nullable: true, description: "Código de barras/linha digitável" },
-        fornecedor_nome_sugerido: { type: "string", description: "Nome do fornecedor/empresa emissora" },
-        categoria_sugerida: { type: "string", description: "Categoria financeira sugerida (ex: Energia, Internet, Aluguel)" }
-      },
-      required: ["descricao", "valor_total_centavos", "fornecedor_nome_sugerido", "categoria_sugerida"]
-    },
-    parcelas: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          parcela_num: { type: "integer", description: "Número da parcela (1, 2, 3...)" },
-          valor_parcela_centavos: { type: "integer", description: "Valor da parcela em CENTAVOS" },
-          vencimento: { type: "string", description: "Data de vencimento no formato YYYY-MM-DD" }
-        },
-        required: ["parcela_num", "valor_parcela_centavos", "vencimento"]
-      }
-    },
-    confianca: { type: "integer", description: "Nível de confiança da extração (0 a 100)" },
-    observacoes: { type: "string", nullable: true, description: "Informações adicionais encontradas" }
+const SYSTEM_INSTRUCTION = `Você é um robô de extração de dados financeiros. Leia a imagem e extraia os dados para as tabelas contas_pagar e contas_pagar_parcelas. Retorne APENAS JSON. Valores em centavos. Datas em YYYY-MM-DD.
+
+SCHEMA OBRIGATÓRIO:
+{
+  "conta_pagar": {
+    "descricao": "string - Descrição do documento/serviço",
+    "numero_nota": "string ou null - Número da nota/fatura/boleto",
+    "chave_nfe": "string ou null - Chave NFe (44 dígitos)",
+    "valor_total_centavos": "integer - Valor total em CENTAVOS (R$ 150,00 = 15000)",
+    "data_emissao": "string ou null - Data de emissão no formato YYYY-MM-DD",
+    "referencia": "string ou null - Código de barras/linha digitável",
+    "fornecedor_nome_sugerido": "string - Nome do fornecedor/empresa emissora",
+    "categoria_sugerida": "string - Categoria financeira (Energia, Internet, Aluguel, etc)"
   },
-  required: ["conta_pagar", "parcelas", "confianca"]
-};
+  "parcelas": [
+    {
+      "parcela_num": "integer - Número da parcela (1, 2, 3...)",
+      "valor_parcela_centavos": "integer - Valor da parcela em CENTAVOS",
+      "vencimento": "string - Data de vencimento YYYY-MM-DD"
+    }
+  ],
+  "confianca": "integer - Nível de confiança 0 a 100",
+  "observacoes": "string ou null - Informações adicionais"
+}
 
-const SYSTEM_INSTRUCTION = `Você é um extrator especializado de dados financeiros de documentos brasileiros (boletos, notas fiscais, faturas, comprovantes).
-
-INSTRUÇÕES:
-1. Analise cuidadosamente o documento (texto, imagem ou PDF)
-2. Extraia TODOS os dados financeiros relevantes
-3. SEMPRE converta valores para CENTAVOS (R$ 150,00 = 15000)
-4. Datas SEMPRE no formato YYYY-MM-DD
-5. Se houver múltiplas parcelas, liste todas com suas datas de vencimento
-6. Se não encontrar um campo, use null
-7. O campo confianca deve refletir a qualidade da extração (0-100)
-
-ATENÇÃO ESPECIAL:
-- Em boletos, procure: beneficiário, valor, vencimento, código de barras
-- Em notas fiscais: emitente, CNPJ, número da nota, chave de acesso, produtos, total
+ATENÇÃO:
+- Em boletos: beneficiário, valor, vencimento, código de barras
+- Em notas fiscais: emitente, CNPJ, número da nota, chave de acesso, total
 - Em faturas: empresa, valor, referência do mês, vencimento
-
-CATEGORIAS COMUNS: Energia, Água, Internet, Telefonia, Aluguel, Condomínio, Material de Escritório, Serviços, Impostos, Seguros, Manutenção, Combustível, Frete, Marketing`;
+- CATEGORIAS: Energia, Água, Internet, Telefonia, Aluguel, Condomínio, Material, Serviços, Impostos, Seguros, Manutenção, Combustível, Frete, Marketing`;
 
 interface RequestBody {
   prompt?: string;
@@ -103,10 +80,10 @@ serve(async (req) => {
 
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY não configurada");
+      throw new Error("GEMINI_API_KEY não configurada nos Secrets do Supabase");
     }
 
-    // Construir as parts do request
+    // Construir as parts do conteúdo
     const parts: any[] = [];
 
     // Adicionar texto se fornecido
@@ -148,32 +125,32 @@ serve(async (req) => {
       throw new Error("Envie ao menos um prompt, imagem ou PDF para análise");
     }
 
-    // Gemini 3 Flash Preview com Structured Output e Thinking High
+    // Configuração conforme Google AI Studio - gemini-3-flash-preview
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
 
-    console.log("🚀 Enviando para Gemini 3 Flash Preview (Structured Output + Thinking High)...");
+    console.log("🚀 Enviando para Gemini 3 Flash Preview (Temperature 0, Thinking HIGH)...");
 
+    // Request body seguindo exatamente o código do AI Studio
     const requestBody = {
-      contents: [{ 
+      contents: [{
         role: "user",
-        parts 
+        parts
       }],
       systemInstruction: {
         parts: [{ text: SYSTEM_INSTRUCTION }]
       },
       generationConfig: {
-        temperature: 0.1,
-        topP: 0.8,
-        maxOutputTokens: 4096,
+        temperature: 0,
+        topP: 0,
+        maxOutputTokens: 8192,
         responseMimeType: "application/json",
-        responseSchema: RESPONSE_SCHEMA,
         thinkingConfig: {
-          thinkingBudget: 2048 // Thinking Level High para cálculos precisos
+          thinkingLevel: "HIGH"
         }
       }
     };
 
-    console.log("📤 Request body:", JSON.stringify(requestBody, null, 2).substring(0, 1000));
+    console.log("📤 Modelo: gemini-3-flash-preview | Temperature: 0 | Thinking: HIGH");
 
     const response = await fetch(url, {
       method: "POST",
@@ -184,42 +161,80 @@ serve(async (req) => {
     if (!response.ok) {
       const errorData = await response.text();
       console.error("❌ Erro Gemini API:", response.status, errorData);
-      
-      // Se Gemini 3 não estiver disponível, fallback para 2.5 Flash
-      if (response.status === 404 || errorData.includes("not found")) {
-        console.log("⚠️ Gemini 3 Flash Preview não disponível, tentando Gemini 2.5 Flash...");
-        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-        
-        const fallbackResponse = await fetch(fallbackUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts }],
-            systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-            generationConfig: {
-              temperature: 0.1,
-              topP: 0.8,
-              maxOutputTokens: 4096,
-              responseMimeType: "application/json",
-              responseSchema: RESPONSE_SCHEMA
-            }
-          }),
-        });
-        
-        if (!fallbackResponse.ok) {
-          const fallbackError = await fallbackResponse.text();
-          throw new Error(`Erro na API Gemini: ${fallbackError}`);
-        }
-        
-        const fallbackData = await fallbackResponse.json();
-        return processGeminiResponse(fallbackData, corsHeaders);
-      }
-      
       throw new Error(`Erro na API Gemini (${response.status}): ${errorData}`);
     }
 
     const data = await response.json();
-    return processGeminiResponse(data, corsHeaders);
+    console.log("✅ Resposta recebida do Gemini 3 Flash Preview");
+
+    // Extrair texto da resposta
+    let resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    
+    // Limpar possíveis markdown code blocks
+    resultText = resultText
+      .replace(/```json\s*/gi, "")
+      .replace(/```\s*/g, "")
+      .trim();
+
+    console.log("📝 JSON recebido:", resultText.substring(0, 500));
+
+    // Parsear e validar JSON
+    let jsonResponse: GeminiResponse;
+    try {
+      jsonResponse = JSON.parse(resultText);
+      
+      // Validações de segurança
+      if (!jsonResponse.conta_pagar) {
+        throw new Error("Campo conta_pagar ausente");
+      }
+      
+      // Garantir valor_total_centavos é número inteiro
+      if (typeof jsonResponse.conta_pagar.valor_total_centavos !== 'number') {
+        const valorStr = String(jsonResponse.conta_pagar.valor_total_centavos).replace(/[^\d.,]/g, '').replace(',', '.');
+        jsonResponse.conta_pagar.valor_total_centavos = Math.round(parseFloat(valorStr) * 100) || 0;
+      }
+      
+      // Garantir parcelas existe e é array
+      if (!jsonResponse.parcelas || !Array.isArray(jsonResponse.parcelas) || jsonResponse.parcelas.length === 0) {
+        const hoje = new Date().toISOString().split('T')[0];
+        jsonResponse.parcelas = [{
+          parcela_num: 1,
+          valor_parcela_centavos: jsonResponse.conta_pagar.valor_total_centavos,
+          vencimento: jsonResponse.conta_pagar.data_emissao || hoje
+        }];
+      }
+      
+      // Validar cada parcela
+      jsonResponse.parcelas = jsonResponse.parcelas.map((p, idx) => ({
+        parcela_num: p.parcela_num || idx + 1,
+        valor_parcela_centavos: typeof p.valor_parcela_centavos === 'number' 
+          ? p.valor_parcela_centavos 
+          : Math.round(parseFloat(String(p.valor_parcela_centavos).replace(/[^\d.,]/g, '').replace(',', '.')) * 100) || 0,
+        vencimento: p.vencimento || new Date().toISOString().split('T')[0]
+      }));
+      
+      // Garantir confianca é número
+      if (typeof jsonResponse.confianca !== 'number') {
+        jsonResponse.confianca = 50;
+      }
+
+      console.log("✅ JSON validado - Confiança:", jsonResponse.confianca, "%");
+
+    } catch (parseError) {
+      console.error("❌ Erro ao parsear JSON:", parseError);
+      return new Response(JSON.stringify({ 
+        error: "Falha ao estruturar resposta",
+        raw: resultText,
+        parseError: parseError instanceof Error ? parseError.message : 'Erro desconhecido'
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify(jsonResponse), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
 
   } catch (error) {
     console.error("❌ Erro Edge Function:", error);
@@ -231,74 +246,3 @@ serve(async (req) => {
     });
   }
 });
-
-function processGeminiResponse(data: any, corsHeaders: Record<string, string>): Response {
-  console.log("✅ Resposta recebida do Gemini");
-
-  let resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-  
-  // Limpar markdown code blocks se houver
-  resultText = resultText
-    .replace(/```json\s*/gi, "")
-    .replace(/```\s*/g, "")
-    .trim();
-
-  console.log("📝 JSON recebido:", resultText.substring(0, 500));
-
-  let jsonResponse: GeminiResponse;
-  try {
-    jsonResponse = JSON.parse(resultText);
-    
-    // Validações de segurança
-    if (!jsonResponse.conta_pagar) {
-      throw new Error("Campo conta_pagar ausente");
-    }
-    
-    // Garantir valor_total_centavos é número inteiro
-    if (typeof jsonResponse.conta_pagar.valor_total_centavos !== 'number') {
-      jsonResponse.conta_pagar.valor_total_centavos = 
-        Math.round(parseFloat(String(jsonResponse.conta_pagar.valor_total_centavos).replace(/[^\d.,]/g, '').replace(',', '.')) * 100) || 0;
-    }
-    
-    // Garantir parcelas existe e é array
-    if (!jsonResponse.parcelas || !Array.isArray(jsonResponse.parcelas) || jsonResponse.parcelas.length === 0) {
-      const hoje = new Date().toISOString().split('T')[0];
-      jsonResponse.parcelas = [{
-        parcela_num: 1,
-        valor_parcela_centavos: jsonResponse.conta_pagar.valor_total_centavos,
-        vencimento: jsonResponse.conta_pagar.data_emissao || hoje
-      }];
-    }
-    
-    // Validar cada parcela
-    jsonResponse.parcelas = jsonResponse.parcelas.map((p, idx) => ({
-      parcela_num: p.parcela_num || idx + 1,
-      valor_parcela_centavos: typeof p.valor_parcela_centavos === 'number' 
-        ? p.valor_parcela_centavos 
-        : Math.round(parseFloat(String(p.valor_parcela_centavos).replace(/[^\d.,]/g, '').replace(',', '.')) * 100) || 0,
-      vencimento: p.vencimento || new Date().toISOString().split('T')[0]
-    }));
-    
-    // Garantir confianca é número
-    if (typeof jsonResponse.confianca !== 'number') {
-      jsonResponse.confianca = 50;
-    }
-
-    console.log("✅ JSON validado com sucesso - Confiança:", jsonResponse.confianca, "%");
-
-  } catch (parseError) {
-    console.error("❌ Erro ao parsear JSON:", parseError);
-    return new Response(JSON.stringify({ 
-      error: "Falha ao estruturar resposta",
-      raw: resultText,
-      parseError: parseError instanceof Error ? parseError.message : 'Erro desconhecido'
-    }), {
-      status: 422,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  return new Response(JSON.stringify(jsonResponse), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
