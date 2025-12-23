@@ -6,28 +6,32 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Schema oficial do Google AI Studio para Structured Output
+// Schema do Google AI Studio para Structured Output - atualizado conforme solicitado
 const RESPONSE_SCHEMA = {
   type: "OBJECT",
-  required: ["intencao"],
+  required: ["intencao", "contas_pagar"],
   properties: {
     intencao: {
       type: "STRING",
-      enum: ["CRIAR_CONTA", "DAR_BAIXA"]
+      enum: ["CRIAR_CONTA", "DAR_BAIXA", "CRIAR_E_PAGAR"],
     },
     contas_pagar: {
       type: "OBJECT",
-      required: ["descricao", "valor_total_centavos", "num_parcelas"],
+      required: ["descricao", "valor_total_centavos"],
       properties: {
         descricao: { type: "STRING" },
         valor_total_centavos: { type: "INTEGER" },
+        juros_centavos: { type: "INTEGER" },
+        desconto_centavos: { type: "INTEGER" },
+        valor_final_centavos: { type: "INTEGER" },
         num_parcelas: { type: "INTEGER" },
         numero_nota: { type: "STRING" },
         chave_nfe: { type: "STRING" },
         data_emissao: { type: "STRING" },
-        referencia: { type: "STRING" },
+        data_pagamento: { type: "STRING" },
         fornecedor_nome_sugerido: { type: "STRING" },
         categoria_sugerida: { type: "STRING" },
+        referencia: { type: "STRING" },
       },
     },
     contas_pagar_parcelas: {
@@ -42,40 +46,29 @@ const RESPONSE_SCHEMA = {
         },
       },
     },
-    // Campos específicos para DAR_BAIXA (comprovante de pagamento)
-    pagamento: {
-      type: "OBJECT",
-      properties: {
-        data_pagamento: { type: "STRING" },
-        valor_pago_centavos: { type: "INTEGER" },
-        juros_centavos: { type: "INTEGER" },
-        desconto_centavos: { type: "INTEGER" },
-        multa_centavos: { type: "INTEGER" },
-        forma_pagamento_sugerida: { type: "STRING" },
-        numero_documento_referencia: { type: "STRING" },
-        codigo_barras: { type: "STRING" },
-      },
-    },
+    observacao_ia: { type: "STRING" },
   },
 };
 
 // Base system instruction
-const BASE_SYSTEM_INSTRUCTION = `Você é um robô de extração de dados financeiros. 
+const BASE_SYSTEM_INSTRUCTION = `Você é o Diretor Financeiro IA da empresa. Sua tarefa é analisar Áudio, Imagem ou PDF e decidir a intenção:
 
-PRIMEIRO, identifique a INTENÇÃO do documento:
-- "CRIAR_CONTA": Se é um boleto, nota fiscal, fatura ou conta A PAGAR (documento que gera uma obrigação de pagamento)
-- "DAR_BAIXA": Se é um COMPROVANTE de pagamento já realizado (PIX, transferência, recibo)
+INTENÇÕES:
+- "CRIAR_CONTA": Se for um boleto, fatura ou ordem de voz para pagar no futuro.
+- "DAR_BAIXA": Se for um comprovante de transferência/Pix ou voz dizendo que algo foi pago.
+- "CRIAR_E_PAGAR": Se for um comprovante de algo que não estava no sistema.
 
-REGRAS:
-1. Para CRIAR_CONTA: Preencha contas_pagar e contas_pagar_parcelas
-2. Para DAR_BAIXA: Preencha pagamento com os dados do comprovante. Também preencha contas_pagar com o que conseguir identificar (descrição, fornecedor, valor original se disponível)
-3. Em pagamento.juros_centavos: valor de juros/mora cobrados
-4. Em pagamento.desconto_centavos: valor de desconto concedido
-5. Em pagamento.multa_centavos: valor de multa cobrada
-6. Valores sempre em centavos. Datas em YYYY-MM-DD.
-7. Em numero_documento_referencia: extraia o número do boleto/título/nota que aparece no comprovante
+REGRAS FINANCEIRAS:
+1. Extraia o valor principal, juros e descontos separadamente.
+2. Valor Final = Valor Original + Juros - Desconto. Armazene em valor_final_centavos.
+3. Se for voz e o usuário disser "Paguei hoje", use a data atual em data_pagamento.
+4. Identifique o fornecedor pelo logotipo, nome no documento ou menção no áudio.
+5. Valores SEMPRE em centavos (R$ 100,00 = 10000). Datas em YYYY-MM-DD.
+6. Use observacao_ia para explicar sua análise ou alertar sobre algo importante.
+7. Em fornecedor_nome_sugerido, coloque o nome da empresa/pessoa que receberá o pagamento.
+8. Em categoria_sugerida, sugira uma categoria (ex: "Telefonia", "Aluguel", "Fornecedor").
 
-Retorne APENAS JSON.`;
+IMPORTANTE: Retorne APENAS JSON válido.`;
 
 // Function to fetch business knowledge from database
 async function fetchBusinessKnowledge(): Promise<string[]> {
@@ -110,20 +103,22 @@ async function fetchBusinessKnowledge(): Promise<string[]> {
 
 // Build complete system instruction with business knowledge
 function buildSystemInstruction(businessRules: string[]): string {
-  if (businessRules.length === 0) {
-    return BASE_SYSTEM_INSTRUCTION;
-  }
+  let instruction = BASE_SYSTEM_INSTRUCTION;
 
-  const rulesSection = `
-===== CONTEXTO DE NEGÓCIO DA EMPRESA =====
-IMPORTANTE: As regras abaixo são específicas desta empresa e DEVEM ser priorizadas sobre comportamentos padrão.
+  if (businessRules.length > 0) {
+    const rulesSection = `
+
+===== REGRAS DE NEGÓCIO PERSONALIZADAS =====
+ATENÇÃO: Estas regras são específicas desta empresa e DEVEM ser aplicadas:
 
 ${businessRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 
-===========================================
+=============================================
 `;
+    instruction = rulesSection + instruction;
+  }
 
-  return rulesSection + "\n" + BASE_SYSTEM_INSTRUCTION;
+  return instruction;
 }
 
 interface RequestBody {
@@ -131,6 +126,8 @@ interface RequestBody {
   image_base64?: string;
   image_mime_type?: string;
   pdf_base64?: string;
+  audio_base64?: string;
+  audio_mime_type?: string;
   num_parcelas?: number;
   primeira_data_vencimento?: string;
 }
@@ -142,7 +139,16 @@ serve(async (req) => {
 
   try {
     const body: RequestBody = await req.json();
-    const { prompt, image_base64, image_mime_type, pdf_base64, num_parcelas, primeira_data_vencimento } = body;
+    const { 
+      prompt, 
+      image_base64, 
+      image_mime_type, 
+      pdf_base64, 
+      audio_base64, 
+      audio_mime_type,
+      num_parcelas, 
+      primeira_data_vencimento 
+    } = body;
 
     // Ler API Key dos Secrets do Supabase
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
@@ -150,10 +156,11 @@ serve(async (req) => {
       throw new Error("GEMINI_API_KEY não configurada nos Secrets do Supabase");
     }
 
-    // Fetch business knowledge from database
-    console.log("📚 Fetching business knowledge...");
+    // Fetch business knowledge from database (Cérebro da IA)
+    console.log("🧠 Carregando cérebro da IA (ia_conhecimento)...");
     const businessRules = await fetchBusinessKnowledge();
     const systemInstruction = buildSystemInstruction(businessRules);
+    console.log("📋 System Instruction construída com", businessRules.length, "regras de negócio");
 
     // Construir as parts do request
     const parts: any[] = [];
@@ -192,10 +199,25 @@ serve(async (req) => {
       });
     }
 
+    // Adicionar áudio se fornecido (multimodal)
+    if (audio_base64 && audio_mime_type) {
+      console.log(`🎤 Processando áudio (${audio_mime_type}), tamanho: ${(audio_base64.length / 1024).toFixed(1)}KB`);
+      parts.push({
+        inline_data: {
+          mime_type: audio_mime_type,
+          data: audio_base64
+        }
+      });
+    }
+
     // Se não há conteúdo, usar prompt padrão
     if (parts.length === 0) {
       parts.push({ text: prompt || "Extraia os dados financeiros do documento." });
     }
+
+    // Adicionar data atual para contexto
+    const hoje = new Date().toISOString().split('T')[0];
+    parts.push({ text: `Data de hoje: ${hoje}` });
 
     // Configuração oficial do Google AI Studio
     const requestBody = {
@@ -216,7 +238,7 @@ serve(async (req) => {
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
 
-    console.log("🚀 Enviando para Gemini 3 Flash Preview (Temperature 0, Thinking HIGH)...");
+    console.log("🚀 Enviando para Gemini 3 Flash Preview (Multimodal: Imagem/PDF/Áudio)...");
 
     const response = await fetch(url, {
       method: "POST",
@@ -233,7 +255,7 @@ serve(async (req) => {
     const data = await response.json();
     console.log("✅ Resposta recebida do Gemini 3 Flash Preview");
 
-    // Extrair o texto da resposta (já vem estruturado pelo responseSchema)
+    // Extrair o texto da resposta
     const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
     console.log("📝 JSON extraído:", resultText.substring(0, 500));
 
@@ -241,6 +263,8 @@ serve(async (req) => {
     const geminiResponse = JSON.parse(resultText);
     
     console.log("🎯 Intenção detectada:", geminiResponse.intencao);
+    console.log("💰 Valor:", geminiResponse.contas_pagar?.valor_total_centavos);
+    console.log("🏢 Fornecedor:", geminiResponse.contas_pagar?.fornecedor_nome_sugerido);
 
     // Mapear para formato esperado pelo frontend
     const formattedResponse = {
@@ -250,25 +274,19 @@ serve(async (req) => {
         numero_nota: geminiResponse.contas_pagar?.numero_nota || null,
         chave_nfe: geminiResponse.contas_pagar?.chave_nfe || null,
         valor_total_centavos: geminiResponse.contas_pagar?.valor_total_centavos || 0,
+        juros_centavos: geminiResponse.contas_pagar?.juros_centavos || 0,
+        desconto_centavos: geminiResponse.contas_pagar?.desconto_centavos || 0,
+        valor_final_centavos: geminiResponse.contas_pagar?.valor_final_centavos || geminiResponse.contas_pagar?.valor_total_centavos || 0,
         data_emissao: geminiResponse.contas_pagar?.data_emissao || null,
+        data_pagamento: geminiResponse.contas_pagar?.data_pagamento || null,
         referencia: geminiResponse.contas_pagar?.referencia || null,
         fornecedor_nome_sugerido: geminiResponse.contas_pagar?.fornecedor_nome_sugerido || null,
         categoria_sugerida: geminiResponse.contas_pagar?.categoria_sugerida || null,
         num_parcelas: geminiResponse.contas_pagar?.num_parcelas || 1,
       },
       parcelas: geminiResponse.contas_pagar_parcelas || [],
-      pagamento: geminiResponse.pagamento ? {
-        data_pagamento: geminiResponse.pagamento.data_pagamento || null,
-        valor_pago_centavos: geminiResponse.pagamento.valor_pago_centavos || 0,
-        juros_centavos: geminiResponse.pagamento.juros_centavos || 0,
-        desconto_centavos: geminiResponse.pagamento.desconto_centavos || 0,
-        multa_centavos: geminiResponse.pagamento.multa_centavos || 0,
-        forma_pagamento_sugerida: geminiResponse.pagamento.forma_pagamento_sugerida || null,
-        numero_documento_referencia: geminiResponse.pagamento.numero_documento_referencia || null,
-        codigo_barras: geminiResponse.pagamento.codigo_barras || null,
-      } : null,
+      observacao_ia: geminiResponse.observacao_ia || null,
       confianca: 95,
-      observacoes: null
     };
 
     console.log("✅ Resposta processada com sucesso");
