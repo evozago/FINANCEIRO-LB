@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const SYSTEM_PROMPT = `
 Você é um assistente financeiro de IA especializado em estruturar dados para inserção em banco de dados.
@@ -17,84 +17,157 @@ SAÍDA: Retorne APENAS um JSON estrito (sem markdown) com este formato:
   "valor_total": number (float, ex: 150.50),
   "data_vencimento": "YYYY-MM-DD" (se não for citada data, assuma a data de hoje),
   "nome_fornecedor_sugerido": "string (nome extraído do áudio para busca)",
-  "nome_empresa_sugerida": "string (nome da empresa citada, ou null se não citado)",
+  "nome_empresa_sugerida": "string (nome da empresa citada, ou string vazia se não citado)",
   "nome_categoria_sugerida": "string (sugira uma categoria baseada no contexto)",
   "observacoes": "string (qualquer detalhe extra mencionado)"
 }
 `;
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+// Schema de Structured Output (estilo Google AI Studio) para reduzir falhas de parsing
+const RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  required: [
+    "descricao",
+    "valor_total",
+    "data_vencimento",
+    "nome_fornecedor_sugerido",
+    "nome_empresa_sugerida",
+    "nome_categoria_sugerida",
+    "observacoes",
+  ],
+  properties: {
+    descricao: { type: "STRING" },
+    valor_total: { type: "NUMBER" },
+    data_vencimento: { type: "STRING" },
+    nome_fornecedor_sugerido: { type: "STRING" },
+    nome_empresa_sugerida: { type: "STRING" },
+    nome_categoria_sugerida: { type: "STRING" },
+    observacoes: { type: "STRING" },
+  },
+};
+
+function extractJsonFromText(text: string) {
+  const cleaned = text
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("Não foi possível localizar um JSON na resposta da IA.");
+    return JSON.parse(match[0]);
+  }
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { textoTranscrito } = await req.json()
-    
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY não configurada')
+    const body = await req.json().catch(() => ({}));
+    const textoTranscrito = typeof body?.textoTranscrito === "string" ? body.textoTranscrito.trim() : "";
 
-    console.log('Processando texto:', textoTranscrito)
-
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `TEXTO DO USUÁRIO PARA PROCESSAR: "${textoTranscrito}"` }
-        ],
-      })
-    })
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: 'Limite de requisições excedido. Tente novamente em alguns segundos.' }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: 'Créditos insuficientes. Adicione créditos ao workspace.' }), {
-          status: 402,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-      const errorText = await response.text()
-      console.error('Erro do gateway:', response.status, errorText)
-      throw new Error(`Erro do gateway AI: ${response.status}`)
+    if (!textoTranscrito) {
+      return new Response(JSON.stringify({ error: "textoTranscrito é obrigatório" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const data = await response.json()
-    console.log('Resposta do gateway:', JSON.stringify(data))
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY não configurada nos Secrets do Supabase");
+    }
 
-    let rawJson = data.choices?.[0]?.message?.content
-    if (!rawJson) throw new Error('A IA não retornou texto válido.')
+    console.log("🎙️ processar-audio-despesa: texto recebido:", textoTranscrito);
 
-    // Remove formatações caso a IA mande ```json ... ```
-    rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim()
-    
-    const structuredData = JSON.parse(rawJson)
-    console.log('Dados estruturados:', JSON.stringify(structuredData))
+    const requestBody = {
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `TEXTO DO USUÁRIO PARA PROCESSAR: "${textoTranscrito}"` }],
+        },
+      ],
+      systemInstruction: {
+        parts: [{ text: SYSTEM_PROMPT }],
+      },
+      generationConfig: {
+        temperature: 0,
+        topP: 0,
+        responseMimeType: "application/json",
+        responseSchema: RESPONSE_SCHEMA,
+      },
+    };
+
+    // Usar o mesmo modelo que já está funcionando na função gemini-chat
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
+
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => "");
+      console.error("❌ Gemini HTTP error:", resp.status, t);
+      return new Response(
+        JSON.stringify({ error: `Erro Gemini (${resp.status})`, details: t || null }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const data = await resp.json();
+
+    if (data?.error?.message) {
+      console.error("❌ Gemini API error:", data.error);
+      return new Response(JSON.stringify({ error: data.error.message }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const resultText = (data?.candidates?.[0]?.content?.parts ?? [])
+      .map((p: any) => (typeof p?.text === "string" ? p.text : ""))
+      .join("")
+      .trim();
+
+    if (!resultText) {
+      const blockReason = data?.promptFeedback?.blockReason;
+      if (blockReason) {
+        console.warn("⚠️ Gemini bloqueou o conteúdo:", blockReason);
+        return new Response(JSON.stringify({ error: "Conteúdo bloqueado pela IA", reason: blockReason }), {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      throw new Error("O Gemini não retornou texto válido.");
+    }
+
+    const structuredData = extractJsonFromText(resultText);
 
     return new Response(JSON.stringify(structuredData), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
-    console.error('Erro:', error)
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Erro desconhecido' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    console.error("💥 processar-audio-despesa error:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
-})
+});
