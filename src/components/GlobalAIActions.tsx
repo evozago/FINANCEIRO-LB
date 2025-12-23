@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Mic, MicOff, Loader2, Upload, FileImage } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,32 +17,100 @@ export function GlobalAIActions() {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
-  // Voice input
-  const startListening = () => {
-    if (!("webkitSpeechRecognition" in window)) {
-      toast.error("Seu navegador não suporta reconhecimento de voz.");
-      return;
+  // Toggle voice recording
+  const toggleListening = async () => {
+    if (isListening) {
+      // Stop recording
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+      setIsListening(false);
+    } else {
+      // Start recording
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          // Stop all tracks
+          stream.getTracks().forEach(track => track.stop());
+          
+          if (audioChunksRef.current.length > 0) {
+            const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+            await processAudio(audioBlob);
+          }
+        };
+
+        mediaRecorder.start();
+        setIsListening(true);
+        toast.info("Gravando... Clique novamente para parar.");
+      } catch (error) {
+        console.error("Erro ao acessar microfone:", error);
+        toast.error("Não foi possível acessar o microfone.");
+      }
     }
+  };
 
-    const recognition = new (window as any).webkitSpeechRecognition();
-    recognition.lang = "pt-BR";
-    recognition.continuous = false;
+  const processAudio = async (audioBlob: Blob) => {
+    setIsProcessing(true);
+    toast.info("Processando áudio...");
 
-    recognition.onstart = () => setIsListening(true);
+    try {
+      // Convert to base64
+      const base64 = await blobToBase64(audioBlob);
+      
+      const { data, error } = await supabase.functions.invoke("gemini-chat", {
+        body: { 
+          audio_base64: base64,
+          audio_mime_type: audioBlob.type
+        },
+      });
 
-    recognition.onresult = async (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setIsListening(false);
-      processarTexto(transcript);
-    };
+      if (error) throw error;
 
-    recognition.onerror = () => {
-      setIsListening(false);
-      toast.error("Não entendi o áudio, tente novamente.");
-    };
+      if (data.error) {
+        throw new Error(data.error);
+      }
 
-    recognition.start();
+      toast.success("Áudio processado com sucesso!");
+      
+      // Navigate based on intent
+      if (data.intencao === "DAR_BAIXA") {
+        navigate("/financeiro/contas-pagar", { state: { darBaixa: data } });
+      } else {
+        navigate("/financeiro/contas-pagar/nova", { state: { dadosImportados: data } });
+      }
+    } catch (error) {
+      console.error("Erro ao processar áudio:", error);
+      toast.error(error instanceof Error ? error.message : "Falha ao processar áudio.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(",")[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+    });
   };
 
   const processarTexto = async (texto: string) => {
@@ -147,7 +215,7 @@ export function GlobalAIActions() {
         <Button
           variant={isListening ? "destructive" : "ghost"}
           size="icon"
-          onClick={startListening}
+          onClick={toggleListening}
           disabled={isProcessing}
           title="Lançar por voz"
         >
