@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
-// AQUI ESTÁ O TEXTO QUE VOCÊ PERGUNTOU
-// Nós guardamos ele nessa variável para enviar junto com o áudio do usuário
 const SYSTEM_PROMPT = `
 Você é um assistente financeiro de IA especializado em estruturar dados para inserção em banco de dados.
 Sua tarefa é analisar o texto transcrito de um áudio e extrair informações para uma conta a pagar.
@@ -31,50 +29,70 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Isso permite que o seu site (frontend) chame essa função sem erro de segurança
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
     const { textoTranscrito } = await req.json()
     
-    // Pega a chave que você salvou no painel do Supabase
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
-    if (!GEMINI_API_KEY) throw new Error('Chave Gemini não configurada')
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
+    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY não configurada')
 
-    // Aqui a gente junta a sua INSTRUÇÃO (System Prompt) com o PEDIDO DO USUÁRIO
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    console.log('Processando texto:', textoTranscrito)
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
-        contents: [{
-          parts: [{
-            // Veja aqui: Enviamos o prompt do sistema + o que você falou no microfone
-            text: `${SYSTEM_PROMPT}\n\nTEXTO DO USUÁRIO PARA PROCESSAR: "${textoTranscrito}"`
-          }]
-        }]
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: `TEXTO DO USUÁRIO PARA PROCESSAR: "${textoTranscrito}"` }
+        ],
       })
     })
 
-    const data = await response.json()
+    if (!response.ok) {
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: 'Limite de requisições excedido. Tente novamente em alguns segundos.' }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: 'Créditos insuficientes. Adicione créditos ao workspace.' }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const errorText = await response.text()
+      console.error('Erro do gateway:', response.status, errorText)
+      throw new Error(`Erro do gateway AI: ${response.status}`)
+    }
 
-    // Tratamento para garantir que pegamos apenas o JSON limpo da resposta
-    let rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!rawJson) throw new Error('O Gemini não retornou texto válido.')
+    const data = await response.json()
+    console.log('Resposta do gateway:', JSON.stringify(data))
+
+    let rawJson = data.choices?.[0]?.message?.content
+    if (!rawJson) throw new Error('A IA não retornou texto válido.')
 
     // Remove formatações caso a IA mande ```json ... ```
     rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim()
     
     const structuredData = JSON.parse(rawJson)
+    console.log('Dados estruturados:', JSON.stringify(structuredData))
 
     return new Response(JSON.stringify(structuredData), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
 
   } catch (error) {
-    console.error(error)
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
+    console.error('Erro:', error)
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Erro desconhecido' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
