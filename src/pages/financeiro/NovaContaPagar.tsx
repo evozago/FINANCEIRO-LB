@@ -9,16 +9,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, FileText, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { PreviewParcelas, type PreviewParcela } from "@/components/financeiro/PreviewParcelas";
 import { formatDateToISO, parseLocalDate, todayLocalDate } from "@/lib/date";
 import { NovoPJForm } from "@/components/financeiro/NovoPJForm";
 import { NovoPFForm } from "@/components/financeiro/NovoPFForm";
+import { ImportarDocumentoIA } from "@/components/financeiro/ImportarDocumentoIA";
 
 export default function NovaContaPagar() {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<"manual" | "ia">("ia");
 
   // Form state
   const [fornecedorTipo, setFornecedorTipo] = useState<"pj" | "pf">("pj");
@@ -215,6 +218,79 @@ export default function NovaContaPagar() {
     }
   };
 
+  // Handler para salvar via IA
+  const handleSaveFromIA = async (data: {
+    fornecedorTipo: "pj" | "pf";
+    fornecedorId: number | null;
+    fornecedorNome: string;
+    categoriaId: number | null;
+    filialId: number | null;
+    descricao: string;
+    valorTotalCentavos: number;
+    numParcelas: number;
+    numeroNota: string;
+    chaveNfe: string;
+    dataEmissao: string;
+    referencia: string;
+    parcelas: { parcela_num: number; valor_parcela_centavos: number; vencimento: string }[];
+  }) => {
+    try {
+      // Criar conta a pagar
+      const { data: conta, error: contaError } = await supabase
+        .from("contas_pagar")
+        .insert({
+          fornecedor_id: data.fornecedorTipo === "pj" ? data.fornecedorId : null,
+          fornecedor_pf_id: data.fornecedorTipo === "pf" ? data.fornecedorId : null,
+          categoria_id: data.categoriaId,
+          filial_id: data.filialId,
+          descricao: data.descricao || data.fornecedorNome,
+          valor_total_centavos: data.valorTotalCentavos,
+          num_parcelas: data.numParcelas,
+          numero_nota: data.numeroNota || null,
+          chave_nfe: data.chaveNfe || null,
+          data_emissao: data.dataEmissao || null,
+          referencia: data.referencia || null,
+        })
+        .select()
+        .single();
+
+      if (contaError) throw contaError;
+
+      // Criar parcelas
+      const parcelas = data.parcelas.map((p) => ({
+        conta_id: conta.id,
+        parcela_num: p.parcela_num,
+        numero_parcela: p.parcela_num,
+        valor_parcela_centavos: p.valor_parcela_centavos,
+        vencimento: p.vencimento,
+        pago: false,
+      }));
+
+      const { error: parcelasError } = await supabase
+        .from("contas_pagar_parcelas")
+        .insert(parcelas);
+
+      if (parcelasError) throw parcelasError;
+
+      navigate("/financeiro/contas-pagar");
+    } catch (error) {
+      console.error("Erro ao salvar:", error);
+      throw error;
+    }
+  };
+
+  // Preparar dados para o componente de IA
+  const categoriasForIA = categorias?.map(c => ({ id: c.id, nome: c.nome })) || [];
+  const fornecedoresPJForIA = fornecedoresPJ?.map(f => ({ 
+    id: f.id, 
+    nome: f.nome_fantasia || f.razao_social || "" 
+  })) || [];
+  const fornecedoresPFForIA = fornecedoresPF?.map(f => ({ 
+    id: f.id, 
+    nome: f.nome_completo 
+  })) || [];
+  const filiaisForIA = filiais?.map(f => ({ id: f.id, nome: f.nome })) || [];
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center gap-4">
@@ -223,16 +299,40 @@ export default function NovaContaPagar() {
         </Button>
         <div>
           <h1 className="text-3xl font-bold">Nova Conta a Pagar</h1>
-          <p className="text-muted-foreground">Cadastro manual de conta a pagar</p>
+          <p className="text-muted-foreground">Importe com IA ou cadastre manualmente</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Dados da Conta</CardTitle>
-            <CardDescription>Preencha os campos abaixo para cadastrar uma nova conta a pagar</CardDescription>
-          </CardHeader>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "manual" | "ia")}>
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="ia" className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" />
+            Importar com IA
+          </TabsTrigger>
+          <TabsTrigger value="manual" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Cadastro Manual
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ia" className="mt-6">
+          <ImportarDocumentoIA
+            categorias={categoriasForIA}
+            fornecedoresPJ={fornecedoresPJForIA}
+            fornecedoresPF={fornecedoresPFForIA}
+            filiais={filiaisForIA}
+            onSave={handleSaveFromIA}
+            onCancel={() => navigate("/financeiro/contas-pagar")}
+          />
+        </TabsContent>
+
+        <TabsContent value="manual" className="mt-6">
+          <form onSubmit={handleSubmit}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Dados da Conta</CardTitle>
+                <CardDescription>Preencha os campos abaixo para cadastrar uma nova conta a pagar</CardDescription>
+              </CardHeader>
           <CardContent className="space-y-6">
             {/* Tipo de Fornecedor */}
             <div className="grid gap-2">
@@ -484,9 +584,11 @@ export default function NovaContaPagar() {
                 {isSubmitting ? "Salvando..." : "Salvar Conta"}
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      </form>
+            </CardContent>
+          </Card>
+        </form>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
