@@ -8,8 +8,12 @@ const corsHeaders = {
 // Schema oficial do Google AI Studio para Structured Output
 const RESPONSE_SCHEMA = {
   type: "OBJECT",
-  required: ["contas_pagar", "contas_pagar_parcelas"],
+  required: ["intencao"],
   properties: {
+    intencao: {
+      type: "STRING",
+      enum: ["CRIAR_CONTA", "DAR_BAIXA"]
+    },
     contas_pagar: {
       type: "OBJECT",
       required: ["descricao", "valor_total_centavos", "num_parcelas"],
@@ -37,11 +41,40 @@ const RESPONSE_SCHEMA = {
         },
       },
     },
+    // Campos específicos para DAR_BAIXA (comprovante de pagamento)
+    pagamento: {
+      type: "OBJECT",
+      properties: {
+        data_pagamento: { type: "STRING" },
+        valor_pago_centavos: { type: "INTEGER" },
+        juros_centavos: { type: "INTEGER" },
+        desconto_centavos: { type: "INTEGER" },
+        multa_centavos: { type: "INTEGER" },
+        forma_pagamento_sugerida: { type: "STRING" },
+        numero_documento_referencia: { type: "STRING" },
+        codigo_barras: { type: "STRING" },
+      },
+    },
   },
 };
 
-// System instruction oficial do Google AI Studio
-const SYSTEM_INSTRUCTION = `Você é um robô de extração de dados financeiros. Leia a imagem e extraia os dados para as tabelas contas_pagar e contas_pagar_parcelas. Retorne APENAS JSON. Valores em centavos. Datas em YYYY-MM-DD.`;
+// System instruction atualizada para identificar intenção
+const SYSTEM_INSTRUCTION = `Você é um robô de extração de dados financeiros. 
+
+PRIMEIRO, identifique a INTENÇÃO do documento:
+- "CRIAR_CONTA": Se é um boleto, nota fiscal, fatura ou conta A PAGAR (documento que gera uma obrigação de pagamento)
+- "DAR_BAIXA": Se é um COMPROVANTE de pagamento já realizado (PIX, transferência, recibo)
+
+REGRAS:
+1. Para CRIAR_CONTA: Preencha contas_pagar e contas_pagar_parcelas
+2. Para DAR_BAIXA: Preencha pagamento com os dados do comprovante. Também preencha contas_pagar com o que conseguir identificar (descrição, fornecedor, valor original se disponível)
+3. Em pagamento.juros_centavos: valor de juros/mora cobrados
+4. Em pagamento.desconto_centavos: valor de desconto concedido
+5. Em pagamento.multa_centavos: valor de multa cobrada
+6. Valores sempre em centavos. Datas em YYYY-MM-DD.
+7. Em numero_documento_referencia: extraia o número do boleto/título/nota que aparece no comprovante
+
+Retorne APENAS JSON.`;
 
 interface RequestBody {
   prompt?: string;
@@ -110,9 +143,6 @@ serve(async (req) => {
     }
 
     // Configuração oficial do Google AI Studio
-    // Modelo: gemini-3-flash-preview
-    // Temperature: 0 (precisão máxima)
-    // Thinking Level: HIGH
     const requestBody = {
       contents: [{ role: "user", parts }],
       systemInstruction: {
@@ -129,7 +159,6 @@ serve(async (req) => {
       }
     };
 
-    // Usar gemini-3-flash-preview conforme código do Google AI Studio
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
 
     console.log("🚀 Enviando para Gemini 3 Flash Preview (Temperature 0, Thinking HIGH)...");
@@ -155,9 +184,12 @@ serve(async (req) => {
 
     // Parse do JSON estruturado
     const geminiResponse = JSON.parse(resultText);
+    
+    console.log("🎯 Intenção detectada:", geminiResponse.intencao);
 
-    // Mapear para formato esperado pelo frontend (compatibilidade)
+    // Mapear para formato esperado pelo frontend
     const formattedResponse = {
+      intencao: geminiResponse.intencao || "CRIAR_CONTA",
       conta_pagar: {
         descricao: geminiResponse.contas_pagar?.descricao || null,
         numero_nota: geminiResponse.contas_pagar?.numero_nota || null,
@@ -170,7 +202,17 @@ serve(async (req) => {
         num_parcelas: geminiResponse.contas_pagar?.num_parcelas || 1,
       },
       parcelas: geminiResponse.contas_pagar_parcelas || [],
-      confianca: 95, // Alta confiança com Thinking HIGH + Temperature 0
+      pagamento: geminiResponse.pagamento ? {
+        data_pagamento: geminiResponse.pagamento.data_pagamento || null,
+        valor_pago_centavos: geminiResponse.pagamento.valor_pago_centavos || 0,
+        juros_centavos: geminiResponse.pagamento.juros_centavos || 0,
+        desconto_centavos: geminiResponse.pagamento.desconto_centavos || 0,
+        multa_centavos: geminiResponse.pagamento.multa_centavos || 0,
+        forma_pagamento_sugerida: geminiResponse.pagamento.forma_pagamento_sugerida || null,
+        numero_documento_referencia: geminiResponse.pagamento.numero_documento_referencia || null,
+        codigo_barras: geminiResponse.pagamento.codigo_barras || null,
+      } : null,
+      confianca: 95,
       observacoes: null
     };
 
