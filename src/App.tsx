@@ -34,6 +34,7 @@ import { Relatorios } from "@/pages/Relatorios";
 import TesteGemini from "./pages/TesteGemini";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import CerebroIA from "./pages/ia/CerebroIA";
 
 const queryClient = new QueryClient();
 
@@ -93,7 +94,8 @@ const App = () => (
             {/* <Route path="produtos" element={<Produtos />} /> */}
             <Route path="relatorios" element={<Relatorios />} />
             
-            {/* Teste IA */}
+            {/* IA */}
+            <Route path="ia/cerebro" element={<CerebroIA />} />
             <Route path="teste-gemini" element={<TesteGemini />} />
           </Route>
 

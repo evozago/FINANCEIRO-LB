@@ -8,7 +8,8 @@ import {
   TrendingUp, 
   FileText,
   Package,
-  Menu
+  Menu,
+  Brain
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -71,6 +72,11 @@ const navigationItems = [
     title: 'Relatórios',
     href: '/relatorios',
     icon: FileText,
+  },
+  {
+    title: 'Cérebro da IA',
+    href: '/ia/cerebro',
+    icon: Brain,
   },
 ];
 

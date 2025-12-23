@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,8 +59,8 @@ const RESPONSE_SCHEMA = {
   },
 };
 
-// System instruction atualizada para identificar intenção
-const SYSTEM_INSTRUCTION = `Você é um robô de extração de dados financeiros. 
+// Base system instruction
+const BASE_SYSTEM_INSTRUCTION = `Você é um robô de extração de dados financeiros. 
 
 PRIMEIRO, identifique a INTENÇÃO do documento:
 - "CRIAR_CONTA": Se é um boleto, nota fiscal, fatura ou conta A PAGAR (documento que gera uma obrigação de pagamento)
@@ -75,6 +76,55 @@ REGRAS:
 7. Em numero_documento_referencia: extraia o número do boleto/título/nota que aparece no comprovante
 
 Retorne APENAS JSON.`;
+
+// Function to fetch business knowledge from database
+async function fetchBusinessKnowledge(): Promise<string[]> {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.log("⚠️ Supabase credentials not found, skipping knowledge fetch");
+      return [];
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    const { data, error } = await supabase
+      .from('ia_conhecimento')
+      .select('regra')
+      .eq('ativa', true);
+
+    if (error) {
+      console.error("❌ Error fetching knowledge:", error);
+      return [];
+    }
+
+    console.log(`📚 Loaded ${data?.length || 0} business rules from ia_conhecimento`);
+    return data?.map(r => r.regra) || [];
+  } catch (error) {
+    console.error("❌ Error in fetchBusinessKnowledge:", error);
+    return [];
+  }
+}
+
+// Build complete system instruction with business knowledge
+function buildSystemInstruction(businessRules: string[]): string {
+  if (businessRules.length === 0) {
+    return BASE_SYSTEM_INSTRUCTION;
+  }
+
+  const rulesSection = `
+===== CONTEXTO DE NEGÓCIO DA EMPRESA =====
+IMPORTANTE: As regras abaixo são específicas desta empresa e DEVEM ser priorizadas sobre comportamentos padrão.
+
+${businessRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}
+
+===========================================
+`;
+
+  return rulesSection + "\n" + BASE_SYSTEM_INSTRUCTION;
+}
 
 interface RequestBody {
   prompt?: string;
@@ -99,6 +149,11 @@ serve(async (req) => {
     if (!GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY não configurada nos Secrets do Supabase");
     }
+
+    // Fetch business knowledge from database
+    console.log("📚 Fetching business knowledge...");
+    const businessRules = await fetchBusinessKnowledge();
+    const systemInstruction = buildSystemInstruction(businessRules);
 
     // Construir as parts do request
     const parts: any[] = [];
@@ -146,7 +201,7 @@ serve(async (req) => {
     const requestBody = {
       contents: [{ role: "user", parts }],
       systemInstruction: {
-        parts: [{ text: SYSTEM_INSTRUCTION }]
+        parts: [{ text: systemInstruction }]
       },
       generationConfig: {
         temperature: 0,
