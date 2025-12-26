@@ -71,6 +71,16 @@ interface DarBaixaData {
   parcelas?: Array<{ parcela_num: number; valor_parcela_centavos: number; vencimento: string }>;
   contas_pagar_parcelas?: Array<{ parcela_num: number; valor_parcela_centavos: number; vencimento: string }>;
   observacao_ia?: string;
+  fileName?: string;
+}
+
+// Interface para item de baixa em lote
+interface BaixaLoteItem {
+  data: DarBaixaData;
+  parcelasCorrespondentes: ParcelaCompleta[];
+  parcelaSelecionada: number | null;
+  valorPago: number;
+  confirmado: boolean;
 }
 
 export function ContasPagarSimple() {
@@ -113,7 +123,7 @@ export function ContasPagarSimple() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showColumnsModal, setShowColumnsModal] = useState(false);
 
-  // DAR_BAIXA modal (IA)
+  // DAR_BAIXA modal (IA) - individual
   const [showDarBaixaModal, setShowDarBaixaModal] = useState(false);
   const [darBaixaData, setDarBaixaData] = useState<DarBaixaData | null>(null);
   const [parcelasCorrespondentes, setParcelasCorrespondentes] = useState<ParcelaCompleta[]>([]);
@@ -125,6 +135,13 @@ export function ContasPagarSimple() {
     valor_pago_centavos: 0,
     observacao: ''
   });
+
+  // DAR_BAIXA LOTE (múltiplos comprovantes)
+  const [showBaixaLoteModal, setShowBaixaLoteModal] = useState(false);
+  const [baixaLoteItems, setBaixaLoteItems] = useState<BaixaLoteItem[]>([]);
+  const [baixaLoteFormaPagamento, setBaixaLoteFormaPagamento] = useState('');
+  const [baixaLoteContaBancaria, setBaixaLoteContaBancaria] = useState('');
+  const [baixaLoteProcessing, setBaixaLoteProcessing] = useState(false);
 
   // edição em massa
   const [massEditData, setMassEditData] = useState({
@@ -166,21 +183,57 @@ export function ContasPagarSimple() {
 
   useEffect(() => { fetchAllData(); }, []);
   
-  // Effect para processar DAR_BAIXA vindo da IA
+  // Effect para processar DAR_BAIXA vindo da IA (individual)
   useEffect(() => {
-    const state = location.state as { darBaixa?: DarBaixaData } | null;
+    const state = location.state as { darBaixa?: DarBaixaData; darBaixaLote?: DarBaixaData[] } | null;
+    
+    // Processar lote de comprovantes
+    if (state?.darBaixaLote && parcelas.length > 0) {
+      console.log("📋 Recebido DAR_BAIXA LOTE:", state.darBaixaLote);
+      processarLoteBaixa(state.darBaixaLote);
+      window.history.replaceState({}, document.title);
+      return;
+    }
+    
+    // Processar comprovante individual (compatibilidade)
     if (state?.darBaixa && parcelas.length > 0) {
       console.log("📋 Recebido DAR_BAIXA:", state.darBaixa);
       setDarBaixaData(state.darBaixa);
       searchMatchingParcelas(state.darBaixa);
-      // Limpar o state da navegação
       window.history.replaceState({}, document.title);
     }
   }, [location.state, parcelas]);
   
-  // Função para buscar parcelas correspondentes ao comprovante
-  const searchMatchingParcelas = (data: DarBaixaData) => {
-    const tolerancia = 0.15; // 15% de tolerância no valor
+  // Processar lote de comprovantes
+  const processarLoteBaixa = (lote: DarBaixaData[]) => {
+    const items: BaixaLoteItem[] = lote.map(data => {
+      const { correspondentes, melhorMatch, valorPago } = findMatchingParcelas(data);
+      return {
+        data,
+        parcelasCorrespondentes: correspondentes,
+        parcelaSelecionada: melhorMatch,
+        valorPago,
+        confirmado: melhorMatch !== null
+      };
+    });
+    
+    setBaixaLoteItems(items);
+    setShowBaixaLoteModal(true);
+    
+    const comMatch = items.filter(i => i.parcelaSelecionada !== null).length;
+    toast({
+      title: `${lote.length} comprovante(s) processado(s)`,
+      description: `${comMatch} com parcelas identificadas automaticamente.`,
+    });
+  };
+  
+  // Função para buscar parcelas correspondentes (retorna resultado em vez de setar state)
+  const findMatchingParcelas = (data: DarBaixaData): { 
+    correspondentes: ParcelaCompleta[]; 
+    melhorMatch: number | null;
+    valorPago: number;
+  } => {
+    const tolerancia = 0.15;
 
     const valorBusca =
       data.conta_pagar.valor_final_centavos ??
@@ -195,31 +248,12 @@ export function ContasPagarSimple() {
     const nomeFornecedorRaw = data.conta_pagar.fornecedor_nome_sugerido || '';
 
     const normalizeText = (txt: string) =>
-      txt
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]+/g, ' ')
-        .trim();
+      txt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
-    const STOP = new Set([
-      'ltda',
-      'me',
-      'eireli',
-      'sa',
-      's',
-      'a',
-      'do',
-      'da',
-      'de',
-      'e',
-    ]);
+    const STOP = new Set(['ltda', 'me', 'eireli', 'sa', 's', 'a', 'do', 'da', 'de', 'e']);
 
     const tokenize = (txt: string) =>
-      normalizeText(txt)
-        .split(' ')
-        .map((t) => t.trim())
-        .filter((t) => t.length >= 2 && !STOP.has(t));
+      normalizeText(txt).split(' ').map(t => t.trim()).filter(t => t.length >= 2 && !STOP.has(t));
 
     const supplierSimilarity = (a: string, b: string) => {
       const ta = tokenize(a);
@@ -233,30 +267,19 @@ export function ContasPagarSimple() {
       return union ? inter / union : 0;
     };
 
-    // Filtrar apenas parcelas não pagas
-    const parcelasAbertas = parcelas.filter((p) => !p.pago);
+    const parcelasAbertas = parcelas.filter(p => !p.pago);
 
-    // Montar candidatos com score (evita “pegar o primeiro”)
     const candidatos = parcelasAbertas
-      .map((p) => {
+      .map(p => {
         const diffValor = valorBusca > 0 ? Math.abs(p.valor_parcela_centavos - valorBusca) : Number.POSITIVE_INFINITY;
-        const valorMatch =
-          valorBusca > 0 && diffValor <= valorBusca * tolerancia;
-
-        const fornecedorScore = nomeFornecedorRaw
-          ? supplierSimilarity(nomeFornecedorRaw, p.fornecedor)
-          : 0;
+        const valorMatch = valorBusca > 0 && diffValor <= valorBusca * tolerancia;
+        const fornecedorScore = nomeFornecedorRaw ? supplierSimilarity(nomeFornecedorRaw, p.fornecedor) : 0;
         const fornecedorMatch = nomeFornecedorRaw ? fornecedorScore >= 0.45 : false;
-
         const vencimentoMatch = vencimentoSug ? p.vencimento === vencimentoSug : false;
 
-        // Só considera candidato se bater em pelo menos um sinal
         if (!valorMatch && !fornecedorMatch && !vencimentoMatch) return null;
 
-        const valorScore = valorMatch && valorBusca > 0
-          ? 1 - diffValor / (valorBusca * tolerancia)
-          : 0;
-
+        const valorScore = valorMatch && valorBusca > 0 ? 1 - diffValor / (valorBusca * tolerancia) : 0;
         const score = nomeFornecedorRaw
           ? fornecedorScore * 0.6 + valorScore * 0.3 + (vencimentoMatch ? 0.1 : 0)
           : valorScore * 0.85 + (vencimentoMatch ? 0.15 : 0);
@@ -266,20 +289,35 @@ export function ContasPagarSimple() {
       .filter((x): x is { parcela: ParcelaCompleta; score: number } => !!x)
       .sort((a, b) => b.score - a.score);
 
-    const correspondentes = candidatos.map((c) => c.parcela);
+    const correspondentes = candidatos.map(c => c.parcela);
+    
+    const valorFinal = data.conta_pagar.valor_final_centavos ?? data.conta_pagar.valor_total_centavos ?? valorBusca;
+
+    // Auto-seleciona se houver match claro
+    let melhorMatch: number | null = null;
+    if (correspondentes.length > 0) {
+      const top = candidatos[0];
+      const second = candidatos[1];
+      const autoSelect = correspondentes.length === 1 ||
+        (!!top && top.score >= 0.88 && (!second || top.score - second.score >= 0.18));
+      if (autoSelect && top) {
+        melhorMatch = top.parcela.id;
+      }
+    }
+
+    return { correspondentes, melhorMatch, valorPago: valorFinal || 0 };
+  };
+  
+  // Função para buscar parcelas correspondentes ao comprovante (versão original para individual)
+  const searchMatchingParcelas = (data: DarBaixaData) => {
+    const { correspondentes, melhorMatch, valorPago } = findMatchingParcelas(data);
 
     setParcelasCorrespondentes(correspondentes);
-    setParcelaSelecionadaBaixa(null);
+    setParcelaSelecionadaBaixa(melhorMatch);
 
-    // Pré-preencher dados do pagamento (não depende da parcela escolhida)
-    const valorFinal =
-      data.conta_pagar.valor_final_centavos ??
-      data.conta_pagar.valor_total_centavos ??
-      valorBusca;
-
-    setBaixaFormData((prev) => ({
+    setBaixaFormData(prev => ({
       ...prev,
-      valor_pago_centavos: valorFinal || 0,
+      valor_pago_centavos: valorPago,
       data_pagamento: data.conta_pagar.data_pagamento
         ? parseLocalDate(data.conta_pagar.data_pagamento)
         : new Date(),
@@ -287,21 +325,10 @@ export function ContasPagarSimple() {
     }));
 
     if (correspondentes.length > 0) {
-      // Só auto-seleciona se houver 1 match OU se a sugestão for muito clara
-      const top = candidatos[0];
-      const second = candidatos[1];
-      const autoSelect =
-        correspondentes.length === 1 ||
-        (!!top && top.score >= 0.88 && (!second || top.score - second.score >= 0.18));
-
-      if (autoSelect && top) {
-        setParcelaSelecionadaBaixa(top.parcela.id);
-      }
-
       setShowDarBaixaModal(true);
       toast({
         title: `${correspondentes.length} parcela(s) encontrada(s)`,
-        description: autoSelect
+        description: melhorMatch
           ? 'Sugestão selecionada automaticamente — confira antes de confirmar.'
           : 'Selecione a parcela correta para dar baixa.',
       });
@@ -314,6 +341,74 @@ export function ContasPagarSimple() {
       variant: 'destructive',
     });
     navigate('/financeiro/contas-pagar/nova', { state: { dadosImportados: data } });
+  };
+  
+  // Atualizar seleção de parcela em um item do lote
+  const handleLoteItemSelect = (itemIndex: number, parcelaId: number | null) => {
+    setBaixaLoteItems(prev => prev.map((item, idx) => {
+      if (idx !== itemIndex) return item;
+      const parcela = item.parcelasCorrespondentes.find(p => p.id === parcelaId);
+      return {
+        ...item,
+        parcelaSelecionada: parcelaId,
+        valorPago: item.data.conta_pagar.valor_final_centavos ?? 
+                   item.data.conta_pagar.valor_total_centavos ?? 
+                   parcela?.valor_parcela_centavos ?? 0,
+        confirmado: parcelaId !== null
+      };
+    }));
+  };
+  
+  // Confirmar todas as baixas em lote
+  const handleConfirmarBaixaLote = async () => {
+    const itemsParaBaixar = baixaLoteItems.filter(item => item.parcelaSelecionada !== null && item.confirmado);
+    
+    if (itemsParaBaixar.length === 0) {
+      toast({ title: 'Nenhum item selecionado para baixa', variant: 'destructive' });
+      return;
+    }
+    
+    if (!baixaLoteFormaPagamento) {
+      toast({ title: 'Selecione a forma de pagamento', variant: 'destructive' });
+      return;
+    }
+    
+    setBaixaLoteProcessing(true);
+    let sucesso = 0;
+    let erros = 0;
+    
+    for (const item of itemsParaBaixar) {
+      try {
+        await supabase.rpc('pagar_parcela', {
+          parcela_id: item.parcelaSelecionada!,
+          conta_bancaria_id: baixaLoteContaBancaria ? parseInt(baixaLoteContaBancaria) : null,
+          forma_pagamento_id: parseInt(baixaLoteFormaPagamento),
+          valor_pago_centavos: item.valorPago,
+          observacao_param: item.data.observacao_ia || null
+        });
+        sucesso++;
+      } catch (error: any) {
+        console.error('Erro ao dar baixa:', error);
+        erros++;
+      }
+    }
+    
+    setBaixaLoteProcessing(false);
+    
+    if (erros === 0) {
+      toast({ title: `${sucesso} baixa(s) realizada(s) com sucesso!` });
+    } else {
+      toast({ 
+        title: `${sucesso} baixa(s) realizada(s), ${erros} erro(s)`, 
+        variant: 'destructive' 
+      });
+    }
+    
+    setShowBaixaLoteModal(false);
+    setBaixaLoteItems([]);
+    setBaixaLoteFormaPagamento('');
+    setBaixaLoteContaBancaria('');
+    fetchParcelas();
   };
 
   // Confirmar baixa da parcela
@@ -2053,6 +2148,155 @@ export function ContasPagarSimple() {
             >
               <Check className="h-4 w-4 mr-2" />
               Confirmar Baixa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal DAR_BAIXA LOTE (múltiplos comprovantes) */}
+      <Dialog open={showBaixaLoteModal} onOpenChange={(open) => {
+        if (!open && !baixaLoteProcessing) {
+          setShowBaixaLoteModal(false);
+          setBaixaLoteItems([]);
+          setBaixaLoteFormaPagamento('');
+          setBaixaLoteContaBancaria('');
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-500" />
+              Baixa em Lote - {baixaLoteItems.length} Comprovantes
+            </DialogTitle>
+            <CardDescription>
+              Revise os comprovantes identificados. Selecione a parcela correspondente para cada um.
+            </CardDescription>
+          </DialogHeader>
+          
+          {/* Configurações globais para o lote */}
+          <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+            <div>
+              <Label>Forma de Pagamento *</Label>
+              <Select value={baixaLoteFormaPagamento} onValueChange={setBaixaLoteFormaPagamento}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {formasPagamento.map(f => (
+                    <SelectItem key={f.id} value={f.id.toString()}>{f.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Conta Bancária</Label>
+              <Select value={baixaLoteContaBancaria} onValueChange={setBaixaLoteContaBancaria}>
+                <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
+                <SelectContent>
+                  {contasBancarias.map(c => (
+                    <SelectItem key={c.id} value={c.id.toString()}>{c.nome_conta} ({c.banco})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <ScrollArea className="max-h-[50vh]">
+            <div className="space-y-3">
+              {baixaLoteItems.map((item, itemIndex) => {
+                const temMatch = item.parcelaSelecionada !== null;
+                
+                return (
+                  <Card key={itemIndex} className={`${temMatch ? 'border-green-300 bg-green-50/30 dark:bg-green-950/20' : 'border-yellow-300 bg-yellow-50/30 dark:bg-yellow-950/20'}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        {/* Info do comprovante */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-medium truncate">{item.data.fileName || `Comprovante ${itemIndex + 1}`}</span>
+                            {temMatch ? (
+                              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                                <Check className="h-3 w-3 mr-1" /> Identificado
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-300">
+                                Selecione
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-3 gap-2 text-sm">
+                            {item.data.conta_pagar.fornecedor_nome_sugerido && (
+                              <div>
+                                <span className="text-muted-foreground">Fornecedor:</span>
+                                <span className="ml-1 font-medium">{item.data.conta_pagar.fornecedor_nome_sugerido}</span>
+                              </div>
+                            )}
+                            <div>
+                              <span className="text-muted-foreground">Valor:</span>
+                              <span className="ml-1 font-medium">
+                                {formatCurrency(item.data.conta_pagar.valor_final_centavos || item.data.conta_pagar.valor_total_centavos || 0)}
+                              </span>
+                            </div>
+                            {item.data.conta_pagar.data_pagamento && (
+                              <div>
+                                <span className="text-muted-foreground">Data:</span>
+                                <span className="ml-1">{formatDate(item.data.conta_pagar.data_pagamento)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Seletor de parcela */}
+                        <div className="w-80">
+                          <Select 
+                            value={item.parcelaSelecionada?.toString() || ''} 
+                            onValueChange={(v) => handleLoteItemSelect(itemIndex, v ? parseInt(v) : null)}
+                          >
+                            <SelectTrigger className={temMatch ? 'border-green-400' : 'border-yellow-400'}>
+                              <SelectValue placeholder="Selecione a parcela..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {item.parcelasCorrespondentes.length === 0 ? (
+                                <div className="p-2 text-sm text-muted-foreground">Nenhuma correspondência</div>
+                              ) : (
+                                item.parcelasCorrespondentes.map(parcela => (
+                                  <SelectItem key={parcela.id} value={parcela.id.toString()}>
+                                    <div className="flex justify-between gap-4 w-full">
+                                      <span className="truncate">{parcela.fornecedor}</span>
+                                      <span className="font-medium">{formatCurrency(parcela.valor_parcela_centavos)}</span>
+                                      <span className="text-muted-foreground">{formatDate(parcela.vencimento)}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </ScrollArea>
+
+          <DialogFooter className="gap-2">
+            <div className="flex-1 text-sm text-muted-foreground">
+              {baixaLoteItems.filter(i => i.parcelaSelecionada !== null).length} de {baixaLoteItems.length} selecionados
+            </div>
+            <Button variant="outline" onClick={() => setShowBaixaLoteModal(false)} disabled={baixaLoteProcessing}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleConfirmarBaixaLote} 
+              disabled={!baixaLoteFormaPagamento || baixaLoteItems.filter(i => i.parcelaSelecionada !== null).length === 0 || baixaLoteProcessing}
+            >
+              {baixaLoteProcessing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4 mr-2" />
+              )}
+              Confirmar Baixas ({baixaLoteItems.filter(i => i.parcelaSelecionada !== null).length})
             </Button>
           </DialogFooter>
         </DialogContent>
