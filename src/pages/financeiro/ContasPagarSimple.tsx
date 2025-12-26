@@ -67,6 +67,9 @@ interface DarBaixaData {
     data_pagamento?: string;
     numero_nota?: string;
   };
+  // Alguns retornos vêm como `parcelas`, outros como `contas_pagar_parcelas`
+  parcelas?: Array<{ parcela_num: number; valor_parcela_centavos: number; vencimento: string }>;
+  contas_pagar_parcelas?: Array<{ parcela_num: number; valor_parcela_centavos: number; vencimento: string }>;
   observacao_ia?: string;
 }
 
@@ -177,58 +180,140 @@ export function ContasPagarSimple() {
   
   // Função para buscar parcelas correspondentes ao comprovante
   const searchMatchingParcelas = (data: DarBaixaData) => {
-    const valorBusca = data.conta_pagar.valor_total_centavos || data.conta_pagar.valor_final_centavos || 0;
-    const nomeFornecedor = data.conta_pagar.fornecedor_nome_sugerido?.toLowerCase() || '';
     const tolerancia = 0.15; // 15% de tolerância no valor
-    
+
+    const valorBusca =
+      data.conta_pagar.valor_final_centavos ??
+      data.conta_pagar.valor_total_centavos ??
+      data.parcelas?.[0]?.valor_parcela_centavos ??
+      data.contas_pagar_parcelas?.[0]?.valor_parcela_centavos ??
+      0;
+
+    const vencimentoSug =
+      data.parcelas?.[0]?.vencimento ?? data.contas_pagar_parcelas?.[0]?.vencimento;
+
+    const nomeFornecedorRaw = data.conta_pagar.fornecedor_nome_sugerido || '';
+
+    const normalizeText = (txt: string) =>
+      txt
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+
+    const STOP = new Set([
+      'ltda',
+      'me',
+      'eireli',
+      'sa',
+      's',
+      'a',
+      'do',
+      'da',
+      'de',
+      'e',
+    ]);
+
+    const tokenize = (txt: string) =>
+      normalizeText(txt)
+        .split(' ')
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 2 && !STOP.has(t));
+
+    const supplierSimilarity = (a: string, b: string) => {
+      const ta = tokenize(a);
+      const tb = tokenize(b);
+      if (!ta.length || !tb.length) return 0;
+      const setA = new Set(ta);
+      const setB = new Set(tb);
+      let inter = 0;
+      for (const t of setA) if (setB.has(t)) inter++;
+      const union = new Set([...setA, ...setB]).size;
+      return union ? inter / union : 0;
+    };
+
     // Filtrar apenas parcelas não pagas
-    const parcelasAbertas = parcelas.filter(p => !p.pago);
-    
-    // Buscar por valor aproximado e/ou nome do fornecedor
-    const correspondentes = parcelasAbertas.filter(p => {
-      const valorMatch = valorBusca > 0 && 
-        Math.abs(p.valor_parcela_centavos - valorBusca) <= valorBusca * tolerancia;
-      
-      const fornecedorMatch = nomeFornecedor && 
-        p.fornecedor.toLowerCase().includes(nomeFornecedor);
-      
-      // Match se valor ou fornecedor correspondem
-      return valorMatch || fornecedorMatch;
-    });
-    
-    // Ordenar por relevância (match de valor + fornecedor primeiro)
-    correspondentes.sort((a, b) => {
-      const aValorMatch = valorBusca > 0 && Math.abs(a.valor_parcela_centavos - valorBusca) <= valorBusca * tolerancia ? 1 : 0;
-      const bValorMatch = valorBusca > 0 && Math.abs(b.valor_parcela_centavos - valorBusca) <= valorBusca * tolerancia ? 1 : 0;
-      const aFornecedorMatch = nomeFornecedor && a.fornecedor.toLowerCase().includes(nomeFornecedor) ? 1 : 0;
-      const bFornecedorMatch = nomeFornecedor && b.fornecedor.toLowerCase().includes(nomeFornecedor) ? 1 : 0;
-      return (bValorMatch + bFornecedorMatch) - (aValorMatch + aFornecedorMatch);
-    });
-    
+    const parcelasAbertas = parcelas.filter((p) => !p.pago);
+
+    // Montar candidatos com score (evita “pegar o primeiro”)
+    const candidatos = parcelasAbertas
+      .map((p) => {
+        const diffValor = valorBusca > 0 ? Math.abs(p.valor_parcela_centavos - valorBusca) : Number.POSITIVE_INFINITY;
+        const valorMatch =
+          valorBusca > 0 && diffValor <= valorBusca * tolerancia;
+
+        const fornecedorScore = nomeFornecedorRaw
+          ? supplierSimilarity(nomeFornecedorRaw, p.fornecedor)
+          : 0;
+        const fornecedorMatch = nomeFornecedorRaw ? fornecedorScore >= 0.45 : false;
+
+        const vencimentoMatch = vencimentoSug ? p.vencimento === vencimentoSug : false;
+
+        // Só considera candidato se bater em pelo menos um sinal
+        if (!valorMatch && !fornecedorMatch && !vencimentoMatch) return null;
+
+        const valorScore = valorMatch && valorBusca > 0
+          ? 1 - diffValor / (valorBusca * tolerancia)
+          : 0;
+
+        const score = nomeFornecedorRaw
+          ? fornecedorScore * 0.6 + valorScore * 0.3 + (vencimentoMatch ? 0.1 : 0)
+          : valorScore * 0.85 + (vencimentoMatch ? 0.15 : 0);
+
+        return { parcela: p, score };
+      })
+      .filter((x): x is { parcela: ParcelaCompleta; score: number } => !!x)
+      .sort((a, b) => b.score - a.score);
+
+    const correspondentes = candidatos.map((c) => c.parcela);
+
     setParcelasCorrespondentes(correspondentes);
-    
+    setParcelaSelecionadaBaixa(null);
+
+    // Pré-preencher dados do pagamento (não depende da parcela escolhida)
+    const valorFinal =
+      data.conta_pagar.valor_final_centavos ??
+      data.conta_pagar.valor_total_centavos ??
+      valorBusca;
+
+    setBaixaFormData((prev) => ({
+      ...prev,
+      valor_pago_centavos: valorFinal || 0,
+      data_pagamento: data.conta_pagar.data_pagamento
+        ? parseLocalDate(data.conta_pagar.data_pagamento)
+        : new Date(),
+      observacao: data.observacao_ia || '',
+    }));
+
     if (correspondentes.length > 0) {
-      // Pré-selecionar a primeira parcela
-      setParcelaSelecionadaBaixa(correspondentes[0].id);
-      // Pré-preencher valor pago com juros/descontos
-      const valorFinal = data.conta_pagar.valor_final_centavos || 
-                         data.conta_pagar.valor_total_centavos || 
-                         correspondentes[0].valor_parcela_centavos;
-      setBaixaFormData(prev => ({
-        ...prev,
-        valor_pago_centavos: valorFinal,
-        data_pagamento: data.conta_pagar.data_pagamento 
-          ? parseLocalDate(data.conta_pagar.data_pagamento) 
-          : new Date(),
-        observacao: data.observacao_ia || ''
-      }));
+      // Só auto-seleciona se houver 1 match OU se a sugestão for muito clara
+      const top = candidatos[0];
+      const second = candidatos[1];
+      const autoSelect =
+        correspondentes.length === 1 ||
+        (!!top && top.score >= 0.88 && (!second || top.score - second.score >= 0.18));
+
+      if (autoSelect && top) {
+        setParcelaSelecionadaBaixa(top.parcela.id);
+      }
+
       setShowDarBaixaModal(true);
-      toast({ title: `${correspondentes.length} parcela(s) encontrada(s)`, description: 'Selecione a parcela para dar baixa' });
-    } else {
-      toast({ title: 'Nenhuma parcela correspondente', description: 'Criando nova conta a pagar...', variant: 'destructive' });
-      // Navegar para criar nova conta com os dados
-      navigate('/financeiro/contas-pagar/nova', { state: { dadosImportados: data } });
+      toast({
+        title: `${correspondentes.length} parcela(s) encontrada(s)`,
+        description: autoSelect
+          ? 'Sugestão selecionada automaticamente — confira antes de confirmar.'
+          : 'Selecione a parcela correta para dar baixa.',
+      });
+      return;
     }
+
+    toast({
+      title: 'Nenhuma parcela correspondente',
+      description: 'Criando nova conta a pagar...',
+      variant: 'destructive',
+    });
+    navigate('/financeiro/contas-pagar/nova', { state: { dadosImportados: data } });
   };
 
   // Confirmar baixa da parcela
