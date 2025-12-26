@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -54,9 +54,26 @@ interface Filial { id: number; nome: string; }
 interface ContaBancaria { id: number; nome_conta: string; banco: string; }
 interface FormaPagamento { id: number; nome: string; }
 
+// Interface para dados de DAR_BAIXA vindos da IA
+interface DarBaixaData {
+  intencao: string;
+  conta_pagar: {
+    descricao?: string;
+    valor_total_centavos?: number;
+    valor_final_centavos?: number;
+    juros_centavos?: number;
+    desconto_centavos?: number;
+    fornecedor_nome_sugerido?: string;
+    data_pagamento?: string;
+    numero_nota?: string;
+  };
+  observacao_ia?: string;
+}
+
 export function ContasPagarSimple() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const { importFiles, processing: xmlProcessing, progress: xmlProgress } = useXMLImport();
   const [parcelas, setParcelas] = useState<ParcelaCompleta[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,6 +109,19 @@ export function ContasPagarSimple() {
   const [showEditMassModal, setShowEditMassModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showColumnsModal, setShowColumnsModal] = useState(false);
+
+  // DAR_BAIXA modal (IA)
+  const [showDarBaixaModal, setShowDarBaixaModal] = useState(false);
+  const [darBaixaData, setDarBaixaData] = useState<DarBaixaData | null>(null);
+  const [parcelasCorrespondentes, setParcelasCorrespondentes] = useState<ParcelaCompleta[]>([]);
+  const [parcelaSelecionadaBaixa, setParcelaSelecionadaBaixa] = useState<number | null>(null);
+  const [baixaFormData, setBaixaFormData] = useState({
+    conta_bancaria_id: '',
+    forma_pagamento_id: '',
+    data_pagamento: new Date(),
+    valor_pago_centavos: 0,
+    observacao: ''
+  });
 
   // edição em massa
   const [massEditData, setMassEditData] = useState({
@@ -132,6 +162,113 @@ export function ContasPagarSimple() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => { fetchAllData(); }, []);
+  
+  // Effect para processar DAR_BAIXA vindo da IA
+  useEffect(() => {
+    const state = location.state as { darBaixa?: DarBaixaData } | null;
+    if (state?.darBaixa && parcelas.length > 0) {
+      console.log("📋 Recebido DAR_BAIXA:", state.darBaixa);
+      setDarBaixaData(state.darBaixa);
+      searchMatchingParcelas(state.darBaixa);
+      // Limpar o state da navegação
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, parcelas]);
+  
+  // Função para buscar parcelas correspondentes ao comprovante
+  const searchMatchingParcelas = (data: DarBaixaData) => {
+    const valorBusca = data.conta_pagar.valor_total_centavos || data.conta_pagar.valor_final_centavos || 0;
+    const nomeFornecedor = data.conta_pagar.fornecedor_nome_sugerido?.toLowerCase() || '';
+    const tolerancia = 0.15; // 15% de tolerância no valor
+    
+    // Filtrar apenas parcelas não pagas
+    const parcelasAbertas = parcelas.filter(p => !p.pago);
+    
+    // Buscar por valor aproximado e/ou nome do fornecedor
+    const correspondentes = parcelasAbertas.filter(p => {
+      const valorMatch = valorBusca > 0 && 
+        Math.abs(p.valor_parcela_centavos - valorBusca) <= valorBusca * tolerancia;
+      
+      const fornecedorMatch = nomeFornecedor && 
+        p.fornecedor.toLowerCase().includes(nomeFornecedor);
+      
+      // Match se valor ou fornecedor correspondem
+      return valorMatch || fornecedorMatch;
+    });
+    
+    // Ordenar por relevância (match de valor + fornecedor primeiro)
+    correspondentes.sort((a, b) => {
+      const aValorMatch = valorBusca > 0 && Math.abs(a.valor_parcela_centavos - valorBusca) <= valorBusca * tolerancia ? 1 : 0;
+      const bValorMatch = valorBusca > 0 && Math.abs(b.valor_parcela_centavos - valorBusca) <= valorBusca * tolerancia ? 1 : 0;
+      const aFornecedorMatch = nomeFornecedor && a.fornecedor.toLowerCase().includes(nomeFornecedor) ? 1 : 0;
+      const bFornecedorMatch = nomeFornecedor && b.fornecedor.toLowerCase().includes(nomeFornecedor) ? 1 : 0;
+      return (bValorMatch + bFornecedorMatch) - (aValorMatch + aFornecedorMatch);
+    });
+    
+    setParcelasCorrespondentes(correspondentes);
+    
+    if (correspondentes.length > 0) {
+      // Pré-selecionar a primeira parcela
+      setParcelaSelecionadaBaixa(correspondentes[0].id);
+      // Pré-preencher valor pago com juros/descontos
+      const valorFinal = data.conta_pagar.valor_final_centavos || 
+                         data.conta_pagar.valor_total_centavos || 
+                         correspondentes[0].valor_parcela_centavos;
+      setBaixaFormData(prev => ({
+        ...prev,
+        valor_pago_centavos: valorFinal,
+        data_pagamento: data.conta_pagar.data_pagamento 
+          ? parseLocalDate(data.conta_pagar.data_pagamento) 
+          : new Date(),
+        observacao: data.observacao_ia || ''
+      }));
+      setShowDarBaixaModal(true);
+      toast({ title: `${correspondentes.length} parcela(s) encontrada(s)`, description: 'Selecione a parcela para dar baixa' });
+    } else {
+      toast({ title: 'Nenhuma parcela correspondente', description: 'Criando nova conta a pagar...', variant: 'destructive' });
+      // Navegar para criar nova conta com os dados
+      navigate('/financeiro/contas-pagar/nova', { state: { dadosImportados: data } });
+    }
+  };
+
+  // Confirmar baixa da parcela
+  const handleConfirmarBaixa = async () => {
+    if (!parcelaSelecionadaBaixa) {
+      toast({ title: 'Selecione uma parcela', variant: 'destructive' });
+      return;
+    }
+    if (!baixaFormData.forma_pagamento_id) {
+      toast({ title: 'Selecione a forma de pagamento', variant: 'destructive' });
+      return;
+    }
+    
+    try {
+      await supabase.rpc('pagar_parcela', {
+        parcela_id: parcelaSelecionadaBaixa,
+        conta_bancaria_id: baixaFormData.conta_bancaria_id ? parseInt(baixaFormData.conta_bancaria_id) : null,
+        forma_pagamento_id: parseInt(baixaFormData.forma_pagamento_id),
+        valor_pago_centavos: baixaFormData.valor_pago_centavos,
+        observacao_param: baixaFormData.observacao || null
+      });
+      
+      toast({ title: 'Baixa realizada com sucesso!' });
+      setShowDarBaixaModal(false);
+      setDarBaixaData(null);
+      setParcelasCorrespondentes([]);
+      setParcelaSelecionadaBaixa(null);
+      setBaixaFormData({
+        conta_bancaria_id: '',
+        forma_pagamento_id: '',
+        data_pagamento: new Date(),
+        valor_pago_centavos: 0,
+        observacao: ''
+      });
+      fetchParcelas();
+    } catch (error: any) {
+      toast({ title: 'Erro ao dar baixa', description: error?.message || 'Erro desconhecido', variant: 'destructive' });
+    }
+  };
+
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -1621,6 +1758,217 @@ export function ContasPagarSimple() {
               filial: true, valor_parcela: true, parcela: true, vencimento: true, data_pagamento: true, status: true, acoes: true
             })}>Restaurar Padrão</Button>
             <Button onClick={() => setShowColumnsModal(false)}>Aplicar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal DAR_BAIXA (IA) */}
+      <Dialog open={showDarBaixaModal} onOpenChange={(open) => {
+        setShowDarBaixaModal(open);
+        if (!open) {
+          setDarBaixaData(null);
+          setParcelasCorrespondentes([]);
+          setParcelaSelecionadaBaixa(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-500" />
+              Dar Baixa - Comprovante Identificado
+            </DialogTitle>
+            <CardDescription>
+              A IA identificou um comprovante de pagamento. Selecione a parcela correspondente.
+            </CardDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-4 p-1">
+              {/* Dados extraídos pela IA */}
+              {darBaixaData && (
+                <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Dados Extraídos pela IA</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-2 text-sm">
+                    {darBaixaData.conta_pagar.fornecedor_nome_sugerido && (
+                      <div>
+                        <span className="text-muted-foreground">Fornecedor:</span>
+                        <span className="ml-2 font-medium">{darBaixaData.conta_pagar.fornecedor_nome_sugerido}</span>
+                      </div>
+                    )}
+                    {darBaixaData.conta_pagar.valor_total_centavos && (
+                      <div>
+                        <span className="text-muted-foreground">Valor:</span>
+                        <span className="ml-2 font-medium">{formatCurrency(darBaixaData.conta_pagar.valor_total_centavos)}</span>
+                      </div>
+                    )}
+                    {darBaixaData.conta_pagar.valor_final_centavos && darBaixaData.conta_pagar.valor_final_centavos !== darBaixaData.conta_pagar.valor_total_centavos && (
+                      <div>
+                        <span className="text-muted-foreground">Valor Pago:</span>
+                        <span className="ml-2 font-medium text-green-600">{formatCurrency(darBaixaData.conta_pagar.valor_final_centavos)}</span>
+                      </div>
+                    )}
+                    {darBaixaData.conta_pagar.juros_centavos && darBaixaData.conta_pagar.juros_centavos > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Juros:</span>
+                        <span className="ml-2 font-medium text-red-600">+{formatCurrency(darBaixaData.conta_pagar.juros_centavos)}</span>
+                      </div>
+                    )}
+                    {darBaixaData.conta_pagar.desconto_centavos && darBaixaData.conta_pagar.desconto_centavos > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Desconto:</span>
+                        <span className="ml-2 font-medium text-green-600">-{formatCurrency(darBaixaData.conta_pagar.desconto_centavos)}</span>
+                      </div>
+                    )}
+                    {darBaixaData.observacao_ia && (
+                      <div className="col-span-2">
+                        <span className="text-muted-foreground">Observação IA:</span>
+                        <span className="ml-2 italic">{darBaixaData.observacao_ia}</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Lista de parcelas correspondentes */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Parcelas Correspondentes ({parcelasCorrespondentes.length})</Label>
+                {parcelasCorrespondentes.map((parcela) => (
+                  <Card 
+                    key={parcela.id} 
+                    className={`cursor-pointer transition-all ${
+                      parcelaSelecionadaBaixa === parcela.id 
+                        ? 'ring-2 ring-primary bg-primary/5' 
+                        : 'hover:bg-muted/50'
+                    }`}
+                    onClick={() => {
+                      setParcelaSelecionadaBaixa(parcela.id);
+                      setBaixaFormData(prev => ({
+                        ...prev,
+                        valor_pago_centavos: darBaixaData?.conta_pagar.valor_final_centavos || 
+                                             darBaixaData?.conta_pagar.valor_total_centavos || 
+                                             parcela.valor_parcela_centavos
+                      }));
+                    }}
+                  >
+                    <CardContent className="p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Checkbox 
+                          checked={parcelaSelecionadaBaixa === parcela.id}
+                          onCheckedChange={() => setParcelaSelecionadaBaixa(parcela.id)}
+                        />
+                        <div>
+                          <p className="font-medium">{parcela.fornecedor}</p>
+                          <p className="text-sm text-muted-foreground">{parcela.descricao}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold">{formatCurrency(parcela.valor_parcela_centavos)}</p>
+                        <p className="text-sm text-muted-foreground">Venc: {formatDate(parcela.vencimento)}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                {parcelasCorrespondentes.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Nenhuma parcela correspondente encontrada
+                  </p>
+                )}
+              </div>
+
+              {/* Formulário de pagamento */}
+              {parcelaSelecionadaBaixa && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Dados do Pagamento</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Data do Pagamento</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start text-left">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {format(baixaFormData.data_pagamento, 'dd/MM/yyyy')}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={baixaFormData.data_pagamento}
+                            onSelect={(date) => date && setBaixaFormData(prev => ({ ...prev, data_pagamento: date }))}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div>
+                      <Label>Forma de Pagamento *</Label>
+                      <Select 
+                        value={baixaFormData.forma_pagamento_id} 
+                        onValueChange={(v) => setBaixaFormData(prev => ({ ...prev, forma_pagamento_id: v }))}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          {formasPagamento.map(f => (
+                            <SelectItem key={f.id} value={f.id.toString()}>{f.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Conta Bancária</Label>
+                      <Select 
+                        value={baixaFormData.conta_bancaria_id} 
+                        onValueChange={(v) => setBaixaFormData(prev => ({ ...prev, conta_bancaria_id: v }))}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
+                        <SelectContent>
+                          {contasBancarias.map(c => (
+                            <SelectItem key={c.id} value={c.id.toString()}>{c.nome_conta} ({c.banco})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Valor Pago</Label>
+                      <CurrencyInput
+                        value={baixaFormData.valor_pago_centavos}
+                        onValueChange={(v) => setBaixaFormData(prev => ({ ...prev, valor_pago_centavos: v }))}
+                        placeholder="0,00"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Observação</Label>
+                      <Textarea
+                        value={baixaFormData.observacao}
+                        onChange={(e) => setBaixaFormData(prev => ({ ...prev, observacao: e.target.value }))}
+                        placeholder="Observações sobre o pagamento..."
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </ScrollArea>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => {
+              setShowDarBaixaModal(false);
+              // Se não der baixa, oferecer criar nova conta
+              if (darBaixaData) {
+                navigate('/financeiro/contas-pagar/nova', { state: { dadosImportados: darBaixaData } });
+              }
+            }}>
+              Criar Nova Conta
+            </Button>
+            <Button 
+              onClick={handleConfirmarBaixa} 
+              disabled={!parcelaSelecionadaBaixa || !baixaFormData.forma_pagamento_id}
+            >
+              <Check className="h-4 w-4 mr-2" />
+              Confirmar Baixa
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
