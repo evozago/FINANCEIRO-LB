@@ -16,10 +16,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EditarParcelaModal } from '@/components/financeiro/EditarParcelaModal';
+import { ExportImportFinanceiro } from '@/components/financeiro/ExportImportFinanceiro';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import {
   Search, Filter, Edit, Check, Trash2, Settings2, CalendarIcon,
-  ArrowUpDown, X, Plus, RotateCcw, Edit2, Copy, Upload, FileText, Loader2
+  ArrowUpDown, X, Plus, RotateCcw, Edit2, Copy, Upload, FileText, Loader2, Download
 } from 'lucide-react';
 import { useXMLImport } from '@/hooks/useXMLImport';
 import { Progress } from '@/components/ui/progress';
@@ -170,6 +171,9 @@ export function ContasPagarSimple() {
   // modal edição individual
   const [editingParcela, setEditingParcela] = useState<ParcelaCompleta | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  
+  // modal export/import
+  const [showExportImportModal, setShowExportImportModal] = useState(false);
 
   // visibilidade colunas
   const [visibleColumns, setVisibleColumns] = useState({
