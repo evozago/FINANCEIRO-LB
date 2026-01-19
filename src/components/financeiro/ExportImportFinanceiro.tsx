@@ -8,10 +8,12 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Download, Upload, FileJson, CheckCircle, XCircle, AlertCircle, Loader2, FileDown, FileUp, X } from 'lucide-react';
+import { Download, Upload, FileJson, CheckCircle, XCircle, AlertCircle, Loader2, FileDown, FileUp, X, FileSpreadsheet } from 'lucide-react';
 import { format } from 'date-fns';
+import Papa from 'papaparse';
 
 interface ExportImportFinanceiroProps {
   isOpen: boolean;
@@ -64,6 +66,10 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
   const [importResults, setImportResults] = useState<ImportResult[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<FinanceiroExportData | null>(null);
+  const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json');
+  const [importFormat, setImportFormat] = useState<'json' | 'csv' | null>(null);
+  const [csvTableToImport, setCsvTableToImport] = useState<string>('contas_pagar_parcelas');
+  const [csvPreviewData, setCsvPreviewData] = useState<any[] | null>(null);
 
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     contas_pagar: true,
@@ -79,6 +85,53 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
 
   const toggleOption = (key: keyof ExportOptions) => {
     setExportOptions(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // ============= HELPERS CSV =============
+  const tableLabels: Record<string, string> = {
+    categorias_financeiras: 'Categorias',
+    filiais: 'Filiais',
+    pessoas_juridicas: 'Fornecedores_PJ',
+    pessoas_fisicas: 'Fornecedores_PF',
+    contas_bancarias: 'Contas_Bancarias',
+    formas_pagamento: 'Formas_Pagamento',
+    recorrencias: 'Recorrencias',
+    contas_pagar: 'Contas_Pagar',
+    contas_pagar_parcelas: 'Parcelas',
+  };
+
+  const exportToCSV = async (exportData: FinanceiroExportData) => {
+    const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm');
+    
+    const tablesToExport = [
+      { key: 'categorias_financeiras', data: exportData.categorias_financeiras },
+      { key: 'filiais', data: exportData.filiais },
+      { key: 'pessoas_juridicas', data: exportData.pessoas_juridicas },
+      { key: 'pessoas_fisicas', data: exportData.pessoas_fisicas },
+      { key: 'contas_bancarias', data: exportData.contas_bancarias },
+      { key: 'formas_pagamento', data: exportData.formas_pagamento },
+      { key: 'recorrencias', data: exportData.recorrencias },
+      { key: 'contas_pagar', data: exportData.contas_pagar },
+      { key: 'contas_pagar_parcelas', data: exportData.contas_pagar_parcelas },
+    ].filter(t => t.data && t.data.length > 0);
+
+    for (const table of tablesToExport) {
+      const csv = Papa.unparse(table.data!, {
+        delimiter: ';',
+        header: true,
+      });
+      
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${tableLabels[table.key] || table.key}_${timestamp}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      // Pequeno delay entre downloads
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
   };
 
   // ============= EXPORTAÇÃO =============
@@ -167,19 +220,24 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
         setExportProgress((currentStep / totalSteps) * 100);
       }
 
-      // Gerar arquivo JSON
-      const jsonString = JSON.stringify(exportData, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `financeiro_backup_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      // Gerar arquivo baseado no formato selecionado
+      if (exportFormat === 'json') {
+        const jsonString = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `financeiro_backup_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        // Exportar CSV - gera múltiplos arquivos (um para cada tabela)
+        await exportToCSV(exportData);
+      }
 
       toast({
         title: 'Exportação concluída!',
-        description: `Arquivo gerado com sucesso.`,
+        description: exportFormat === 'json' ? 'Arquivo JSON gerado com sucesso.' : 'Arquivos CSV gerados com sucesso.',
       });
 
     } catch (error) {
@@ -200,26 +258,57 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.json')) {
+    const isJson = file.name.endsWith('.json');
+    const isCsv = file.name.endsWith('.csv');
+
+    if (!isJson && !isCsv) {
       toast({
         title: 'Arquivo inválido',
-        description: 'Por favor, selecione um arquivo JSON.',
+        description: 'Por favor, selecione um arquivo JSON ou CSV.',
         variant: 'destructive',
       });
       return;
     }
 
     setSelectedFile(file);
+    setImportFormat(isJson ? 'json' : 'csv');
 
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const data = JSON.parse(event.target?.result as string) as FinanceiroExportData;
-        setPreviewData(data);
+        if (isJson) {
+          const data = JSON.parse(event.target?.result as string) as FinanceiroExportData;
+          setPreviewData(data);
+          setCsvPreviewData(null);
+        } else {
+          // Parse CSV
+          Papa.parse(event.target?.result as string, {
+            header: true,
+            skipEmptyLines: true,
+            delimiter: ';',
+            complete: (results) => {
+              if (results.data.length === 0) {
+                // Tentar com vírgula
+                Papa.parse(event.target?.result as string, {
+                  header: true,
+                  skipEmptyLines: true,
+                  delimiter: ',',
+                  complete: (results2) => {
+                    setCsvPreviewData(results2.data as any[]);
+                    setPreviewData(null);
+                  }
+                });
+              } else {
+                setCsvPreviewData(results.data as any[]);
+                setPreviewData(null);
+              }
+            }
+          });
+        }
       } catch (error) {
         toast({
           title: 'Arquivo inválido',
-          description: 'Não foi possível ler o arquivo JSON.',
+          description: 'Não foi possível ler o arquivo.',
           variant: 'destructive',
         });
       }
@@ -336,6 +425,20 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
   };
 
   const handleImport = async () => {
+    // Importação JSON
+    if (previewData) {
+      await handleImportJSON();
+      return;
+    }
+    
+    // Importação CSV
+    if (csvPreviewData && csvPreviewData.length > 0) {
+      await handleImportCSV();
+      return;
+    }
+  };
+
+  const handleImportJSON = async () => {
     if (!previewData) return;
 
     setImporting(true);
@@ -404,11 +507,81 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
     }
   };
 
+  const handleImportCSV = async () => {
+    if (!csvPreviewData || csvPreviewData.length === 0) return;
+
+    setImporting(true);
+    setImportProgress(0);
+    setImportResults([]);
+
+    try {
+      // Determinar campo único baseado na tabela selecionada
+      const uniqueFields: Record<string, string> = {
+        categorias_financeiras: 'id',
+        filiais: 'id',
+        pessoas_juridicas: 'cnpj',
+        pessoas_fisicas: 'cpf',
+        contas_bancarias: 'id',
+        formas_pagamento: 'nome',
+        recorrencias: 'id',
+        contas_pagar: 'chave_nfe',
+        contas_pagar_parcelas: 'id',
+      };
+
+      const uniqueField = uniqueFields[csvTableToImport] || 'id';
+      const label = tableLabels[csvTableToImport] || csvTableToImport;
+
+      // Converter valores numéricos e booleanos
+      const processedData = csvPreviewData.map(row => {
+        const processed: any = {};
+        for (const [key, value] of Object.entries(row)) {
+          if (value === '' || value === null || value === undefined) {
+            processed[key] = null;
+          } else if (key.includes('centavos') || key === 'id' || key.endsWith('_id') || key === 'num_parcelas' || key === 'parcela_num' || key === 'numero_parcela') {
+            const num = parseInt(value as string);
+            processed[key] = isNaN(num) ? null : num;
+          } else if (value === 'true' || value === 'TRUE') {
+            processed[key] = true;
+          } else if (value === 'false' || value === 'FALSE') {
+            processed[key] = false;
+          } else {
+            processed[key] = value;
+          }
+        }
+        return processed;
+      });
+
+      const result = await importTableData(csvTableToImport, processedData, uniqueField, label);
+      setImportResults([result]);
+
+      toast({
+        title: 'Importação CSV concluída!',
+        description: `${result.inseridos} inseridos, ${result.atualizados} atualizados, ${result.erros} erros.`,
+        variant: result.erros > 0 ? 'destructive' : 'default',
+      });
+
+      if (onComplete) onComplete();
+
+    } catch (error) {
+      console.error('Erro na importação CSV:', error);
+      toast({
+        title: 'Erro na importação',
+        description: 'Ocorreu um erro ao importar o CSV.',
+        variant: 'destructive',
+      });
+    } finally {
+      setImporting(false);
+      setImportProgress(100);
+    }
+  };
+
   const resetImport = () => {
     setSelectedFile(null);
     setPreviewData(null);
+    setCsvPreviewData(null);
     setImportResults([]);
     setImportProgress(0);
+    setImportFormat(null);
   };
 
   const getPreviewStats = () => {
@@ -501,6 +674,39 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
                 </CardContent>
               </Card>
 
+              {/* Seleção de formato */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Formato de exportação:</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="exportFormat"
+                        checked={exportFormat === 'json'}
+                        onChange={() => setExportFormat('json')}
+                        className="w-4 h-4"
+                      />
+                      <FileJson className="h-4 w-4" />
+                      <span className="text-sm">JSON (completo, ideal para backup)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="exportFormat"
+                        checked={exportFormat === 'csv'}
+                        onChange={() => setExportFormat('csv')}
+                        className="w-4 h-4"
+                      />
+                      <FileSpreadsheet className="h-4 w-4" />
+                      <span className="text-sm">CSV (Excel, um arquivo por tabela)</span>
+                    </label>
+                  </div>
+                </CardContent>
+              </Card>
+
               {exporting && (
                 <div className="space-y-2">
                   <Label>Progresso da exportação:</Label>
@@ -514,25 +720,25 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
           {/* ABA IMPORTAR */}
           <TabsContent value="import" className="flex-1 overflow-auto mt-4">
             <div className="space-y-4">
-              {!previewData ? (
+              {!previewData && !csvPreviewData ? (
                 <Card>
                   <CardContent className="pt-6">
                     <label className="flex flex-col items-center justify-center gap-4 p-8 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary transition-colors">
                       <Upload className="h-10 w-10 text-muted-foreground" />
                       <div className="text-center">
-                        <p className="font-medium">Clique para selecionar o arquivo JSON</p>
-                        <p className="text-sm text-muted-foreground">ou arraste e solte aqui</p>
+                        <p className="font-medium">Clique para selecionar o arquivo</p>
+                        <p className="text-sm text-muted-foreground">Suporta JSON ou CSV</p>
                       </div>
                       <input
                         type="file"
-                        accept=".json"
+                        accept=".json,.csv"
                         onChange={handleFileSelect}
                         className="hidden"
                       />
                     </label>
                   </CardContent>
                 </Card>
-              ) : (
+              ) : previewData ? (
                 <>
                   <Card>
                     <CardHeader className="pb-3">
@@ -631,7 +837,123 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
                     </Card>
                   )}
                 </>
-              )}
+              ) : csvPreviewData ? (
+                <>
+                  {/* Preview CSV */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="h-4 w-4" />
+                          <span>Arquivo CSV: {selectedFile?.name}</span>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={resetImport}>
+                          <X className="h-4 w-4 mr-1" />
+                          Trocar arquivo
+                        </Button>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Badge variant="outline">{csvPreviewData.length} registros encontrados</Badge>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label>Importar para qual tabela?</Label>
+                        <Select value={csvTableToImport} onValueChange={setCsvTableToImport}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="contas_pagar_parcelas">Parcelas</SelectItem>
+                            <SelectItem value="contas_pagar">Contas a Pagar</SelectItem>
+                            <SelectItem value="categorias_financeiras">Categorias Financeiras</SelectItem>
+                            <SelectItem value="filiais">Filiais</SelectItem>
+                            <SelectItem value="pessoas_juridicas">Fornecedores (PJ)</SelectItem>
+                            <SelectItem value="pessoas_fisicas">Fornecedores (PF)</SelectItem>
+                            <SelectItem value="contas_bancarias">Contas Bancárias</SelectItem>
+                            <SelectItem value="formas_pagamento">Formas de Pagamento</SelectItem>
+                            <SelectItem value="recorrencias">Recorrências</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Preview das colunas */}
+                      {csvPreviewData.length > 0 && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Colunas detectadas:</Label>
+                          <div className="flex flex-wrap gap-1">
+                            {Object.keys(csvPreviewData[0]).map(col => (
+                              <Badge key={col} variant="secondary" className="text-xs">
+                                {col}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {importing && (
+                    <div className="space-y-2">
+                      <Label>Progresso da importação:</Label>
+                      <Progress value={importProgress} />
+                      <p className="text-sm text-muted-foreground text-center">{Math.round(importProgress)}%</p>
+                    </div>
+                  )}
+
+                  {importResults.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">Resultado da Importação:</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ScrollArea className="h-48">
+                          <div className="space-y-2">
+                            {importResults.map((result, idx) => (
+                              <div key={idx} className="p-3 bg-muted rounded-lg">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-medium text-sm">{result.tabela}</span>
+                                  <div className="flex gap-2">
+                                    {result.inseridos > 0 && (
+                                      <Badge variant="default" className="text-xs">
+                                        <CheckCircle className="h-3 w-3 mr-1" />
+                                        {result.inseridos} inseridos
+                                      </Badge>
+                                    )}
+                                    {result.atualizados > 0 && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        <AlertCircle className="h-3 w-3 mr-1" />
+                                        {result.atualizados} atualizados
+                                      </Badge>
+                                    )}
+                                    {result.erros > 0 && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        <XCircle className="h-3 w-3 mr-1" />
+                                        {result.erros} erros
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                                {result.detalhes.length > 0 && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    {result.detalhes.slice(0, 3).map((d, i) => (
+                                      <div key={i}>{d}</div>
+                                    ))}
+                                    {result.detalhes.length > 3 && (
+                                      <div>... e mais {result.detalhes.length - 3} mensagens</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              ) : null}
             </div>
           </TabsContent>
         </Tabs>
@@ -651,13 +973,13 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
               ) : (
                 <>
                   <Download className="h-4 w-4 mr-2" />
-                  Exportar JSON
+                  Exportar {exportFormat === 'json' ? 'JSON' : 'CSV'}
                 </>
               )}
             </Button>
           )}
 
-          {activeTab === 'import' && previewData && (
+          {activeTab === 'import' && (previewData || csvPreviewData) && (
             <Button onClick={handleImport} disabled={importing}>
               {importing ? (
                 <>
@@ -667,7 +989,7 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
               ) : (
                 <>
                   <Upload className="h-4 w-4 mr-2" />
-                  Importar Dados
+                  Importar {importFormat === 'csv' ? 'CSV' : 'Dados'}
                 </>
               )}
             </Button>
