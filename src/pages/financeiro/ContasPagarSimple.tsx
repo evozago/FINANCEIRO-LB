@@ -1020,10 +1020,16 @@ export function ContasPagarSimple() {
           <h1 className="text-3xl font-bold tracking-tight">Contas a Pagar</h1>
           <p className="text-muted-foreground">Total: {parcelas.length} parcela(s) | Exibindo: {filteredAndSortedParcelas.length}</p>
         </div>
-        <Button onClick={() => navigate('/financeiro/contas-pagar/nova')}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Conta a Pagar
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setShowExportImportModal(true)}>
+            <Download className="h-4 w-4 mr-2" />
+            Exportar / Importar
+          </Button>
+          <Button onClick={() => navigate('/financeiro/contas-pagar/nova')}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Conta a Pagar
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -2315,6 +2321,13 @@ export function ContasPagarSimple() {
           fetchParcelas();
           setEditingParcela(null);
         }}
+      />
+
+      {/* Modal Export/Import Financeiro */}
+      <ExportImportFinanceiro
+        isOpen={showExportImportModal}
+        onClose={() => setShowExportImportModal(false)}
+        onComplete={() => fetchAllData()}
       />
     </div>
   );
