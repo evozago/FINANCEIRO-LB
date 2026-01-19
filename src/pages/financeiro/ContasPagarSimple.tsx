@@ -17,10 +17,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EditarParcelaModal } from '@/components/financeiro/EditarParcelaModal';
 import { ExportImportFinanceiro } from '@/components/financeiro/ExportImportFinanceiro';
+import { ImportarExtratoBancario } from '@/components/financeiro/ImportarExtratoBancario';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import {
   Search, Filter, Edit, Check, Trash2, Settings2, CalendarIcon,
-  ArrowUpDown, X, Plus, RotateCcw, Edit2, Copy, Upload, FileText, Loader2, Download
+  ArrowUpDown, X, Plus, RotateCcw, Edit2, Copy, Upload, FileText, Loader2, Download, FileSpreadsheet
 } from 'lucide-react';
 import { useXMLImport } from '@/hooks/useXMLImport';
 import { Progress } from '@/components/ui/progress';
@@ -143,6 +144,9 @@ export function ContasPagarSimple() {
   const [baixaLoteFormaPagamento, setBaixaLoteFormaPagamento] = useState('');
   const [baixaLoteContaBancaria, setBaixaLoteContaBancaria] = useState('');
   const [baixaLoteProcessing, setBaixaLoteProcessing] = useState(false);
+  
+  // Importar Extrato Bancário
+  const [showExtratoModal, setShowExtratoModal] = useState(false);
 
   // edição em massa
   const [massEditData, setMassEditData] = useState({
@@ -1021,6 +1025,10 @@ export function ContasPagarSimple() {
           <p className="text-muted-foreground">Total: {parcelas.length} parcela(s) | Exibindo: {filteredAndSortedParcelas.length}</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setShowExtratoModal(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Importar Extrato
+          </Button>
           <Button variant="outline" onClick={() => setShowExportImportModal(true)}>
             <Download className="h-4 w-4 mr-2" />
             Exportar / Importar
@@ -2327,6 +2335,13 @@ export function ContasPagarSimple() {
       <ExportImportFinanceiro
         isOpen={showExportImportModal}
         onClose={() => setShowExportImportModal(false)}
+        onComplete={() => fetchAllData()}
+      />
+      
+      {/* Modal Importar Extrato Bancário */}
+      <ImportarExtratoBancario
+        isOpen={showExtratoModal}
+        onClose={() => setShowExtratoModal(false)}
         onComplete={() => fetchAllData()}
       />
     </div>
