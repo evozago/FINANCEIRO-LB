@@ -234,18 +234,61 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
       .filter(item => item.tipo === 'saida' && item.valor > 0);
   };
 
-  const buscarMatchesParcela = async (extrato: ExtratoItem): Promise<ParcelaMatch[]> => {
+  const buscarMatchesParcela = async (extrato: ExtratoItem, parcelasAbertas: any[]): Promise<ParcelaMatch[]> => {
     const valorMin = extrato.valor * (1 - toleranciaValor / 100);
     const valorMax = extrato.valor * (1 + toleranciaValor / 100);
     const valorCentavosMin = Math.round(valorMin * 100);
     const valorCentavosMax = Math.round(valorMax * 100);
     
-    const dataExtrato = new Date(extrato.data);
-    const dataMin = new Date(dataExtrato);
-    dataMin.setDate(dataMin.getDate() - toleranciaDias);
-    const dataMax = new Date(dataExtrato);
-    dataMax.setDate(dataMax.getDate() + toleranciaDias);
+    const dataExtrato = new Date(extrato.data + 'T12:00:00');
+    if (isNaN(dataExtrato.getTime())) {
+      console.error('Data inválida no extrato:', extrato.data);
+      return [];
+    }
+    
+    // Filtrar parcelas que correspondem ao critério de valor e data
+    const parcelasFiltradas = parcelasAbertas.filter(p => {
+      const valorOk = p.valor_parcela_centavos >= valorCentavosMin && 
+                      p.valor_parcela_centavos <= valorCentavosMax;
+      
+      const vencimento = new Date(p.vencimento + 'T12:00:00');
+      const diffDias = Math.abs(Math.floor((dataExtrato.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24)));
+      const dataOk = diffDias <= toleranciaDias;
+      
+      return valorOk && dataOk;
+    });
 
+    return parcelasFiltradas.map(p => {
+      const valorParcela = p.valor_parcela_centavos / 100;
+      const diferencaValor = Math.abs(extrato.valor - valorParcela);
+      const diferencaPercentual = (diferencaValor / valorParcela) * 100;
+      
+      const vencimento = new Date(p.vencimento + 'T12:00:00');
+      const diferencaDias = Math.abs(Math.floor((dataExtrato.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24)));
+      
+      // Score baseado em proximidade de valor e data
+      const scoreValor = Math.max(0, 1 - (diferencaPercentual / Math.max(toleranciaValor, 1)));
+      const scoreDias = Math.max(0, 1 - (diferencaDias / Math.max(toleranciaDias, 1)));
+      const score = (scoreValor * 0.6) + (scoreDias * 0.4);
+
+      return {
+        parcela_id: p.id,
+        conta_id: p.conta_id,
+        fornecedor: p.fornecedor_nome || 'Não identificado',
+        descricao: p.descricao || '',
+        valor_parcela: valorParcela,
+        vencimento: p.vencimento,
+        numero_parcela: p.numero_parcela || 1,
+        total_parcelas: p.total_parcelas || 1,
+        score,
+        diferenca_valor: diferencaValor,
+        diferenca_dias: diferencaDias
+      };
+    }).sort((a, b) => b.score - a.score);
+  };
+
+  const carregarParcelasAbertas = async () => {
+    // Buscar todas as parcelas abertas de uma vez
     const { data: parcelas, error } = await supabase
       .from('contas_pagar_parcelas')
       .select(`
@@ -258,69 +301,58 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         contas_pagar!inner (
           id,
           descricao,
-          pessoa_juridica_id,
-          pessoa_fisica_id,
-          pessoas_juridicas (razao_social, nome_fantasia),
-          pessoas_fisicas (nome)
+          fornecedor_id,
+          fornecedor_pf_id,
+          qtd_parcelas
         )
       `)
-      .eq('pago', false)
-      .gte('valor_parcela_centavos', valorCentavosMin)
-      .lte('valor_parcela_centavos', valorCentavosMax)
-      .gte('vencimento', dataMin.toISOString().split('T')[0])
-      .lte('vencimento', dataMax.toISOString().split('T')[0]);
+      .eq('pago', false);
 
-    if (error || !parcelas) return [];
+    if (error || !parcelas) {
+      console.error('Erro ao buscar parcelas:', error);
+      return [];
+    }
 
-    // Buscar total de parcelas para cada conta
-    const contaIds = [...new Set(parcelas.map(p => p.conta_id))];
-    const { data: totalParcelas } = await supabase
-      .from('contas_pagar_parcelas')
-      .select('conta_id')
-      .in('conta_id', contaIds);
+    // Buscar nomes dos fornecedores
+    const pjIds = [...new Set(parcelas.map(p => (p.contas_pagar as any)?.fornecedor_id).filter(Boolean))];
+    const pfIds = [...new Set(parcelas.map(p => (p.contas_pagar as any)?.fornecedor_pf_id).filter(Boolean))];
 
-    const parcelasPorConta: Record<number, number> = {};
-    totalParcelas?.forEach(p => {
-      parcelasPorConta[p.conta_id] = (parcelasPorConta[p.conta_id] || 0) + 1;
+    const [pjRes, pfRes] = await Promise.all([
+      pjIds.length > 0 ? supabase.from('pessoas_juridicas').select('id, nome_fantasia, razao_social').in('id', pjIds) : { data: [] },
+      pfIds.length > 0 ? supabase.from('pessoas_fisicas').select('id, nome_completo').in('id', pfIds) : { data: [] }
+    ]);
+
+    const pjMap: Record<number, string> = {};
+    const pfMap: Record<number, string> = {};
+    
+    pjRes.data?.forEach((pj: any) => {
+      pjMap[pj.id] = pj.nome_fantasia || pj.razao_social || 'PJ sem nome';
+    });
+    pfRes.data?.forEach((pf: any) => {
+      pfMap[pf.id] = pf.nome_completo || 'PF sem nome';
     });
 
     return parcelas.map(p => {
       const conta = p.contas_pagar as any;
-      const valorParcela = p.valor_parcela_centavos / 100;
-      const diferencaValor = Math.abs(extrato.valor - valorParcela);
-      const diferencaPercentual = (diferencaValor / valorParcela) * 100;
+      let fornecedorNome = 'Não identificado';
       
-      const vencimento = new Date(p.vencimento);
-      const diferencaDias = Math.abs(Math.floor((dataExtrato.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24)));
-      
-      // Score baseado em proximidade de valor e data
-      const scoreValor = 1 - (diferencaPercentual / toleranciaValor);
-      const scoreDias = 1 - (diferencaDias / toleranciaDias);
-      const score = (scoreValor * 0.6) + (scoreDias * 0.4);
-
-      let fornecedor = 'Não identificado';
-      if (conta?.pessoas_juridicas?.nome_fantasia) {
-        fornecedor = conta.pessoas_juridicas.nome_fantasia;
-      } else if (conta?.pessoas_juridicas?.razao_social) {
-        fornecedor = conta.pessoas_juridicas.razao_social;
-      } else if (conta?.pessoas_fisicas?.nome) {
-        fornecedor = conta.pessoas_fisicas.nome;
+      if (conta?.fornecedor_id && pjMap[conta.fornecedor_id]) {
+        fornecedorNome = pjMap[conta.fornecedor_id];
+      } else if (conta?.fornecedor_pf_id && pfMap[conta.fornecedor_pf_id]) {
+        fornecedorNome = pfMap[conta.fornecedor_pf_id];
       }
 
       return {
-        parcela_id: p.id,
+        id: p.id,
         conta_id: p.conta_id,
-        fornecedor,
-        descricao: conta?.descricao || '',
-        valor_parcela: valorParcela,
-        vencimento: p.vencimento,
         numero_parcela: p.numero_parcela,
-        total_parcelas: parcelasPorConta[p.conta_id] || 1,
-        score,
-        diferenca_valor: diferencaValor,
-        diferenca_dias: diferencaDias
+        valor_parcela_centavos: p.valor_parcela_centavos,
+        vencimento: p.vencimento,
+        descricao: conta?.descricao || '',
+        fornecedor_nome: fornecedorNome,
+        total_parcelas: conta?.qtd_parcelas || 1
       };
-    }).sort((a, b) => b.score - a.score);
+    });
   };
 
   const iniciarReconciliacao = async () => {
@@ -332,24 +364,46 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
     setIsProcessing(true);
     setStep('reconcile');
     
-    const saidas = processExtrato();
-    const reconciliacaoItems: ReconciliacaoItem[] = [];
-    
-    for (let i = 0; i < saidas.length; i++) {
-      const extrato = saidas[i];
-      const matches = await buscarMatchesParcela(extrato);
+    try {
+      // Carregar todas as parcelas abertas de uma vez
+      const parcelasAbertas = await carregarParcelasAbertas();
+      console.log(`Carregadas ${parcelasAbertas.length} parcelas abertas`);
       
-      reconciliacaoItems.push({
-        extrato,
-        matches,
-        selectedMatch: matches.length === 1 && matches[0].score >= 0.8 ? matches[0] : null,
-        confirmed: matches.length === 1 && matches[0].score >= 0.9
-      });
+      const saidas = processExtrato();
+      console.log(`Processando ${saidas.length} saídas do extrato`);
       
-      setProcessedCount(i + 1);
+      const reconciliacaoItems: ReconciliacaoItem[] = [];
+      
+      // Processar em batches para não travar a UI
+      const batchSize = 50;
+      for (let i = 0; i < saidas.length; i += batchSize) {
+        const batch = saidas.slice(i, Math.min(i + batchSize, saidas.length));
+        
+        const batchResults = await Promise.all(
+          batch.map(async (extrato) => {
+            const matches = await buscarMatchesParcela(extrato, parcelasAbertas);
+            return {
+              extrato,
+              matches,
+              selectedMatch: matches.length === 1 && matches[0].score >= 0.8 ? matches[0] : null,
+              confirmed: matches.length === 1 && matches[0].score >= 0.9
+            };
+          })
+        );
+        
+        reconciliacaoItems.push(...batchResults);
+        setProcessedCount(Math.min(i + batchSize, saidas.length));
+        
+        // Pequeno delay para permitir atualização da UI
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      
+      setReconciliacoes(reconciliacaoItems);
+    } catch (error) {
+      console.error('Erro na reconciliação:', error);
+      toast.error('Erro ao processar reconciliação');
     }
     
-    setReconciliacoes(reconciliacaoItems);
     setIsProcessing(false);
   };
 
