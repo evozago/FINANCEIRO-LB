@@ -296,7 +296,30 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
       // Score baseado em proximidade de valor e data
       const scoreValor = Math.max(0, 1 - (diferencaPercentual / Math.max(toleranciaValor, 1)));
       const scoreDias = Math.max(0, 1 - (diferencaDias / Math.max(toleranciaDias, 1)));
-      const score = (scoreValor * 0.6) + (scoreDias * 0.4);
+      
+      // NOVO: Score baseado em correspondência do nome do fornecedor na descrição
+      const descricaoNormalizada = extrato.descricao.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const fornecedorNormalizado = (p.fornecedor_nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      
+      let scoreFornecedor = 0;
+      if (fornecedorNormalizado && descricaoNormalizada) {
+        // Verificar se o nome do fornecedor está contido na descrição
+        if (descricaoNormalizada.includes(fornecedorNormalizado)) {
+          scoreFornecedor = 1; // Match exato
+        } else {
+          // Verificar palavras-chave do nome do fornecedor
+          const palavrasFornecedor = fornecedorNormalizado.split(/\s+/).filter(p => p.length > 2);
+          const palavrasEncontradas = palavrasFornecedor.filter(palavra => 
+            descricaoNormalizada.includes(palavra)
+          );
+          if (palavrasFornecedor.length > 0) {
+            scoreFornecedor = palavrasEncontradas.length / palavrasFornecedor.length;
+          }
+        }
+      }
+      
+      // Score final: 40% valor, 20% data, 40% nome do fornecedor
+      const score = (scoreValor * 0.4) + (scoreDias * 0.2) + (scoreFornecedor * 0.4);
 
       return {
         parcela_id: p.id,
