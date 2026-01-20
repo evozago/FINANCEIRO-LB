@@ -31,6 +31,7 @@ interface ExtratoItem {
   valor: number;
   tipo: 'entrada' | 'saida';
   formaPagamento?: string;
+  identificador?: string; // Código único do pagamento para deduplicação
   raw: Record<string, any>;
 }
 
@@ -47,6 +48,9 @@ interface ParcelaMatch {
   diferenca_valor: number;
   diferenca_dias: number;
   ja_pago?: boolean; // Indica se a parcela já foi paga
+  pago_em?: string; // Data em que foi pago
+  valor_pago?: number; // Valor pago anteriormente (para mostrar quando já pago)
+  observacao_pagamento?: string; // Observação do pagamento anterior
 }
 
 interface ReconciliacaoItem {
@@ -54,6 +58,8 @@ interface ReconciliacaoItem {
   matches: ParcelaMatch[];
   selectedMatch: ParcelaMatch | null;
   confirmed: boolean;
+  substituirPagamento?: boolean; // Se true, substitui o pagamento existente
+  identificadorDuplicado?: boolean; // Se o identificador já existe no sistema
 }
 
 type FiltroReconciliacao = 'todos' | 'selecionados' | 'com_match' | 'sem_match';
@@ -81,6 +87,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
   const [colValor, setColValor] = useState<string>('');
   const [colTipo, setColTipo] = useState<string>('');
   const [colFormaPagamento, setColFormaPagamento] = useState<string>('');
+  const [colIdentificador, setColIdentificador] = useState<string>(''); // Coluna de identificador único
   const [valorSaidaNegativo, setValorSaidaNegativo] = useState<boolean>(true);
   
   // Dados auxiliares
@@ -141,6 +148,9 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
             }
             if (lower.includes('forma') || lower.includes('pagamento') || lower.includes('metodo') || lower.includes('payment')) {
               setColFormaPagamento(field);
+            }
+            if (lower.includes('identific') || lower.includes('codigo') || lower.includes('id') || lower.includes('ref')) {
+              setColIdentificador(field);
             }
           });
           
@@ -237,6 +247,12 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         if (colFormaPagamento && row[colFormaPagamento]) {
           formaPagamento = String(row[colFormaPagamento]).trim();
         }
+
+        // Extrair identificador único se a coluna estiver mapeada
+        let identificador: string | undefined;
+        if (colIdentificador && row[colIdentificador]) {
+          identificador = String(row[colIdentificador]).trim();
+        }
         
         return {
           data: parseDate(row[colData]),
@@ -244,6 +260,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
           valor: Math.abs(valor),
           tipo,
           formaPagamento,
+          identificador,
           raw: row
         };
       })
@@ -356,7 +373,10 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         score,
         diferenca_valor: diferencaValor,
         diferenca_dias: diferencaDias,
-        ja_pago: p.pago || false
+        ja_pago: p.pago || false,
+        pago_em: p.pago_em || undefined,
+        valor_pago: p.valor_pago_centavos ? p.valor_pago_centavos / 100 : undefined,
+        observacao_pagamento: p.observacao || undefined
       };
     }).sort((a, b) => b.score - a.score);
   };
@@ -370,9 +390,11 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         conta_id,
         numero_parcela,
         valor_parcela_centavos,
+        valor_pago_centavos,
         vencimento,
         pago,
         pago_em,
+        observacao,
         contas_pagar!inner (
           id,
           descricao,
@@ -426,9 +448,20 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         fornecedor_nome: fornecedorNome,
         total_parcelas: conta?.qtd_parcelas || 1,
         pago: p.pago,
-        pago_em: p.pago_em
+        pago_em: p.pago_em,
+        valor_pago_centavos: p.valor_pago_centavos,
+        observacao: p.observacao
       };
     });
+  };
+
+  // Verificar se um identificador já existe nas observações das parcelas pagas
+  const verificarIdentificadorDuplicado = (identificador: string, todasParcelas: any[]): boolean => {
+    if (!identificador) return false;
+    const prefixo = `[EXTRATO:${identificador}]`;
+    return todasParcelas.some(p => 
+      p.pago && p.observacao && p.observacao.includes(prefixo)
+    );
   };
 
   const iniciarReconciliacao = async () => {
@@ -457,6 +490,22 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         
         const batchResults = await Promise.all(
           batch.map(async (extrato) => {
+            // Verificar se o identificador já existe no sistema
+            const identificadorDuplicado = extrato.identificador 
+              ? verificarIdentificadorDuplicado(extrato.identificador, todasParcelas)
+              : false;
+
+            // Se identificador duplicado, pular a busca de matches
+            if (identificadorDuplicado) {
+              return {
+                extrato,
+                matches: [],
+                selectedMatch: null,
+                confirmed: false,
+                identificadorDuplicado: true
+              };
+            }
+
             const matches = await buscarMatchesParcela(extrato, todasParcelas);
             // Priorizar parcelas não pagas para auto-seleção
             const matchesAbertos = matches.filter(m => !m.ja_pago);
@@ -465,7 +514,8 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
               extrato,
               matches,
               selectedMatch: autoSelect,
-              confirmed: autoSelect !== null && autoSelect.score >= 0.9
+              confirmed: autoSelect !== null && autoSelect.score >= 0.9,
+              identificadorDuplicado: false
             };
           })
         );
@@ -492,14 +542,28 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
     ));
   };
 
-  const selectMatch = (reconcIndex: number, match: ParcelaMatch | null) => {
+  const selectMatch = (reconcIndex: number, match: ParcelaMatch | null, substituir: boolean = false) => {
     setReconciliacoes(prev => prev.map((item, i) => 
-      i === reconcIndex ? { ...item, selectedMatch: match, confirmed: match !== null } : item
+      i === reconcIndex ? { 
+        ...item, 
+        selectedMatch: match, 
+        confirmed: match !== null,
+        substituirPagamento: substituir
+      } : item
+    ));
+  };
+
+  // Habilitar/desabilitar substituição de pagamento para item já pago
+  const toggleSubstituirPagamento = (index: number) => {
+    setReconciliacoes(prev => prev.map((item, i) => 
+      i === index ? { ...item, substituirPagamento: !item.substituirPagamento, confirmed: !item.substituirPagamento } : item
     ));
   };
 
   const confirmarBaixas = async () => {
-    const itemsParaBaixa = reconciliacoes.filter(r => r.confirmed && r.selectedMatch);
+    const itemsParaBaixa = reconciliacoes.filter(r => 
+      r.confirmed && r.selectedMatch && !r.identificadorDuplicado
+    );
     
     if (itemsParaBaixa.length === 0) {
       toast.error('Nenhum item selecionado para dar baixa');
@@ -508,6 +572,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
     
     setIsProcessing(true);
     let sucessos = 0;
+    let substituicoes = 0;
     let erros = 0;
     
     for (const item of itemsParaBaixa) {
@@ -518,19 +583,50 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
       const formaIdFromCsv = getFormaPagamentoId(item.extrato.formaPagamento);
       const formaIdFinal = formaIdFromCsv || parseInt(formaPagamentoId);
       
+      // Montar observação com identificador se disponível
+      let observacao = `Baixa automática via extrato: ${item.extrato.descricao}`;
+      if (item.extrato.identificador) {
+        observacao = `[EXTRATO:${item.extrato.identificador}] ${observacao}`;
+      }
+
+      // Se for substituição de pagamento, primeiro limpar os dados antigos
+      if (item.substituirPagamento && match.ja_pago) {
+        const { error: clearError } = await supabase
+          .from('contas_pagar_parcelas')
+          .update({
+            pago: false,
+            pago_em: null,
+            valor_pago_centavos: null,
+            forma_pagamento_id: null,
+            conta_bancaria_id: null,
+            observacao: null
+          })
+          .eq('id', match.parcela_id);
+
+        if (clearError) {
+          console.error('Erro ao limpar pagamento anterior:', clearError);
+          erros++;
+          continue;
+        }
+      }
+      
       const { error } = await supabase.rpc('pagar_parcela', {
         parcela_id: match.parcela_id,
         valor_pago_centavos: valorPagoCentavos,
         forma_pagamento_id: formaIdFinal,
         conta_bancaria_id: parseInt(contaBancariaId),
-        observacao_param: `Baixa automática via extrato: ${item.extrato.descricao}`
+        observacao_param: observacao
       });
       
       if (error) {
         console.error('Erro ao dar baixa:', error);
         erros++;
       } else {
-        sucessos++;
+        if (item.substituirPagamento) {
+          substituicoes++;
+        } else {
+          sucessos++;
+        }
       }
     }
     
@@ -538,6 +634,9 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
     
     if (sucessos > 0) {
       toast.success(`${sucessos} parcela(s) baixada(s) com sucesso`);
+    }
+    if (substituicoes > 0) {
+      toast.success(`${substituicoes} pagamento(s) substituído(s) com sucesso`);
     }
     if (erros > 0) {
       toast.error(`${erros} erro(s) ao dar baixa`);
@@ -772,6 +871,22 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                   </Select>
                   <p className="text-xs text-muted-foreground">Ex: PIX, Boleto, Débito, TED</p>
                 </div>
+                
+                <div className="space-y-2">
+                  <Label>Coluna de Identificador (Deduplicação)</Label>
+                  <Select value={colIdentificador || "none"} onValueChange={(val) => setColIdentificador(val === "none" ? "" : val)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Opcional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {columns.map(col => (
+                        <SelectItem key={col} value={col}>{col}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Código único para evitar duplicidade em importações</p>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -888,18 +1003,29 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                       // Encontrar o índice original para as funções de callback
                       const originalIndex = reconciliacoes.findIndex(r => r === item);
                       return (
-                        <Card key={originalIndex} className={item.confirmed ? 'border-primary' : ''}>
+                        <Card key={originalIndex} className={`${item.confirmed ? 'border-primary' : ''} ${item.identificadorDuplicado ? 'opacity-50' : ''}`}>
                           <CardHeader className="py-3">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
                                 <Checkbox 
                                   checked={item.confirmed}
-                                  onCheckedChange={() => item.selectedMatch && !item.selectedMatch.ja_pago && toggleConfirm(originalIndex)}
-                                  disabled={!item.selectedMatch || item.selectedMatch.ja_pago}
+                                  onCheckedChange={() => {
+                                    if (item.selectedMatch?.ja_pago) {
+                                      toggleSubstituirPagamento(originalIndex);
+                                    } else if (item.selectedMatch) {
+                                      toggleConfirm(originalIndex);
+                                    }
+                                  }}
+                                  disabled={!item.selectedMatch || item.identificadorDuplicado}
                                 />
                                 <div>
-                                  <CardTitle className="text-sm font-medium">
+                                  <CardTitle className="text-sm font-medium flex items-center gap-2">
                                     {formatDate(item.extrato.data)} - {formatCurrency(item.extrato.valor)}
+                                    {item.extrato.identificador && (
+                                      <Badge variant="outline" className="text-xs">
+                                        ID: {item.extrato.identificador}
+                                      </Badge>
+                                    )}
                                   </CardTitle>
                                   <p className="text-xs text-muted-foreground truncate max-w-md">
                                     {item.extrato.descricao}
@@ -907,10 +1033,20 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                                 </div>
                               </div>
                               
-                              {item.matches.length === 0 ? (
+                              {item.identificadorDuplicado ? (
+                                <Badge variant="outline" className="text-muted-foreground border-muted-foreground">
+                                  <X className="h-3 w-3 mr-1" />
+                                  Identificador já importado
+                                </Badge>
+                              ) : item.matches.length === 0 ? (
                                 <Badge variant="destructive">
                                   <X className="h-3 w-3 mr-1" />
                                   Sem match
+                                </Badge>
+                              ) : item.substituirPagamento ? (
+                                <Badge variant="default" className="bg-amber-500 hover:bg-amber-600">
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  Substituir pagamento
                                 </Badge>
                               ) : item.matches.length === 1 && item.matches[0].score >= 0.9 && !item.matches[0].ja_pago ? (
                                 <Badge className="bg-primary">
@@ -931,83 +1067,114 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                             </div>
                           </CardHeader>
                           
-                          {item.matches.length > 0 && (
+                          {item.matches.length > 0 && !item.identificadorDuplicado && (
                             <CardContent className="pt-0 pb-3">
                               <div className="space-y-2">
                                 {item.matches.slice(0, 5).map((match, mIndex) => (
                                   <div 
                                     key={mIndex}
-                                    className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors ${
-                                      match.ja_pago 
-                                        ? 'bg-amber-50 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700 opacity-70' 
-                                        : item.selectedMatch?.parcela_id === match.parcela_id 
-                                          ? 'border-primary bg-primary/5' 
-                                          : 'hover:bg-muted/50'
-                                    }`}
-                                    onClick={() => !match.ja_pago && selectMatch(originalIndex, match)}
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <div className={`w-3 h-3 rounded-full ${
-                                        match.ja_pago
-                                          ? 'bg-amber-500'
+                                    className={`flex flex-col p-2 rounded border cursor-pointer transition-colors ${
+                                      match.ja_pago && item.selectedMatch?.parcela_id === match.parcela_id && item.substituirPagamento
+                                        ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30'
+                                        : match.ja_pago 
+                                          ? 'bg-muted/30 border-muted' 
                                           : item.selectedMatch?.parcela_id === match.parcela_id 
-                                            ? 'bg-primary' 
-                                            : 'bg-muted'
-                                      }`} />
-                                      <div>
-                                        <div className="flex items-center gap-2">
-                                          <p className="text-sm font-medium">{match.fornecedor}</p>
-                                          {match.ja_pago && (
-                                            <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">
-                                              JÁ PAGO
-                                            </Badge>
-                                          )}
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">
-                                          {match.descricao} • Parcela {match.numero_parcela}/{match.total_parcelas}
-                                        </p>
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="text-right">
-                                      <p className="text-sm font-medium">{formatCurrency(match.valor_parcela)}</p>
-                                      {(() => {
-                                        const diferencaCentavos = item.extrato.valor - match.valor_parcela;
-                                        const diferencaPerc = match.valor_parcela > 0 
-                                          ? ((diferencaCentavos / match.valor_parcela) * 100)
-                                          : 0;
-                                        const isDesconto = diferencaCentavos < 0;
-                                        const isJuros = diferencaCentavos > 0;
-                                        
-                                        return (
-                                          <div className="flex items-center gap-2 justify-end">
-                                            <p className="text-xs text-muted-foreground">
-                                              Venc: {formatDate(match.vencimento)} • Δ {match.diferenca_dias}d
-                                            </p>
-                                            {diferencaCentavos !== 0 && (
-                                              <Badge 
-                                                variant="outline" 
-                                                className={`text-xs ${
-                                                  isDesconto 
-                                                    ? 'text-green-600 border-green-600 bg-green-50 dark:bg-green-950/30' 
-                                                    : 'text-red-600 border-red-600 bg-red-50 dark:bg-red-950/30'
-                                                }`}
-                                              >
-                                                {isDesconto ? '↓' : '↑'} {Math.abs(diferencaPerc).toFixed(2)}%
-                                                <span className="ml-1 opacity-75">
-                                                  ({isDesconto ? '-' : '+'}{formatCurrency(Math.abs(diferencaCentavos))})
-                                                </span>
-                                              </Badge>
-                                            )}
-                                            {diferencaCentavos === 0 && (
-                                              <Badge variant="outline" className="text-xs text-primary border-primary">
-                                                Valor exato
+                                            ? 'border-primary bg-primary/5' 
+                                            : 'hover:bg-muted/50'
+                                    }`}
+                                    onClick={() => {
+                                      if (match.ja_pago) {
+                                        selectMatch(originalIndex, match, true);
+                                      } else {
+                                        selectMatch(originalIndex, match, false);
+                                      }
+                                    }}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <div className={`w-3 h-3 rounded-full ${
+                                          item.selectedMatch?.parcela_id === match.parcela_id && item.substituirPagamento
+                                            ? 'bg-amber-500'
+                                            : match.ja_pago
+                                              ? 'bg-muted-foreground/30'
+                                              : item.selectedMatch?.parcela_id === match.parcela_id 
+                                                ? 'bg-primary' 
+                                                : 'bg-muted'
+                                        }`} />
+                                        <div>
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-sm font-medium">{match.fornecedor}</p>
+                                            {match.ja_pago && (
+                                              <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">
+                                                JÁ PAGO
                                               </Badge>
                                             )}
                                           </div>
-                                        );
-                                      })()}
+                                          <p className="text-xs text-muted-foreground">
+                                            {match.descricao} • Parcela {match.numero_parcela}/{match.total_parcelas}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="text-right">
+                                        <p className="text-sm font-medium">{formatCurrency(match.valor_parcela)}</p>
+                                        {(() => {
+                                          const diferencaCentavos = item.extrato.valor - match.valor_parcela;
+                                          const diferencaPerc = match.valor_parcela > 0 
+                                            ? ((diferencaCentavos / match.valor_parcela) * 100)
+                                            : 0;
+                                          const isDesconto = diferencaCentavos < 0;
+                                          
+                                          return (
+                                            <div className="flex items-center gap-2 justify-end">
+                                              <p className="text-xs text-muted-foreground">
+                                                Venc: {formatDate(match.vencimento)} • Δ {match.diferenca_dias}d
+                                              </p>
+                                              {diferencaCentavos !== 0 && (
+                                                <Badge 
+                                                  variant="outline" 
+                                                  className={`text-xs ${
+                                                    isDesconto 
+                                                      ? 'text-green-600 border-green-600 bg-green-50 dark:bg-green-950/30' 
+                                                      : 'text-red-600 border-red-600 bg-red-50 dark:bg-red-950/30'
+                                                  }`}
+                                                >
+                                                  {isDesconto ? '↓' : '↑'} {Math.abs(diferencaPerc).toFixed(2)}%
+                                                  <span className="ml-1 opacity-75">
+                                                    ({isDesconto ? '-' : '+'}{formatCurrency(Math.abs(diferencaCentavos))})
+                                                  </span>
+                                                </Badge>
+                                              )}
+                                              {diferencaCentavos === 0 && (
+                                                <Badge variant="outline" className="text-xs text-primary border-primary">
+                                                  Valor exato
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
+                                      </div>
                                     </div>
+                                    
+                                    {/* Mostrar detalhes do pagamento anterior para itens já pagos */}
+                                    {match.ja_pago && (match.pago_em || match.valor_pago) && (
+                                      <div className="mt-2 pt-2 border-t border-dashed text-xs text-muted-foreground flex items-center justify-between">
+                                        <div className="flex items-center gap-4">
+                                          <span>Pagamento anterior:</span>
+                                          {match.pago_em && (
+                                            <span>📅 {formatDate(match.pago_em)}</span>
+                                          )}
+                                          {match.valor_pago && (
+                                            <span>💰 {formatCurrency(match.valor_pago)}</span>
+                                          )}
+                                        </div>
+                                        {item.selectedMatch?.parcela_id === match.parcela_id && item.substituirPagamento && (
+                                          <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">
+                                            Será substituído pelo extrato
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
