@@ -718,7 +718,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         )}
 
         {step === 'reconcile' && (
-          <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+          <div className="flex-1 flex flex-col gap-4 min-h-0">
             {isProcessing ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-4">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -753,8 +753,8 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                   </div>
                 </div>
 
-                <ScrollArea className="flex-1 h-[400px]">
-                  <div className="space-y-3 pr-4 pb-4">
+                <div className="flex-1 min-h-0 overflow-auto border rounded-md">
+                  <div className="space-y-3 p-4">
                     {reconciliacoes.map((item, index) => (
                       <Card key={index} className={item.confirmed ? 'border-green-500' : ''}>
                         <CardHeader className="py-3">
@@ -836,7 +836,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                       </Card>
                     ))}
                   </div>
-                </ScrollArea>
+                </div>
               </>
             )}
           </div>
