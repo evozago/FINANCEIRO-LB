@@ -971,10 +971,42 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                                     
                                     <div className="text-right">
                                       <p className="text-sm font-medium">{formatCurrency(match.valor_parcela)}</p>
-                                      <p className="text-xs text-muted-foreground">
-                                        Venc: {formatDate(match.vencimento)} • 
-                                        Δ {match.diferenca_dias}d / {formatCurrency(match.diferenca_valor)}
-                                      </p>
+                                      {(() => {
+                                        const diferencaCentavos = item.extrato.valor - match.valor_parcela;
+                                        const diferencaPerc = match.valor_parcela > 0 
+                                          ? ((diferencaCentavos / match.valor_parcela) * 100)
+                                          : 0;
+                                        const isDesconto = diferencaCentavos < 0;
+                                        const isJuros = diferencaCentavos > 0;
+                                        
+                                        return (
+                                          <div className="flex items-center gap-2 justify-end">
+                                            <p className="text-xs text-muted-foreground">
+                                              Venc: {formatDate(match.vencimento)} • Δ {match.diferenca_dias}d
+                                            </p>
+                                            {diferencaCentavos !== 0 && (
+                                              <Badge 
+                                                variant="outline" 
+                                                className={`text-xs ${
+                                                  isDesconto 
+                                                    ? 'text-green-600 border-green-600 bg-green-50 dark:bg-green-950/30' 
+                                                    : 'text-red-600 border-red-600 bg-red-50 dark:bg-red-950/30'
+                                                }`}
+                                              >
+                                                {isDesconto ? '↓' : '↑'} {Math.abs(diferencaPerc).toFixed(2)}%
+                                                <span className="ml-1 opacity-75">
+                                                  ({isDesconto ? '-' : '+'}{formatCurrency(Math.abs(diferencaCentavos))})
+                                                </span>
+                                              </Badge>
+                                            )}
+                                            {diferencaCentavos === 0 && (
+                                              <Badge variant="outline" className="text-xs text-primary border-primary">
+                                                Valor exato
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
                                 ))}
