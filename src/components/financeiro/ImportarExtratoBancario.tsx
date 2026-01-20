@@ -30,6 +30,7 @@ interface ExtratoItem {
   descricao: string;
   valor: number;
   tipo: 'entrada' | 'saida';
+  formaPagamento?: string;
   raw: Record<string, any>;
 }
 
@@ -76,6 +77,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
   const [colDescricao, setColDescricao] = useState<string>('');
   const [colValor, setColValor] = useState<string>('');
   const [colTipo, setColTipo] = useState<string>('');
+  const [colFormaPagamento, setColFormaPagamento] = useState<string>('');
   const [valorSaidaNegativo, setValorSaidaNegativo] = useState<boolean>(true);
   
   // Dados auxiliares
@@ -132,6 +134,9 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
             }
             if (lower.includes('tipo') || lower.includes('type') || lower.includes('d/c')) {
               setColTipo(field);
+            }
+            if (lower.includes('forma') || lower.includes('pagamento') || lower.includes('metodo') || lower.includes('payment')) {
+              setColFormaPagamento(field);
             }
           });
           
@@ -222,16 +227,38 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         } else if (valorSaidaNegativo) {
           tipo = valor < 0 ? 'saida' : 'entrada';
         }
+
+        // Extrair forma de pagamento do CSV se a coluna estiver mapeada
+        let formaPagamento: string | undefined;
+        if (colFormaPagamento && row[colFormaPagamento]) {
+          formaPagamento = String(row[colFormaPagamento]).trim();
+        }
         
         return {
           data: parseDate(row[colData]),
           descricao: String(row[colDescricao] || ''),
           valor: Math.abs(valor),
           tipo,
+          formaPagamento,
           raw: row
         };
       })
       .filter(item => item.tipo === 'saida' && item.valor > 0);
+  };
+
+  // Mapear nome da forma de pagamento para ID
+  const getFormaPagamentoId = (nome?: string): number | null => {
+    if (!nome) return null;
+    const nomeNorm = nome.toLowerCase().trim();
+    
+    const forma = formasPagamento.find(f => {
+      const fNome = f.nome.toLowerCase();
+      return fNome === nomeNorm || 
+             fNome.includes(nomeNorm) || 
+             nomeNorm.includes(fNome);
+    });
+    
+    return forma?.id || null;
   };
 
   const buscarMatchesParcela = async (extrato: ExtratoItem, parcelasAbertas: any[]): Promise<ParcelaMatch[]> => {
@@ -435,10 +462,14 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
       const match = item.selectedMatch!;
       const valorPagoCentavos = Math.round(item.extrato.valor * 100);
       
+      // Usar forma de pagamento do CSV se disponível, senão usar a global
+      const formaIdFromCsv = getFormaPagamentoId(item.extrato.formaPagamento);
+      const formaIdFinal = formaIdFromCsv || parseInt(formaPagamentoId);
+      
       const { error } = await supabase.rpc('pagar_parcela', {
         parcela_id: match.parcela_id,
         valor_pago_centavos: valorPagoCentavos,
-        forma_pagamento_id: parseInt(formaPagamentoId),
+        forma_pagamento_id: formaIdFinal,
         conta_bancaria_id: parseInt(contaBancariaId),
         observacao_param: `Baixa automática via extrato: ${item.extrato.descricao}`
       });
@@ -532,7 +563,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
               </div>
               
               <div className="space-y-2">
-                <Label>Forma de Pagamento *</Label>
+                <Label>Forma de Pagamento Padrão *</Label>
                 <Select value={formaPagamentoId} onValueChange={setFormaPagamentoId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a forma" />
@@ -545,6 +576,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">Usada quando não informada no CSV</p>
               </div>
             </div>
 
@@ -637,6 +669,24 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Coluna de Forma de Pagamento</Label>
+                  <Select value={colFormaPagamento || "none"} onValueChange={(val) => setColFormaPagamento(val === "none" ? "" : val)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Opcional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma (usar padrão)</SelectItem>
+                      {columns.map(col => (
+                        <SelectItem key={col} value={col}>{col}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Ex: PIX, Boleto, Débito, TED</p>
+                </div>
+              </div>
+
               <div className="flex items-center gap-2">
                 <Checkbox 
                   id="valorNegativo" 
@@ -703,8 +753,8 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                   </div>
                 </div>
 
-                <ScrollArea className="flex-1">
-                  <div className="space-y-3 pr-4">
+                <ScrollArea className="flex-1 h-[400px]">
+                  <div className="space-y-3 pr-4 pb-4">
                     {reconciliacoes.map((item, index) => (
                       <Card key={index} className={item.confirmed ? 'border-green-500' : ''}>
                         <CardHeader className="py-3">
