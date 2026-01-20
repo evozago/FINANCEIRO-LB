@@ -262,33 +262,35 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
   };
 
   const buscarMatchesParcela = async (extrato: ExtratoItem, parcelasAbertas: any[]): Promise<ParcelaMatch[]> => {
-    const valorMin = extrato.valor * (1 - toleranciaValor / 100);
-    const valorMax = extrato.valor * (1 + toleranciaValor / 100);
-    const valorCentavosMin = Math.round(valorMin * 100);
-    const valorCentavosMax = Math.round(valorMax * 100);
-    
+    // Comparação de valor em centavos (evita erro de float) e tolerância simétrica:
+    // aceita diferença de até X% do maior valor (entre extrato e parcela).
+    const extratoValorCentavos = Math.round(Math.abs(extrato.valor) * 100);
+
     const dataExtrato = new Date(extrato.data + 'T12:00:00');
     if (isNaN(dataExtrato.getTime())) {
       console.error('Data inválida no extrato:', extrato.data);
       return [];
     }
-    
+
     // Filtrar parcelas que correspondem ao critério de valor e data
     const parcelasFiltradas = parcelasAbertas.filter(p => {
-      const valorOk = p.valor_parcela_centavos >= valorCentavosMin && 
-                      p.valor_parcela_centavos <= valorCentavosMax;
-      
+      const diffCentavos = Math.abs(p.valor_parcela_centavos - extratoValorCentavos);
+      const baseCentavos = Math.max(p.valor_parcela_centavos, extratoValorCentavos);
+      const maxDiffCentavos = Math.round(baseCentavos * (toleranciaValor / 100));
+      const valorOk = diffCentavos <= maxDiffCentavos;
+
       const vencimento = new Date(p.vencimento + 'T12:00:00');
       const diffDias = Math.abs(Math.floor((dataExtrato.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24)));
       const dataOk = diffDias <= toleranciaDias;
-      
+
       return valorOk && dataOk;
     });
 
     return parcelasFiltradas.map(p => {
       const valorParcela = p.valor_parcela_centavos / 100;
-      const diferencaValor = Math.abs(extrato.valor - valorParcela);
-      const diferencaPercentual = (diferencaValor / valorParcela) * 100;
+      const diferencaCentavos = Math.abs(extratoValorCentavos - p.valor_parcela_centavos);
+      const diferencaValor = diferencaCentavos / 100;
+      const diferencaPercentual = p.valor_parcela_centavos > 0 ? (diferencaCentavos / p.valor_parcela_centavos) * 100 : 0;
       
       const vencimento = new Date(p.vencimento + 'T12:00:00');
       const diferencaDias = Math.abs(Math.floor((dataExtrato.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24)));
