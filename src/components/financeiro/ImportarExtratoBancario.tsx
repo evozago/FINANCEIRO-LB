@@ -298,22 +298,39 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
       const scoreDias = Math.max(0, 1 - (diferencaDias / Math.max(toleranciaDias, 1)));
       
       // NOVO: Score baseado em correspondência do nome do fornecedor na descrição
-      const descricaoNormalizada = extrato.descricao.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const fornecedorNormalizado = (p.fornecedor_nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const normalizar = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const compactar = (str: string) => normalizar(str).replace(/\s+/g, ''); // Remove espaços
+      
+      const descricaoNormalizada = normalizar(extrato.descricao);
+      const descricaoCompactada = compactar(extrato.descricao);
+      const fornecedorNormalizado = normalizar(p.fornecedor_nome || '');
+      const fornecedorCompactado = compactar(p.fornecedor_nome || '');
       
       let scoreFornecedor = 0;
       if (fornecedorNormalizado && descricaoNormalizada) {
-        // Verificar se o nome do fornecedor está contido na descrição
-        if (descricaoNormalizada.includes(fornecedorNormalizado)) {
-          scoreFornecedor = 1; // Match exato
+        // Verificar match exato (com ou sem espaços)
+        if (descricaoNormalizada.includes(fornecedorNormalizado) || 
+            descricaoCompactada.includes(fornecedorCompactado) ||
+            fornecedorCompactado.includes(compactar(extrato.descricao.split(' ')[0]))) {
+          scoreFornecedor = 1;
         } else {
           // Verificar palavras-chave do nome do fornecedor
           const palavrasFornecedor = fornecedorNormalizado.split(/\s+/).filter(p => p.length > 2);
           const palavrasEncontradas = palavrasFornecedor.filter(palavra => 
-            descricaoNormalizada.includes(palavra)
+            descricaoNormalizada.includes(palavra) || descricaoCompactada.includes(palavra)
           );
           if (palavrasFornecedor.length > 0) {
             scoreFornecedor = palavrasEncontradas.length / palavrasFornecedor.length;
+          }
+          
+          // Também verificar se palavras da descrição estão no fornecedor
+          const palavrasDescricao = descricaoNormalizada.split(/\s+/).filter(p => p.length > 3);
+          const matchReverso = palavrasDescricao.filter(palavra => 
+            fornecedorNormalizado.includes(palavra) || fornecedorCompactado.includes(palavra)
+          );
+          if (palavrasDescricao.length > 0) {
+            const scoreReverso = matchReverso.length / palavrasDescricao.length;
+            scoreFornecedor = Math.max(scoreFornecedor, scoreReverso);
           }
         }
       }
