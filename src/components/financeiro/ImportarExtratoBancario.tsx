@@ -46,6 +46,7 @@ interface ParcelaMatch {
   score: number;
   diferenca_valor: number;
   diferenca_dias: number;
+  ja_pago?: boolean; // Indica se a parcela já foi paga
 }
 
 interface ReconciliacaoItem {
@@ -54,6 +55,8 @@ interface ReconciliacaoItem {
   selectedMatch: ParcelaMatch | null;
   confirmed: boolean;
 }
+
+type FiltroReconciliacao = 'todos' | 'selecionados' | 'com_match' | 'sem_match';
 
 interface ImportarExtratoBancarioProps {
   isOpen: boolean;
@@ -88,6 +91,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
   const [reconciliacoes, setReconciliacoes] = useState<ReconciliacaoItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedCount, setProcessedCount] = useState(0);
+  const [filtroReconciliacao, setFiltroReconciliacao] = useState<FiltroReconciliacao[]>(['todos']);
 
   // Carregar dados auxiliares
   const loadAuxData = async () => {
@@ -351,13 +355,14 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         total_parcelas: p.total_parcelas || 1,
         score,
         diferenca_valor: diferencaValor,
-        diferenca_dias: diferencaDias
+        diferenca_dias: diferencaDias,
+        ja_pago: p.pago || false
       };
     }).sort((a, b) => b.score - a.score);
   };
 
-  const carregarParcelasAbertas = async () => {
-    // Buscar todas as parcelas abertas de uma vez
+  const carregarTodasParcelas = async () => {
+    // Buscar TODAS as parcelas (abertas e pagas) para verificar duplicidade
     const { data: parcelas, error } = await supabase
       .from('contas_pagar_parcelas')
       .select(`
@@ -367,6 +372,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         valor_parcela_centavos,
         vencimento,
         pago,
+        pago_em,
         contas_pagar!inner (
           id,
           descricao,
@@ -374,8 +380,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
           fornecedor_pf_id,
           qtd_parcelas
         )
-      `)
-      .eq('pago', false);
+      `);
 
     if (error || !parcelas) {
       console.error('Erro ao buscar parcelas:', error);
@@ -419,7 +424,9 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         vencimento: p.vencimento,
         descricao: conta?.descricao || '',
         fornecedor_nome: fornecedorNome,
-        total_parcelas: conta?.qtd_parcelas || 1
+        total_parcelas: conta?.qtd_parcelas || 1,
+        pago: p.pago,
+        pago_em: p.pago_em
       };
     });
   };
@@ -434,9 +441,9 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
     setStep('reconcile');
     
     try {
-      // Carregar todas as parcelas abertas de uma vez
-      const parcelasAbertas = await carregarParcelasAbertas();
-      console.log(`Carregadas ${parcelasAbertas.length} parcelas abertas`);
+      // Carregar todas as parcelas (abertas e pagas) de uma vez
+      const todasParcelas = await carregarTodasParcelas();
+      console.log(`Carregadas ${todasParcelas.length} parcelas (abertas e pagas)`);
       
       const saidas = processExtrato();
       console.log(`Processando ${saidas.length} saídas do extrato`);
@@ -450,12 +457,15 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         
         const batchResults = await Promise.all(
           batch.map(async (extrato) => {
-            const matches = await buscarMatchesParcela(extrato, parcelasAbertas);
+            const matches = await buscarMatchesParcela(extrato, todasParcelas);
+            // Priorizar parcelas não pagas para auto-seleção
+            const matchesAbertos = matches.filter(m => !m.ja_pago);
+            const autoSelect = matchesAbertos.length === 1 && matchesAbertos[0].score >= 0.8 ? matchesAbertos[0] : null;
             return {
               extrato,
               matches,
-              selectedMatch: matches.length === 1 && matches[0].score >= 0.8 ? matches[0] : null,
-              confirmed: matches.length === 1 && matches[0].score >= 0.9
+              selectedMatch: autoSelect,
+              confirmed: autoSelect !== null && autoSelect.score >= 0.9
             };
           })
         );
@@ -558,6 +568,41 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
 
   const confirmedCount = reconciliacoes.filter(r => r.confirmed && r.selectedMatch).length;
   const withMatchCount = reconciliacoes.filter(r => r.matches.length > 0).length;
+  const withoutMatchCount = reconciliacoes.filter(r => r.matches.length === 0).length;
+
+  // Filtrar reconciliações baseado no filtro selecionado
+  const toggleFiltro = (filtro: FiltroReconciliacao) => {
+    if (filtro === 'todos') {
+      setFiltroReconciliacao(['todos']);
+    } else {
+      setFiltroReconciliacao(prev => {
+        const newFiltros = prev.filter(f => f !== 'todos');
+        if (newFiltros.includes(filtro)) {
+          const result = newFiltros.filter(f => f !== filtro);
+          return result.length === 0 ? ['todos'] : result;
+        } else {
+          return [...newFiltros, filtro];
+        }
+      });
+    }
+  };
+
+  const reconciliacoesFiltradas = reconciliacoes.filter(item => {
+    if (filtroReconciliacao.includes('todos')) return true;
+    
+    const checks: boolean[] = [];
+    if (filtroReconciliacao.includes('selecionados')) {
+      checks.push(item.confirmed && item.selectedMatch !== null);
+    }
+    if (filtroReconciliacao.includes('com_match')) {
+      checks.push(item.matches.length > 0);
+    }
+    if (filtroReconciliacao.includes('sem_match')) {
+      checks.push(item.matches.length === 0);
+    }
+    
+    return checks.some(c => c);
+  });
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -771,112 +816,174 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between">
-                  <div className="flex gap-4">
-                    <Badge variant="outline" className="text-sm">
-                      Total: {reconciliacoes.length} saídas
-                    </Badge>
-                    <Badge variant="secondary" className="text-sm">
-                      Com match: {withMatchCount}
-                    </Badge>
-                    <Badge className="text-sm bg-green-600">
-                      Selecionados: {confirmedCount}
-                    </Badge>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-4">
+                      <Badge variant="outline" className="text-sm">
+                        Total: {reconciliacoes.length} saídas
+                      </Badge>
+                      <Badge variant="secondary" className="text-sm">
+                        Com match: {withMatchCount}
+                      </Badge>
+                      <Badge variant="destructive" className="text-sm">
+                        Sem match: {withoutMatchCount}
+                      </Badge>
+                      <Badge className="text-sm bg-primary">
+                        Selecionados: {confirmedCount}
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setStep('config')}>
+                        Voltar
+                      </Button>
+                      <Button onClick={confirmarBaixas} disabled={confirmedCount === 0}>
+                        <Check className="h-4 w-4 mr-2" />
+                        Confirmar {confirmedCount} Baixa(s)
+                      </Button>
+                    </div>
                   </div>
-                  
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => setStep('config')}>
-                      Voltar
-                    </Button>
-                    <Button onClick={confirmarBaixas} disabled={confirmedCount === 0}>
-                      <Check className="h-4 w-4 mr-2" />
-                      Confirmar {confirmedCount} Baixa(s)
-                    </Button>
+
+                  {/* Filtros */}
+                  <div className="flex items-center gap-3 p-2 border rounded-md bg-muted/50">
+                    <span className="text-sm font-medium">Filtrar:</span>
+                    <div className="flex items-center gap-2">
+                      <Checkbox 
+                        id="filtro-todos"
+                        checked={filtroReconciliacao.includes('todos')}
+                        onCheckedChange={() => toggleFiltro('todos')}
+                      />
+                      <Label htmlFor="filtro-todos" className="text-sm cursor-pointer">Todos</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox 
+                        id="filtro-selecionados"
+                        checked={filtroReconciliacao.includes('selecionados')}
+                        onCheckedChange={() => toggleFiltro('selecionados')}
+                      />
+                      <Label htmlFor="filtro-selecionados" className="text-sm cursor-pointer">Selecionados ({confirmedCount})</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox 
+                        id="filtro-com-match"
+                        checked={filtroReconciliacao.includes('com_match')}
+                        onCheckedChange={() => toggleFiltro('com_match')}
+                      />
+                      <Label htmlFor="filtro-com-match" className="text-sm cursor-pointer">Com match ({withMatchCount})</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox 
+                        id="filtro-sem-match"
+                        checked={filtroReconciliacao.includes('sem_match')}
+                        onCheckedChange={() => toggleFiltro('sem_match')}
+                      />
+                      <Label htmlFor="filtro-sem-match" className="text-sm cursor-pointer">Sem match ({withoutMatchCount})</Label>
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-auto border rounded-md">
                   <div className="space-y-3 p-4">
-                    {reconciliacoes.map((item, index) => (
-                      <Card key={index} className={item.confirmed ? 'border-green-500' : ''}>
-                        <CardHeader className="py-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <Checkbox 
-                                checked={item.confirmed}
-                                onCheckedChange={() => item.selectedMatch && toggleConfirm(index)}
-                                disabled={!item.selectedMatch}
-                              />
-                              <div>
-                                <CardTitle className="text-sm font-medium">
-                                  {formatDate(item.extrato.data)} - {formatCurrency(item.extrato.valor)}
-                                </CardTitle>
-                                <p className="text-xs text-muted-foreground truncate max-w-md">
-                                  {item.extrato.descricao}
-                                </p>
+                    {reconciliacoesFiltradas.map((item) => {
+                      // Encontrar o índice original para as funções de callback
+                      const originalIndex = reconciliacoes.findIndex(r => r === item);
+                      return (
+                        <Card key={originalIndex} className={item.confirmed ? 'border-primary' : ''}>
+                          <CardHeader className="py-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Checkbox 
+                                  checked={item.confirmed}
+                                  onCheckedChange={() => item.selectedMatch && !item.selectedMatch.ja_pago && toggleConfirm(originalIndex)}
+                                  disabled={!item.selectedMatch || item.selectedMatch.ja_pago}
+                                />
+                                <div>
+                                  <CardTitle className="text-sm font-medium">
+                                    {formatDate(item.extrato.data)} - {formatCurrency(item.extrato.valor)}
+                                  </CardTitle>
+                                  <p className="text-xs text-muted-foreground truncate max-w-md">
+                                    {item.extrato.descricao}
+                                  </p>
+                                </div>
                               </div>
+                              
+                              {item.matches.length === 0 ? (
+                                <Badge variant="destructive">
+                                  <X className="h-3 w-3 mr-1" />
+                                  Sem match
+                                </Badge>
+                              ) : item.matches.length === 1 && item.matches[0].score >= 0.9 && !item.matches[0].ja_pago ? (
+                                <Badge className="bg-primary">
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Match exato
+                                </Badge>
+                              ) : item.matches.every(m => m.ja_pago) ? (
+                                <Badge variant="outline" className="text-amber-600 border-amber-600">
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Já pago no sistema
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary">
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  {item.matches.length} opção(ões)
+                                </Badge>
+                              )}
                             </div>
-                            
-                            {item.matches.length === 0 ? (
-                              <Badge variant="destructive">
-                                <X className="h-3 w-3 mr-1" />
-                                Sem match
-                              </Badge>
-                            ) : item.matches.length === 1 && item.matches[0].score >= 0.9 ? (
-                              <Badge className="bg-green-600">
-                                <Check className="h-3 w-3 mr-1" />
-                                Match exato
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary">
-                                <AlertTriangle className="h-3 w-3 mr-1" />
-                                {item.matches.length} opção(ões)
-                              </Badge>
-                            )}
-                          </div>
-                        </CardHeader>
-                        
-                        {item.matches.length > 0 && (
-                          <CardContent className="pt-0 pb-3">
-                            <div className="space-y-2">
-                              {item.matches.slice(0, 5).map((match, mIndex) => (
-                                <div 
-                                  key={mIndex}
-                                  className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors ${
-                                    item.selectedMatch?.parcela_id === match.parcela_id 
-                                      ? 'border-primary bg-primary/5' 
-                                      : 'hover:bg-muted/50'
-                                  }`}
-                                  onClick={() => selectMatch(index, match)}
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <div className={`w-3 h-3 rounded-full ${
-                                      item.selectedMatch?.parcela_id === match.parcela_id 
-                                        ? 'bg-primary' 
-                                        : 'bg-muted'
-                                    }`} />
-                                    <div>
-                                      <p className="text-sm font-medium">{match.fornecedor}</p>
+                          </CardHeader>
+                          
+                          {item.matches.length > 0 && (
+                            <CardContent className="pt-0 pb-3">
+                              <div className="space-y-2">
+                                {item.matches.slice(0, 5).map((match, mIndex) => (
+                                  <div 
+                                    key={mIndex}
+                                    className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors ${
+                                      match.ja_pago 
+                                        ? 'bg-amber-50 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700 opacity-70' 
+                                        : item.selectedMatch?.parcela_id === match.parcela_id 
+                                          ? 'border-primary bg-primary/5' 
+                                          : 'hover:bg-muted/50'
+                                    }`}
+                                    onClick={() => !match.ja_pago && selectMatch(originalIndex, match)}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <div className={`w-3 h-3 rounded-full ${
+                                        match.ja_pago
+                                          ? 'bg-amber-500'
+                                          : item.selectedMatch?.parcela_id === match.parcela_id 
+                                            ? 'bg-primary' 
+                                            : 'bg-muted'
+                                      }`} />
+                                      <div>
+                                        <div className="flex items-center gap-2">
+                                          <p className="text-sm font-medium">{match.fornecedor}</p>
+                                          {match.ja_pago && (
+                                            <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">
+                                              JÁ PAGO
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                          {match.descricao} • Parcela {match.numero_parcela}/{match.total_parcelas}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="text-right">
+                                      <p className="text-sm font-medium">{formatCurrency(match.valor_parcela)}</p>
                                       <p className="text-xs text-muted-foreground">
-                                        {match.descricao} • Parcela {match.numero_parcela}/{match.total_parcelas}
+                                        Venc: {formatDate(match.vencimento)} • 
+                                        Δ {match.diferenca_dias}d / {formatCurrency(match.diferenca_valor)}
                                       </p>
                                     </div>
                                   </div>
-                                  
-                                  <div className="text-right">
-                                    <p className="text-sm font-medium">{formatCurrency(match.valor_parcela)}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      Venc: {formatDate(match.vencimento)} • 
-                                      Δ {match.diferenca_dias}d / {formatCurrency(match.diferenca_valor)}
-                                    </p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        )}
-                      </Card>
-                    ))}
+                                ))}
+                              </div>
+                            </CardContent>
+                          )}
+                        </Card>
+                      );
+                    })}
                   </div>
                 </div>
               </>
