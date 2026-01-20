@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, FileSpreadsheet, Check, X, AlertTriangle, Search, Loader2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, Check, X, AlertTriangle, Search, Loader2, AlertCircle } from 'lucide-react';
 
 interface ContaBancaria {
   id: number;
@@ -669,6 +669,59 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
   const withMatchCount = reconciliacoes.filter(r => r.matches.length > 0).length;
   const withoutMatchCount = reconciliacoes.filter(r => r.matches.length === 0).length;
 
+  // Detectar seleções duplicadas (mesma parcela selecionada em múltiplos itens do extrato)
+  const selecoesDuplicadas = React.useMemo(() => {
+    const parcelasSelecionadas = reconciliacoes
+      .filter(r => r.confirmed && r.selectedMatch && !r.identificadorDuplicado)
+      .map(r => ({
+        parcela_id: r.selectedMatch!.parcela_id,
+        fornecedor: r.selectedMatch!.fornecedor,
+        valor: r.selectedMatch!.valor_parcela,
+        extratoDescricao: r.extrato.descricao,
+        extratoData: r.extrato.data,
+        extratoValor: r.extrato.valor
+      }));
+    
+    // Encontrar duplicatas
+    const contagem: Record<number, typeof parcelasSelecionadas> = {};
+    parcelasSelecionadas.forEach(item => {
+      if (!contagem[item.parcela_id]) {
+        contagem[item.parcela_id] = [];
+      }
+      contagem[item.parcela_id].push(item);
+    });
+
+    return Object.entries(contagem)
+      .filter(([_, items]) => items.length > 1)
+      .map(([parcela_id, items]) => ({
+        parcela_id: Number(parcela_id),
+        fornecedor: items[0].fornecedor,
+        valor: items[0].valor,
+        extratos: items.map(i => ({
+          descricao: i.extratoDescricao,
+          data: i.extratoData,
+          valor: i.extratoValor
+        }))
+      }));
+  }, [reconciliacoes]);
+
+  const temDuplicatas = selecoesDuplicadas.length > 0;
+
+  // Helper para verificar se uma parcela está selecionada em outra linha
+  const getParcelaEmOutraLinha = (parcelaId: number, currentIndex: number): { descricao: string; data: string } | null => {
+    for (let i = 0; i < reconciliacoes.length; i++) {
+      if (i !== currentIndex && 
+          reconciliacoes[i].confirmed && 
+          reconciliacoes[i].selectedMatch?.parcela_id === parcelaId) {
+        return {
+          descricao: reconciliacoes[i].extrato.descricao,
+          data: reconciliacoes[i].extrato.data
+        };
+      }
+    }
+    return null;
+  };
+
   // Filtrar reconciliações baseado no filtro selecionado
   const toggleFiltro = (filtro: FiltroReconciliacao) => {
     if (filtro === 'todos') {
@@ -952,14 +1005,60 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                       <Button variant="outline" onClick={() => setStep('config')}>
                         Voltar
                       </Button>
-                      <Button onClick={confirmarBaixas} disabled={confirmedCount === 0}>
+                      <Button 
+                        onClick={confirmarBaixas} 
+                        disabled={confirmedCount === 0 || temDuplicatas}
+                        className={temDuplicatas ? 'opacity-50 cursor-not-allowed' : ''}
+                      >
                         <Check className="h-4 w-4 mr-2" />
                         Confirmar {confirmedCount} Baixa(s)
                       </Button>
                     </div>
                   </div>
 
-                  {/* Filtros */}
+                  {/* Alerta de duplicatas */}
+                  {temDuplicatas && (
+                    <div className="bg-destructive/10 border border-destructive/50 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-destructive">Atenção: Contas Duplicadas Selecionadas</h4>
+                          <p className="text-sm text-destructive/80 mt-1 mb-3">
+                            A mesma conta a pagar está selecionada para múltiplas linhas do extrato. 
+                            <strong> Ajuste as seleções para continuar.</strong>
+                          </p>
+                          <div className="space-y-3">
+                            {selecoesDuplicadas.map((dup) => (
+                              <div key={dup.parcela_id} className="bg-background/80 rounded p-3 border border-destructive/30">
+                                <div className="font-medium text-sm text-destructive">
+                                  📋 {dup.fornecedor} - {formatCurrency(dup.valor)}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1 mb-2">
+                                  Esta conta está selecionada para {dup.extratos.length} linhas do extrato:
+                                </p>
+                                <ul className="space-y-1">
+                                  {dup.extratos.map((ext, i) => (
+                                    <li key={i} className="text-xs flex items-center gap-2 text-destructive/80">
+                                      <span className="w-2 h-2 rounded-full bg-destructive/50" />
+                                      <span className="font-medium">{formatDate(ext.data)}</span>
+                                      <span className="text-muted-foreground">•</span>
+                                      <span>{formatCurrency(ext.valor)}</span>
+                                      <span className="text-muted-foreground truncate max-w-xs">
+                                        - {ext.descricao}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-xs text-destructive/70 mt-3 italic">
+                            💡 Dica: Clique em outra opção de match ou desmarque os itens duplicados acima.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 p-2 border rounded-md bg-muted/50">
                     <span className="text-sm font-medium">Filtrar:</span>
                     <div className="flex items-center gap-2">
@@ -1070,51 +1169,84 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                           {item.matches.length > 0 && !item.identificadorDuplicado && (
                             <CardContent className="pt-0 pb-3">
                               <div className="space-y-2">
-                                {item.matches.slice(0, 5).map((match, mIndex) => (
-                                  <div 
-                                    key={mIndex}
-                                    className={`flex flex-col p-2 rounded border cursor-pointer transition-colors ${
-                                      match.ja_pago && item.selectedMatch?.parcela_id === match.parcela_id && item.substituirPagamento
-                                        ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30'
-                                        : match.ja_pago 
-                                          ? 'bg-muted/30 border-muted' 
-                                          : item.selectedMatch?.parcela_id === match.parcela_id 
-                                            ? 'border-primary bg-primary/5' 
-                                            : 'hover:bg-muted/50'
-                                    }`}
-                                    onClick={() => {
-                                      if (match.ja_pago) {
-                                        selectMatch(originalIndex, match, true);
-                                      } else {
-                                        selectMatch(originalIndex, match, false);
-                                      }
-                                    }}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-3">
-                                        <div className={`w-3 h-3 rounded-full ${
-                                          item.selectedMatch?.parcela_id === match.parcela_id && item.substituirPagamento
-                                            ? 'bg-amber-500'
-                                            : match.ja_pago
-                                              ? 'bg-muted-foreground/30'
-                                              : item.selectedMatch?.parcela_id === match.parcela_id 
-                                                ? 'bg-primary' 
-                                                : 'bg-muted'
-                                        }`} />
-                                        <div>
-                                          <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium">{match.fornecedor}</p>
-                                            {match.ja_pago && (
-                                              <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">
-                                                JÁ PAGO
-                                              </Badge>
-                                            )}
-                                          </div>
-                                          <p className="text-xs text-muted-foreground">
-                                            {match.descricao} • Parcela {match.numero_parcela}/{match.total_parcelas}
-                                          </p>
+                                {item.matches.slice(0, 5).map((match, mIndex) => {
+                                  const outraLinha = getParcelaEmOutraLinha(match.parcela_id, originalIndex);
+                                  const estaSelecionadoAqui = item.selectedMatch?.parcela_id === match.parcela_id;
+                                  const estaEmConflito = outraLinha !== null && estaSelecionadoAqui;
+                                  
+                                  return (
+                                    <div 
+                                      key={mIndex}
+                                      className={`flex flex-col p-2 rounded border cursor-pointer transition-colors ${
+                                        estaEmConflito
+                                          ? 'border-destructive bg-destructive/10'
+                                          : outraLinha && !estaSelecionadoAqui
+                                            ? 'border-dashed border-muted-foreground/50 bg-muted/20 opacity-60'
+                                            : match.ja_pago && estaSelecionadoAqui && item.substituirPagamento
+                                              ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30'
+                                              : match.ja_pago 
+                                                ? 'bg-muted/30 border-muted' 
+                                                : estaSelecionadoAqui 
+                                                  ? 'border-primary bg-primary/5' 
+                                                  : 'hover:bg-muted/50'
+                                      }`}
+                                      onClick={() => {
+                                        if (match.ja_pago) {
+                                          selectMatch(originalIndex, match, true);
+                                        } else {
+                                          selectMatch(originalIndex, match, false);
+                                        }
+                                      }}
+                                    >
+                                      {/* Aviso de conflito/duplicata */}
+                                      {outraLinha && (
+                                        <div className={`text-xs mb-2 p-1.5 rounded flex items-center gap-2 ${
+                                          estaSelecionadoAqui 
+                                            ? 'bg-destructive/20 text-destructive' 
+                                            : 'bg-muted text-muted-foreground'
+                                        }`}>
+                                          <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                                          <span>
+                                            {estaSelecionadoAqui 
+                                              ? '⚠️ CONFLITO: Esta conta também está selecionada em outra linha do extrato!' 
+                                              : `Já selecionada para: ${formatDate(outraLinha.data)} - ${outraLinha.descricao.substring(0, 30)}...`
+                                            }
+                                          </span>
                                         </div>
-                                      </div>
+                                      )}
+                                      
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                          <div className={`w-3 h-3 rounded-full ${
+                                            estaEmConflito
+                                              ? 'bg-destructive'
+                                              : estaSelecionadoAqui && item.substituirPagamento
+                                                ? 'bg-amber-500'
+                                                : match.ja_pago
+                                                  ? 'bg-muted-foreground/30'
+                                                  : estaSelecionadoAqui 
+                                                    ? 'bg-primary' 
+                                                    : 'bg-muted'
+                                          }`} />
+                                          <div>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <p className="text-sm font-medium">{match.fornecedor}</p>
+                                              {match.ja_pago && (
+                                                <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">
+                                                  JÁ PAGO
+                                                </Badge>
+                                              )}
+                                              {outraLinha && !estaSelecionadoAqui && (
+                                                <Badge variant="outline" className="text-xs text-muted-foreground">
+                                                  Em uso
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                              {match.descricao} • Parcela {match.numero_parcela}/{match.total_parcelas}
+                                            </p>
+                                          </div>
+                                        </div>
                                       
                                       <div className="text-right">
                                         <p className="text-sm font-medium">{formatCurrency(match.valor_parcela)}</p>
