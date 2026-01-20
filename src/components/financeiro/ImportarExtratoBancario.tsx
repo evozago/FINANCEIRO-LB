@@ -569,12 +569,12 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                 
                 <div className="space-y-2">
                   <Label>Coluna de Tipo (D/C)</Label>
-                  <Select value={colTipo} onValueChange={setColTipo}>
+                  <Select value={colTipo || "none"} onValueChange={(val) => setColTipo(val === "none" ? "" : val)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Opcional" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Nenhuma</SelectItem>
+                      <SelectItem value="none">Nenhuma</SelectItem>
                       {columns.map(col => (
                         <SelectItem key={col} value={col}>{col}</SelectItem>
                       ))}
