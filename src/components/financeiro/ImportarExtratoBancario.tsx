@@ -1308,7 +1308,8 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                                       </div>
                                     )}
                                   </div>
-                                ))}
+                                );
+                              })}
                               </div>
                             </CardContent>
                           )}
