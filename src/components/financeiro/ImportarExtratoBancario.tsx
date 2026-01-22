@@ -99,6 +99,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedCount, setProcessedCount] = useState(0);
   const [filtroReconciliacao, setFiltroReconciliacao] = useState<FiltroReconciliacao[]>(['todos']);
+  const [filtrarPorNome, setFiltrarPorNome] = useState<boolean>(true); // Novo: filtro por correspondência de nome
 
   // Carregar dados auxiliares
   const loadAuxData = async () => {
@@ -722,6 +723,42 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
     return null;
   };
 
+  // Função para verificar se há pelo menos uma palavra em comum entre descrição e fornecedor
+  const temPalavraEmComum = (descricao: string, fornecedor: string): boolean => {
+    if (!descricao || !fornecedor) return false;
+    
+    const normalizar = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    
+    // Palavras a ignorar (muito comuns ou curtas)
+    const palavrasIgnorar = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'em', 'para', 'com', 'por', 'uma', 'um', 'ltda', 'sa', 'me', 'eireli', 'epp', 'pix', 'ted', 'doc', 'boleto', 'pagamento', 'transferencia', 'debito', 'credito']);
+    
+    const palavrasDescricao = normalizar(descricao)
+      .split(/[\s\-\/\.\,]+/)
+      .filter(p => p.length > 2 && !palavrasIgnorar.has(p));
+    
+    const palavrasFornecedor = normalizar(fornecedor)
+      .split(/[\s\-\/\.\,]+/)
+      .filter(p => p.length > 2 && !palavrasIgnorar.has(p));
+    
+    // Verificar se há qualquer palavra em comum
+    for (const palavra of palavrasDescricao) {
+      if (palavrasFornecedor.some(pf => pf.includes(palavra) || palavra.includes(pf))) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  // Filtrar matches de um item baseado na correspondência de nome
+  const filtrarMatchesPorNome = (item: ReconciliacaoItem): ParcelaMatch[] => {
+    if (!filtrarPorNome) return item.matches;
+    
+    return item.matches.filter(match => 
+      temPalavraEmComum(item.extrato.descricao, match.fornecedor)
+    );
+  };
+
   // Filtrar reconciliações baseado no filtro selecionado
   const toggleFiltro = (filtro: FiltroReconciliacao) => {
     if (filtro === 'todos') {
@@ -1059,7 +1096,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                       </div>
                     </div>
                   )}
-                  <div className="flex items-center gap-3 p-2 border rounded-md bg-muted/50">
+                  <div className="flex flex-wrap items-center gap-3 p-2 border rounded-md bg-muted/50">
                     <span className="text-sm font-medium">Filtrar:</span>
                     <div className="flex items-center gap-2">
                       <Checkbox 
@@ -1092,6 +1129,17 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                         onCheckedChange={() => toggleFiltro('sem_match')}
                       />
                       <Label htmlFor="filtro-sem-match" className="text-sm cursor-pointer">Sem match ({withoutMatchCount})</Label>
+                    </div>
+                    
+                    <div className="border-l pl-3 ml-1 flex items-center gap-2">
+                      <Checkbox 
+                        id="filtro-por-nome"
+                        checked={filtrarPorNome}
+                        onCheckedChange={(checked) => setFiltrarPorNome(checked as boolean)}
+                      />
+                      <Label htmlFor="filtro-por-nome" className="text-sm cursor-pointer text-primary font-medium">
+                        🔍 Só mostrar matches com nome correspondente
+                      </Label>
                     </div>
                   </div>
                 </div>
@@ -1169,7 +1217,16 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                           {item.matches.length > 0 && !item.identificadorDuplicado && (
                             <CardContent className="pt-0 pb-3">
                               <div className="space-y-2">
-                                {item.matches.slice(0, 5).map((match, mIndex) => {
+                                {(() => {
+                                  const matchesFiltrados = filtrarMatchesPorNome(item);
+                                  if (matchesFiltrados.length === 0 && filtrarPorNome) {
+                                    return (
+                                      <div className="text-sm text-muted-foreground italic p-2 text-center border border-dashed rounded">
+                                        Nenhum match com nome correspondente. Desative o filtro para ver todas as opções.
+                                      </div>
+                                    );
+                                  }
+                                  return matchesFiltrados.slice(0, 5).map((match, mIndex) => {
                                   const outraLinha = getParcelaEmOutraLinha(match.parcela_id, originalIndex);
                                   const estaSelecionadoAqui = item.selectedMatch?.parcela_id === match.parcela_id;
                                   const estaEmConflito = outraLinha !== null && estaSelecionadoAqui;
@@ -1309,7 +1366,8 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                                     )}
                                   </div>
                                 );
-                              })}
+                              });
+                            })()}
                               </div>
                             </CardContent>
                           )}
