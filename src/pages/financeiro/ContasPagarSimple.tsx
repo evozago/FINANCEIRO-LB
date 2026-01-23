@@ -27,6 +27,7 @@ import { useXMLImport } from '@/hooks/useXMLImport';
 import { Progress } from '@/components/ui/progress';
 import { format } from 'date-fns';
 import { parseLocalDate } from '@/lib/date';
+import { usePersistentState } from '@/hooks/usePersistentState';
 
 interface ParcelaCompleta {
   id: number;
@@ -141,9 +142,15 @@ export function ContasPagarSimple() {
   // DAR_BAIXA LOTE (múltiplos comprovantes)
   const [showBaixaLoteModal, setShowBaixaLoteModal] = useState(false);
   const [baixaLoteItems, setBaixaLoteItems] = useState<BaixaLoteItem[]>([]);
+  const [baixaLoteProcessing, setBaixaLoteProcessing] = useState(false);
+  
+  // Estados persistentes para banco e forma de pagamento (memória do último selecionado)
+  const [ultimoContaBancariaId, setUltimoContaBancariaId] = usePersistentState<string>('contas-pagar-ultimo-banco', '13');
+  const [ultimaFormaPagamentoId, setUltimaFormaPagamentoId] = usePersistentState<string>('contas-pagar-ultima-forma-pagamento', '4');
+  
+  // Usar os valores persistidos nos modais de lote
   const [baixaLoteFormaPagamento, setBaixaLoteFormaPagamento] = useState('');
   const [baixaLoteContaBancaria, setBaixaLoteContaBancaria] = useState('');
-  const [baixaLoteProcessing, setBaixaLoteProcessing] = useState(false);
   
   // Importar Extrato Bancário
   const [showExtratoModal, setShowExtratoModal] = useState(false);
@@ -1259,10 +1266,10 @@ export function ContasPagarSimple() {
                   Editar em Massa ({selectedParcelas.length})
                 </Button>
                 <Button size="sm" onClick={() => {
-                  // Inicializar todos os campos com valores padrão
+                  // Inicializar todos os campos com valores padrão (usando os últimos selecionados)
                   const hoje = new Date();
-                  const contaBancariaDefault = '13'; // Digital Kids Mercado Pago
-                  const formaPagamentoDefault = '4'; // Boleto
+                  const contaBancariaDefault = ultimoContaBancariaId || '13';
+                  const formaPagamentoDefault = ultimaFormaPagamentoId || '4';
                   
                   const initialPaymentData: typeof paymentData = {};
                   const selecionadas = filteredAndSortedParcelas.filter(p => selectedParcelas.includes(p.id));
@@ -1652,18 +1659,23 @@ export function ContasPagarSimple() {
                     </div>
                       <Select
                         value={paymentData[parcela.id]?.conta_bancaria_id ? paymentData[parcela.id]!.conta_bancaria_id : 'none'}
-                        onValueChange={(v) => setPaymentData({
-                          ...paymentData,
-                          [parcela.id]: {
-                            data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
-                            conta_bancaria_id: v === 'none' ? '' : v,
-                            forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
-                            codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
-                            valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
-                            valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos,
-                            desconto_percentual: paymentData[parcela.id]?.desconto_percentual || 0
-                          }
-                        })}
+                        onValueChange={(v) => {
+                          const newValue = v === 'none' ? '' : v;
+                          // Persistir última seleção
+                          if (newValue) setUltimoContaBancariaId(newValue);
+                          setPaymentData({
+                            ...paymentData,
+                            [parcela.id]: {
+                              data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
+                              conta_bancaria_id: newValue,
+                              forma_pagamento_id: paymentData[parcela.id]?.forma_pagamento_id || '',
+                              codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
+                              valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
+                              valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos,
+                              desconto_percentual: paymentData[parcela.id]?.desconto_percentual || 0
+                            }
+                          });
+                        }}
                       >
                         <SelectTrigger><SelectValue placeholder="Banco" /></SelectTrigger>
                         <SelectContent className="bg-background z-50">
@@ -1712,18 +1724,23 @@ export function ContasPagarSimple() {
                     </div>
                       <Select
                         value={paymentData[parcela.id]?.forma_pagamento_id ? paymentData[parcela.id]!.forma_pagamento_id : 'none'}
-                        onValueChange={(v) => setPaymentData({
-                          ...paymentData,
-                          [parcela.id]: {
-                            data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
-                            conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
-                            forma_pagamento_id: v === 'none' ? '' : v,
-                            codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
-                            valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
-                            valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos,
-                            desconto_percentual: paymentData[parcela.id]?.desconto_percentual || 0
-                          }
-                        })}
+                        onValueChange={(v) => {
+                          const newValue = v === 'none' ? '' : v;
+                          // Persistir última seleção
+                          if (newValue) setUltimaFormaPagamentoId(newValue);
+                          setPaymentData({
+                            ...paymentData,
+                            [parcela.id]: {
+                              data_pagamento: paymentData[parcela.id]?.data_pagamento || null,
+                              conta_bancaria_id: paymentData[parcela.id]?.conta_bancaria_id || '',
+                              forma_pagamento_id: newValue,
+                              codigo_identificador: paymentData[parcela.id]?.codigo_identificador || '',
+                              valor_original_centavos: paymentData[parcela.id]?.valor_original_centavos || parcela.valor_parcela_centavos,
+                              valor_pago_centavos: paymentData[parcela.id]?.valor_pago_centavos || parcela.valor_parcela_centavos,
+                              desconto_percentual: paymentData[parcela.id]?.desconto_percentual || 0
+                            }
+                          });
+                        }}
                       >
                         <SelectTrigger><SelectValue placeholder="Forma" /></SelectTrigger>
                         <SelectContent className="bg-background z-50">
@@ -2104,7 +2121,10 @@ export function ContasPagarSimple() {
                       <Label>Forma de Pagamento *</Label>
                       <Select 
                         value={baixaFormData.forma_pagamento_id} 
-                        onValueChange={(v) => setBaixaFormData(prev => ({ ...prev, forma_pagamento_id: v }))}
+                        onValueChange={(v) => {
+                          setUltimaFormaPagamentoId(v);
+                          setBaixaFormData(prev => ({ ...prev, forma_pagamento_id: v }));
+                        }}
                       >
                         <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
@@ -2118,7 +2138,10 @@ export function ContasPagarSimple() {
                       <Label>Conta Bancária</Label>
                       <Select 
                         value={baixaFormData.conta_bancaria_id} 
-                        onValueChange={(v) => setBaixaFormData(prev => ({ ...prev, conta_bancaria_id: v }))}
+                        onValueChange={(v) => {
+                          setUltimoContaBancariaId(v);
+                          setBaixaFormData(prev => ({ ...prev, conta_bancaria_id: v }));
+                        }}
                       >
                         <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
                         <SelectContent>
@@ -2195,7 +2218,7 @@ export function ContasPagarSimple() {
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
             <div>
               <Label>Forma de Pagamento *</Label>
-              <Select value={baixaLoteFormaPagamento} onValueChange={setBaixaLoteFormaPagamento}>
+              <Select value={baixaLoteFormaPagamento} onValueChange={(v) => { setUltimaFormaPagamentoId(v); setBaixaLoteFormaPagamento(v); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {formasPagamento.map(f => (
@@ -2206,7 +2229,7 @@ export function ContasPagarSimple() {
             </div>
             <div>
               <Label>Conta Bancária</Label>
-              <Select value={baixaLoteContaBancaria} onValueChange={setBaixaLoteContaBancaria}>
+              <Select value={baixaLoteContaBancaria} onValueChange={(v) => { setUltimoContaBancariaId(v); setBaixaLoteContaBancaria(v); }}>
                 <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
                 <SelectContent>
                   {contasBancarias.map(c => (
