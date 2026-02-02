@@ -14,7 +14,869 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      cargos: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          descricao: string | null
+          id: number
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: number
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: number
+          nome?: string
+        }
+        Relationships: []
+      }
+      categorias_financeiras: {
+        Row: {
+          ativo: boolean | null
+          cor: string | null
+          created_at: string | null
+          id: number
+          nome: string
+          tipo: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          cor?: string | null
+          created_at?: string | null
+          id?: number
+          nome: string
+          tipo?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          cor?: string | null
+          created_at?: string | null
+          id?: number
+          nome?: string
+          tipo?: string | null
+        }
+        Relationships: []
+      }
+      compras_pedido_anexos: {
+        Row: {
+          created_at: string | null
+          descricao: string | null
+          id: number
+          pedido_id: number | null
+          tipo_anexo: string
+          url_anexo: string
+        }
+        Insert: {
+          created_at?: string | null
+          descricao?: string | null
+          id?: number
+          pedido_id?: number | null
+          tipo_anexo: string
+          url_anexo: string
+        }
+        Update: {
+          created_at?: string | null
+          descricao?: string | null
+          id?: number
+          pedido_id?: number | null
+          tipo_anexo?: string
+          url_anexo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compras_pedido_anexos_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "compras_pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      compras_pedido_itens: {
+        Row: {
+          created_at: string | null
+          descricao: string
+          id: number
+          pedido_id: number | null
+          quantidade: number | null
+          valor_total_centavos: number | null
+          valor_unitario_centavos: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          descricao: string
+          id?: number
+          pedido_id?: number | null
+          quantidade?: number | null
+          valor_total_centavos?: number | null
+          valor_unitario_centavos?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          descricao?: string
+          id?: number
+          pedido_id?: number | null
+          quantidade?: number | null
+          valor_total_centavos?: number | null
+          valor_unitario_centavos?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compras_pedido_itens_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "compras_pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      compras_pedidos: {
+        Row: {
+          created_at: string | null
+          data_entrega: string | null
+          data_pedido: string | null
+          filial_id: number | null
+          fornecedor_id: number | null
+          id: number
+          numero_pedido: string | null
+          observacoes: string | null
+          status: string | null
+          updated_at: string | null
+          valor_total_centavos: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          data_entrega?: string | null
+          data_pedido?: string | null
+          filial_id?: number | null
+          fornecedor_id?: number | null
+          id?: number
+          numero_pedido?: string | null
+          observacoes?: string | null
+          status?: string | null
+          updated_at?: string | null
+          valor_total_centavos?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          data_entrega?: string | null
+          data_pedido?: string | null
+          filial_id?: number | null
+          fornecedor_id?: number | null
+          id?: number
+          numero_pedido?: string | null
+          observacoes?: string | null
+          status?: string | null
+          updated_at?: string | null
+          valor_total_centavos?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compras_pedidos_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compras_pedidos_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_juridicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contas_bancarias: {
+        Row: {
+          agencia: string | null
+          ativo: boolean | null
+          banco: string | null
+          conta: string | null
+          created_at: string | null
+          id: number
+          nome: string
+          saldo_inicial_centavos: number | null
+          tipo: string | null
+        }
+        Insert: {
+          agencia?: string | null
+          ativo?: boolean | null
+          banco?: string | null
+          conta?: string | null
+          created_at?: string | null
+          id?: number
+          nome: string
+          saldo_inicial_centavos?: number | null
+          tipo?: string | null
+        }
+        Update: {
+          agencia?: string | null
+          ativo?: boolean | null
+          banco?: string | null
+          conta?: string | null
+          created_at?: string | null
+          id?: number
+          nome?: string
+          saldo_inicial_centavos?: number | null
+          tipo?: string | null
+        }
+        Relationships: []
+      }
+      contas_pagar: {
+        Row: {
+          categoria_id: number | null
+          created_at: string | null
+          descricao: string | null
+          filial_id: number | null
+          fornecedor_id: number | null
+          id: number
+          num_parcelas: number | null
+          numero_nota: string | null
+          observacoes: string | null
+          pessoa_fisica_id: number | null
+          referencia: string | null
+          updated_at: string | null
+          valor_total_centavos: number
+        }
+        Insert: {
+          categoria_id?: number | null
+          created_at?: string | null
+          descricao?: string | null
+          filial_id?: number | null
+          fornecedor_id?: number | null
+          id?: number
+          num_parcelas?: number | null
+          numero_nota?: string | null
+          observacoes?: string | null
+          pessoa_fisica_id?: number | null
+          referencia?: string | null
+          updated_at?: string | null
+          valor_total_centavos: number
+        }
+        Update: {
+          categoria_id?: number | null
+          created_at?: string | null
+          descricao?: string | null
+          filial_id?: number | null
+          fornecedor_id?: number | null
+          id?: number
+          num_parcelas?: number | null
+          numero_nota?: string | null
+          observacoes?: string | null
+          pessoa_fisica_id?: number | null
+          referencia?: string | null
+          updated_at?: string | null
+          valor_total_centavos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contas_pagar_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "categorias_financeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_juridicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_pessoa_fisica_id_fkey"
+            columns: ["pessoa_fisica_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contas_pagar_parcelas: {
+        Row: {
+          conta_bancaria_id: number | null
+          conta_id: number | null
+          created_at: string | null
+          data_pagamento: string | null
+          forma_pagamento_id: number | null
+          id: number
+          numero_parcela: number
+          observacoes: string | null
+          pago: boolean | null
+          updated_at: string | null
+          valor_centavos: number
+          vencimento: string
+        }
+        Insert: {
+          conta_bancaria_id?: number | null
+          conta_id?: number | null
+          created_at?: string | null
+          data_pagamento?: string | null
+          forma_pagamento_id?: number | null
+          id?: number
+          numero_parcela: number
+          observacoes?: string | null
+          pago?: boolean | null
+          updated_at?: string | null
+          valor_centavos: number
+          vencimento: string
+        }
+        Update: {
+          conta_bancaria_id?: number | null
+          conta_id?: number | null
+          created_at?: string | null
+          data_pagamento?: string | null
+          forma_pagamento_id?: number | null
+          id?: number
+          numero_parcela?: number
+          observacoes?: string | null
+          pago?: boolean | null
+          updated_at?: string | null
+          valor_centavos?: number
+          vencimento?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contas_pagar_parcelas_conta_bancaria_id_fkey"
+            columns: ["conta_bancaria_id"]
+            isOneToOne: false
+            referencedRelation: "contas_bancarias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_parcelas_conta_id_fkey"
+            columns: ["conta_id"]
+            isOneToOne: false
+            referencedRelation: "contas_pagar"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_parcelas_forma_pagamento_id_fkey"
+            columns: ["forma_pagamento_id"]
+            isOneToOne: false
+            referencedRelation: "formas_pagamento"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contas_recorrentes: {
+        Row: {
+          ativo: boolean | null
+          categoria_id: number | null
+          created_at: string | null
+          descricao: string
+          dia_vencimento: number | null
+          filial_id: number | null
+          fornecedor_id: number | null
+          id: number
+          pessoa_fisica_id: number | null
+          valor_centavos: number
+        }
+        Insert: {
+          ativo?: boolean | null
+          categoria_id?: number | null
+          created_at?: string | null
+          descricao: string
+          dia_vencimento?: number | null
+          filial_id?: number | null
+          fornecedor_id?: number | null
+          id?: number
+          pessoa_fisica_id?: number | null
+          valor_centavos: number
+        }
+        Update: {
+          ativo?: boolean | null
+          categoria_id?: number | null
+          created_at?: string | null
+          descricao?: string
+          dia_vencimento?: number | null
+          filial_id?: number | null
+          fornecedor_id?: number | null
+          id?: number
+          pessoa_fisica_id?: number | null
+          valor_centavos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contas_recorrentes_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "categorias_financeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_recorrentes_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_recorrentes_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_juridicas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_recorrentes_pessoa_fisica_id_fkey"
+            columns: ["pessoa_fisica_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fechamentos_caixa: {
+        Row: {
+          created_at: string | null
+          data_fechamento: string
+          filial_id: number | null
+          id: number
+          observacoes: string | null
+          valor_cartao_centavos: number | null
+          valor_dinheiro_centavos: number | null
+          valor_outros_centavos: number | null
+          valor_pix_centavos: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          data_fechamento: string
+          filial_id?: number | null
+          id?: number
+          observacoes?: string | null
+          valor_cartao_centavos?: number | null
+          valor_dinheiro_centavos?: number | null
+          valor_outros_centavos?: number | null
+          valor_pix_centavos?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          data_fechamento?: string
+          filial_id?: number | null
+          id?: number
+          observacoes?: string | null
+          valor_cartao_centavos?: number | null
+          valor_dinheiro_centavos?: number | null
+          valor_outros_centavos?: number | null
+          valor_pix_centavos?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fechamentos_caixa_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      filiais: {
+        Row: {
+          ativo: boolean | null
+          cnpj: string | null
+          created_at: string | null
+          endereco: string | null
+          id: number
+          nome: string
+          telefone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          cnpj?: string | null
+          created_at?: string | null
+          endereco?: string | null
+          id?: number
+          nome: string
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          cnpj?: string | null
+          created_at?: string | null
+          endereco?: string | null
+          id?: number
+          nome?: string
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      folha_pagamento_lancamentos: {
+        Row: {
+          adiantamento_centavos: number | null
+          ano: number
+          conta_pagar_id: number | null
+          created_at: string | null
+          descontos_centavos: number | null
+          id: number
+          mes: number
+          observacoes: string | null
+          pessoa_fisica_id: number | null
+          salario_centavos: number | null
+          vale_transporte_centavos: number | null
+        }
+        Insert: {
+          adiantamento_centavos?: number | null
+          ano: number
+          conta_pagar_id?: number | null
+          created_at?: string | null
+          descontos_centavos?: number | null
+          id?: number
+          mes: number
+          observacoes?: string | null
+          pessoa_fisica_id?: number | null
+          salario_centavos?: number | null
+          vale_transporte_centavos?: number | null
+        }
+        Update: {
+          adiantamento_centavos?: number | null
+          ano?: number
+          conta_pagar_id?: number | null
+          created_at?: string | null
+          descontos_centavos?: number | null
+          id?: number
+          mes?: number
+          observacoes?: string | null
+          pessoa_fisica_id?: number | null
+          salario_centavos?: number | null
+          vale_transporte_centavos?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folha_pagamento_lancamentos_conta_pagar_id_fkey"
+            columns: ["conta_pagar_id"]
+            isOneToOne: false
+            referencedRelation: "contas_pagar"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folha_pagamento_lancamentos_pessoa_fisica_id_fkey"
+            columns: ["pessoa_fisica_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      formas_pagamento: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          id: number
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          id?: number
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          id?: number
+          nome?: string
+        }
+        Relationships: []
+      }
+      marcas: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          descricao: string | null
+          id: number
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: number
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: number
+          nome?: string
+        }
+        Relationships: []
+      }
+      metas_vendas: {
+        Row: {
+          ano: number
+          created_at: string | null
+          filial_id: number | null
+          id: number
+          mes: number
+          valor_meta_centavos: number | null
+          vendedora_id: number | null
+        }
+        Insert: {
+          ano: number
+          created_at?: string | null
+          filial_id?: number | null
+          id?: number
+          mes: number
+          valor_meta_centavos?: number | null
+          vendedora_id?: number | null
+        }
+        Update: {
+          ano?: number
+          created_at?: string | null
+          filial_id?: number | null
+          id?: number
+          mes?: number
+          valor_meta_centavos?: number | null
+          vendedora_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metas_vendas_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metas_vendas_vendedora_id_fkey"
+            columns: ["vendedora_id"]
+            isOneToOne: false
+            referencedRelation: "vendedoras"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pessoas_fisicas: {
+        Row: {
+          ativo: boolean | null
+          cargo_id: number | null
+          cpf: string | null
+          created_at: string | null
+          data_admissao: string | null
+          data_nascimento: string | null
+          email: string | null
+          endereco: string | null
+          filial_id: number | null
+          id: number
+          nome: string
+          rg: string | null
+          salario_centavos: number | null
+          telefone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          cargo_id?: number | null
+          cpf?: string | null
+          created_at?: string | null
+          data_admissao?: string | null
+          data_nascimento?: string | null
+          email?: string | null
+          endereco?: string | null
+          filial_id?: number | null
+          id?: number
+          nome: string
+          rg?: string | null
+          salario_centavos?: number | null
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          cargo_id?: number | null
+          cpf?: string | null
+          created_at?: string | null
+          data_admissao?: string | null
+          data_nascimento?: string | null
+          email?: string | null
+          endereco?: string | null
+          filial_id?: number | null
+          id?: number
+          nome?: string
+          rg?: string | null
+          salario_centavos?: number | null
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pessoas_fisicas_cargo_id_fkey"
+            columns: ["cargo_id"]
+            isOneToOne: false
+            referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pessoas_fisicas_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pessoas_juridicas: {
+        Row: {
+          ativo: boolean | null
+          cep: string | null
+          cidade: string | null
+          cnpj: string | null
+          created_at: string | null
+          email: string | null
+          endereco: string | null
+          estado: string | null
+          id: number
+          ie: string | null
+          nome_fantasia: string | null
+          razao_social: string
+          telefone: string | null
+          tipo: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          cep?: string | null
+          cidade?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: number
+          ie?: string | null
+          nome_fantasia?: string | null
+          razao_social: string
+          telefone?: string | null
+          tipo?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          cep?: string | null
+          cidade?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: number
+          ie?: string | null
+          nome_fantasia?: string | null
+          razao_social?: string
+          telefone?: string | null
+          tipo?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      vendas: {
+        Row: {
+          created_at: string | null
+          data_venda: string | null
+          filial_id: number | null
+          forma_pagamento_id: number | null
+          id: number
+          observacoes: string | null
+          valor_centavos: number | null
+          vendedora_id: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          data_venda?: string | null
+          filial_id?: number | null
+          forma_pagamento_id?: number | null
+          id?: number
+          observacoes?: string | null
+          valor_centavos?: number | null
+          vendedora_id?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          data_venda?: string | null
+          filial_id?: number | null
+          forma_pagamento_id?: number | null
+          id?: number
+          observacoes?: string | null
+          valor_centavos?: number | null
+          vendedora_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendas_filial_id_fkey"
+            columns: ["filial_id"]
+            isOneToOne: false
+            referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_forma_pagamento_id_fkey"
+            columns: ["forma_pagamento_id"]
+            isOneToOne: false
+            referencedRelation: "formas_pagamento"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_vendedora_id_fkey"
+            columns: ["vendedora_id"]
+            isOneToOne: false
+            referencedRelation: "vendedoras"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendedoras: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          id: number
+          nome: string
+          pessoa_fisica_id: number | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          id?: number
+          nome: string
+          pessoa_fisica_id?: number | null
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          id?: number
+          nome?: string
+          pessoa_fisica_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendedoras_pessoa_fisica_id_fkey"
+            columns: ["pessoa_fisica_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_fisicas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
