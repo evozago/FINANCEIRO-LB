@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
+import ModulosHome from "@/pages/ModulosHome";
 import { Dashboard } from "@/pages/Dashboard";
 import { PessoasFisicas } from "@/pages/cadastros/PessoasFisicas";
 import { PessoasJuridicas } from "@/pages/cadastros/PessoasJuridicas";
@@ -29,7 +30,6 @@ import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
 import { DashboardComparativo } from "@/pages/vendas/DashboardComparativo";
 import { Pedidos } from "@/pages/compras/Pedidos";
 import ImportarXML from "@/pages/compras/ImportarXMLNew";
-// import { Produtos } from "@/pages/produtos/Produtos";
 import { Relatorios } from "@/pages/Relatorios";
 import TesteGemini from "./pages/TesteGemini";
 import Index from "./pages/Index";
@@ -45,8 +45,12 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
+          {/* Home - Módulos */}
+          <Route path="/" element={<ModulosHome />} />
+
+          {/* Layout com sidebar para páginas internas */}
+          <Route element={<Layout />}>
+            <Route path="dashboard" element={<Dashboard />} />
 
             {/* Cadastros */}
             <Route path="cadastros/pessoas-fisicas" element={<PessoasFisicas />} />
@@ -55,7 +59,6 @@ const App = () => (
             <Route path="cadastros/filiais" element={<Filiais />} />
             <Route path="cadastros/cargos" element={<Cargos />} />
             <Route path="cadastros/marcas" element={<Marcas />} />
-
 
             {/* Rota CANÔNICA (singular) para detalhe */}
             <Route path="cadastros/pessoa-juridica/:id" element={<PessoaJuridicaDetalhes />} />
@@ -70,7 +73,6 @@ const App = () => (
             <Route path="financeiro/contas-pagar" element={<ContasPagar />} />
             <Route path="financeiro/contas-pagar/nova" element={<NovaContaPagar />} />
             <Route path="financeiro/conta/:id" element={<ContaDetalhes />} />
-            {/* Link herdado de “fornecedor” aponta para o mesmo detail de PJ */}
             <Route path="financeiro/fornecedor/:id" element={<PessoaJuridicaDetalhes />} />
             <Route path="financeiro/contas-bancarias" element={<ContasBancarias />} />
             <Route path="financeiro/fechamento-caixa" element={<FechamentoCaixa />} />
@@ -85,15 +87,18 @@ const App = () => (
             <Route path="vendas/simulador-metas" element={<SimuladorMetas />} />
             <Route path="vendas/dashboard-comparativo" element={<DashboardComparativo />} />
 
-
             {/* Compras */}
             <Route path="compras/pedidos" element={<Pedidos />} />
             <Route path="compras/importar-xml" element={<ImportarXML />} />
 
-            {/* Relatórios / Produtos */}
-            {/* <Route path="produtos" element={<Produtos />} /> */}
+            {/* Módulos futuros - placeholders */}
+            <Route path="estoque" element={<PlaceholderModule title="Estoque" />} />
+            <Route path="crm" element={<PlaceholderModule title="CRM / Clientes" />} />
+            <Route path="ecommerce" element={<PlaceholderModule title="E-commerce" />} />
+
+            {/* Relatórios */}
             <Route path="relatorios" element={<Relatorios />} />
-            
+
             {/* IA */}
             <Route path="ia/cerebro" element={<CerebroIA />} />
             <Route path="teste-gemini" element={<TesteGemini />} />
@@ -109,5 +114,18 @@ const App = () => (
     </TooltipProvider>
   </QueryClientProvider>
 );
+
+// Placeholder para módulos futuros
+function PlaceholderModule({ title }: { title: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+      <div className="p-4 bg-amber-100 rounded-full mb-4">
+        <span className="text-4xl">🚧</span>
+      </div>
+      <h1 className="text-2xl font-bold mb-2">{title}</h1>
+      <p className="text-muted-foreground">Este módulo está em desenvolvimento</p>
+    </div>
+  );
+}
 
 export default App;
