@@ -358,11 +358,11 @@ function Categorias() {
 
   // ===== exclusão / arquivar / mover (iguais ao anterior)
   const canDelete = async (id: number) => {
-    const [{ count: filhos }, { count: uso }] = await Promise.all([
-      supabase.from("categorias_financeiras").select("*", { count: "exact", head: true }).eq("categoria_pai_id" as any, id),
-      supabase.from("contas_pagar").select("*", { count: "exact", head: true }).eq("categoria_id", id),
-    ]);
-    return (filhos || 0) === 0 && (uso || 0) === 0;
+    const { count: uso } = await supabase
+      .from("contas_pagar")
+      .select("*", { count: "exact", head: true })
+      .eq("categoria_id", id);
+    return (uso || 0) === 0;
   };
 
   const handleDelete = async (c: Categoria) => {

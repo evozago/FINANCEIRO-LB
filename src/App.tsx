@@ -14,26 +14,20 @@ import { Marcas } from "@/pages/cadastros/Marcas";
 import { ContasPagarSimple as ContasPagar } from "@/pages/financeiro/ContasPagarSimple";
 import NovaContaPagar from "@/pages/financeiro/NovaContaPagar";
 import ContaDetalhes from "@/pages/financeiro/ContaDetalhes";
-import { FornecedorDetalhes } from "@/pages/financeiro/FornecedorDetalhes";
 import { ContasBancarias } from "@/pages/financeiro/ContasBancarias";
 import { FechamentoCaixa } from "@/pages/financeiro/FechamentoCaixa";
 import { ContasRecorrentes } from "@/pages/financeiro/ContasRecorrentes";
 import Categorias from "@/pages/financeiro/Categorias";
 import { VendasMensaisPorVendedora } from "@/pages/vendas/VendasMensaisPorVendedora";
-import { Metas } from "@/pages/vendas/Metas";
-import RegistrarVendas from "@/pages/vendas/RegistrarVendas";
 import { PessoaFisicaDetalhes } from "@/pages/cadastros/PessoaFisicaDetalhes";
 import PessoaJuridicaDetalhes from "@/pages/cadastros/PessoaJuridicaDetalhes";
 import { MarcaDetalhes } from "@/pages/cadastros/MarcaDetalhes";
-import { RelatoriosVendas } from "@/pages/vendas/RelatoriosVendas";
 import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
-import { DashboardComparativo } from "@/pages/vendas/DashboardComparativo";
 import { Pedidos } from "@/pages/compras/Pedidos";
 import { Relatorios } from "@/pages/Relatorios";
 import TesteGemini from "./pages/TesteGemini";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import CerebroIA from "./pages/ia/CerebroIA";
 import CategoriasProdutos from "./pages/produtos/CategoriasProdutos";
 import ClassificadorProdutos from "./pages/produtos/ClassificadorProdutos";
 import RegrasClassificacao from "./pages/produtos/RegrasClassificacao";
@@ -73,6 +67,8 @@ const App = () => (
               element={<Navigate to="/cadastros/pessoa-juridica/:id" replace />}
             />
 
+            <Route path="cadastros/marca/:id" element={<MarcaDetalhes />} />
+
             {/* Financeiro */}
             <Route path="financeiro/contas-pagar" element={<ContasPagar />} />
             <Route path="financeiro/contas-pagar/nova" element={<NovaContaPagar />} />
@@ -85,11 +81,7 @@ const App = () => (
 
             {/* Vendas */}
             <Route path="vendas/vendas-diarias" element={<VendasMensaisPorVendedora />} />
-            <Route path="vendas/registrar" element={<RegistrarVendas />} />
-            <Route path="vendas/metas" element={<Metas />} />
-            <Route path="vendas/relatorios" element={<RelatoriosVendas />} />
             <Route path="vendas/simulador-metas" element={<SimuladorMetas />} />
-            <Route path="vendas/dashboard-comparativo" element={<DashboardComparativo />} />
 
             {/* Compras */}
             <Route path="compras/pedidos" element={<Pedidos />} />
@@ -109,8 +101,6 @@ const App = () => (
             {/* Relatórios */}
             <Route path="relatorios" element={<Relatorios />} />
 
-            {/* IA */}
-            <Route path="ia/cerebro" element={<CerebroIA />} />
             <Route path="teste-gemini" element={<TesteGemini />} />
           </Route>
 
