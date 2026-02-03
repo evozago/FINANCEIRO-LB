@@ -31,7 +31,7 @@ const ModuleCard = ({ title, description, icon: Icon, href, color, badge }: Modu
             <Icon className="h-6 w-6 text-white" />
           </div>
           {badge && (
-            <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+            <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-800 rounded-full dark:bg-amber-900/30 dark:text-amber-400">
               {badge}
             </span>
           )}
@@ -74,6 +74,13 @@ const modules: ModuleCardProps[] = [
     icon: ShoppingCart,
     href: '/compras/pedidos',
     color: 'bg-gradient-to-br from-orange-500 to-orange-600'
+  },
+  {
+    title: 'Categorias de Produtos',
+    description: 'Classifique produtos em categorias hierárquicas',
+    icon: Package,
+    href: '/produtos/categorias',
+    color: 'bg-gradient-to-br from-fuchsia-500 to-fuchsia-600'
   },
   {
     title: 'Estoque',

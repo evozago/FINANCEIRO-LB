@@ -35,6 +35,7 @@ import TesteGemini from "./pages/TesteGemini";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import CerebroIA from "./pages/ia/CerebroIA";
+import CategoriasProdutos from "./pages/produtos/CategoriasProdutos";
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,9 @@ const App = () => (
             {/* Compras */}
             <Route path="compras/pedidos" element={<Pedidos />} />
             <Route path="compras/importar-xml" element={<ImportarXML />} />
+
+            {/* Produtos */}
+            <Route path="produtos/categorias" element={<CategoriasProdutos />} />
 
             {/* Módulos futuros - placeholders */}
             <Route path="estoque" element={<PlaceholderModule title="Estoque" />} />
