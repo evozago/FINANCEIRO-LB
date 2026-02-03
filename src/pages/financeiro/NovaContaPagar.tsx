@@ -51,9 +51,8 @@ export default function NovaContaPagar() {
 
   type NovaParcelaInsert = {
     conta_id: number;
-    parcela_num: number;
     numero_parcela: number;
-    valor_parcela_centavos: number;
+    valor_centavos: number;
     vencimento: string;
     pago: boolean;
   };
@@ -77,8 +76,8 @@ export default function NovaContaPagar() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("pessoas_fisicas")
-        .select("id, nome_completo")
-        .order("nome_completo");
+        .select("id, nome")
+        .order("nome");
       if (error) throw error;
       return data;
     },
@@ -90,7 +89,7 @@ export default function NovaContaPagar() {
     setFornecedorTipo("pj");
   };
 
-  const handleNovoPF = (newPF: { id: number; nome_completo: string }) => {
+  const handleNovoPF = (newPF: { id: number; nome: string }) => {
     refetchPF();
     setFornecedorId(newPF.id.toString());
     setFornecedorTipo("pf");
@@ -168,9 +167,8 @@ export default function NovaContaPagar() {
       const parcelas: NovaParcelaInsert[] = parcelasPersonalizadas.length > 0
         ? parcelasPersonalizadas.map((p) => ({
             conta_id: conta.id,
-            parcela_num: p.numero,
             numero_parcela: p.numero,
-            valor_parcela_centavos: p.valor_centavos,
+            valor_centavos: p.valor_centavos,
             vencimento: p.vencimento,
             pago: false,
           }))
@@ -191,9 +189,8 @@ export default function NovaContaPagar() {
               
               temp.push({
                 conta_id: conta.id,
-                parcela_num: i,
                 numero_parcela: i,
-                valor_parcela_centavos: i === numParcelas ? valorParcela + valorRestante : valorParcela,
+                valor_centavos: i === numParcelas ? valorParcela + valorRestante : valorParcela,
                 vencimento: formatDateToISO(vencimento),
                 pago: false,
               });
@@ -259,9 +256,8 @@ export default function NovaContaPagar() {
       // Criar parcelas
       const parcelas = data.parcelas.map((p) => ({
         conta_id: conta.id,
-        parcela_num: p.parcela_num,
         numero_parcela: p.parcela_num,
-        valor_parcela_centavos: p.valor_parcela_centavos,
+        valor_centavos: p.valor_parcela_centavos,
         vencimento: p.vencimento,
         pago: false,
       }));
@@ -287,7 +283,7 @@ export default function NovaContaPagar() {
   })) || [];
   const fornecedoresPFForIA = fornecedoresPF?.map(f => ({ 
     id: f.id, 
-    nome: f.nome_completo 
+    nome: f.nome 
   })) || [];
   const filiaisForIA = filiais?.map(f => ({ id: f.id, nome: f.nome })) || [];
 
@@ -386,7 +382,7 @@ export default function NovaContaPagar() {
                         ))
                       : fornecedoresPF?.map((f) => (
                           <SelectItem key={f.id} value={f.id.toString()}>
-                            {f.nome_completo}
+                            {f.nome}
                           </SelectItem>
                         ))
                     }

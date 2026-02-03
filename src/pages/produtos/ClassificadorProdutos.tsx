@@ -36,9 +36,9 @@ import {
   Play,
   Download,
   CheckCircle2,
-  AlertCircle,
   Loader2,
   ArrowRight,
+  ArrowLeft,
   Tags,
   Settings2,
   BarChart3,
@@ -187,12 +187,12 @@ export default function ClassificadorProdutos() {
       // Criar sessão de importação
       const { data: sessao, error: sessaoError } = await supabase
         .from('sessoes_importacao')
-        .insert({
+        .insert([{
           nome: arquivoNome.replace(/\.[^/.]+$/, ''),
           nome_arquivo: arquivoNome,
           total_produtos: dadosPlanilha.length,
-          mapeamento_colunas: mapeamento,
-        })
+          mapeamento_colunas: JSON.parse(JSON.stringify(mapeamento)),
+        }])
         .select()
         .single();
 
@@ -501,12 +501,18 @@ export default function ClassificadorProdutos() {
               </div>
             </div>
 
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={resetar}>Cancelar</Button>
-              <Button onClick={() => { setEtapa('classificacao'); executarClassificacao(); }}>
-                <Play className="h-4 w-4 mr-2" />
-                Classificar Produtos
+            <div className="flex gap-2 justify-between">
+              <Button variant="outline" onClick={() => setEtapa('upload')}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Voltar
               </Button>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={resetar}>Cancelar</Button>
+                <Button onClick={() => { setEtapa('classificacao'); executarClassificacao(); }}>
+                  <Play className="h-4 w-4 mr-2" />
+                  Classificar Produtos
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -562,7 +568,11 @@ export default function ClassificadorProdutos() {
           </div>
 
           {/* Ações */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" onClick={() => setEtapa('mapeamento')}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar ao Mapeamento
+            </Button>
             <Button onClick={exportarExcel}>
               <Download className="h-4 w-4 mr-2" />
               Exportar Excel
@@ -606,11 +616,14 @@ export default function ClassificadorProdutos() {
   );
 }
 
-// Componente de tabela reutilizável
-function TabelaProdutos({ produtos }: { produtos: typeof ClassificadorProdutos extends () => infer R ? never : Array<{
+// Tipo para produtos classificados
+interface ProdutoClassificado {
   produto: ProdutoImportado;
   resultado: ReturnType<typeof classificarLote>[0]['resultado'];
-}> }) {
+}
+
+// Componente de tabela reutilizável
+function TabelaProdutos({ produtos }: { produtos: ProdutoClassificado[] }) {
   if (produtos.length === 0) {
     return <p className="text-center text-muted-foreground py-8">Nenhum produto nesta categoria</p>;
   }

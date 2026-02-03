@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Building2, Mail, Phone, MapPin, FileText, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, MapPin, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -23,11 +23,11 @@ interface FornecedorData {
 
 interface ContaFornecedor {
   id: number;
-  descricao: string;
-  numero_nota: string;
+  descricao: string | null;
+  numero_nota: string | null;
   valor_total_centavos: number;
-  qtd_parcelas: number;
-  data_emissao: string;
+  num_parcelas: number;
+  created_at: string | null;
   parcelas_pagas: number;
   parcelas_pendentes: number;
   valor_pago: number;
@@ -56,7 +56,7 @@ export function FornecedorDetalhes() {
       // Buscar dados do fornecedor
       const { data: fornecedorData, error: fornecedorError } = await supabase
         .from('pessoas_juridicas')
-        .select('*')
+        .select('id, nome_fantasia, razao_social, cnpj, email, telefone, endereco')
         .eq('id', Number(id))
         .single();
 
@@ -66,59 +66,45 @@ export function FornecedorDetalhes() {
       // Buscar contas do fornecedor
       const { data: contasData, error: contasError } = await supabase
         .from('contas_pagar')
-        .select(`
-          id,
-          descricao,
-          numero_nota,
-          valor_total_centavos,
-          qtd_parcelas,
-          data_emissao
-        `)
+        .select('id, descricao, numero_nota, valor_total_centavos, num_parcelas, created_at')
         .eq('fornecedor_id', Number(id))
-        .order('data_emissao', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (contasError) throw contasError;
 
       // Para cada conta, buscar informações das parcelas
       const contasComParcelas = await Promise.all(
-        contasData.map(async (conta) => {
+        (contasData || []).map(async (conta) => {
           const { data: parcelas } = await supabase
             .from('contas_pagar_parcelas')
-            .select(`
-              pago, 
-              valor_parcela_centavos, 
-              valor_pago_centavos,
-              pago_em,
-              forma_pagamento_id,
-              formas_pagamento(nome)
-            `)
+            .select('pago, valor_centavos, data_pagamento, forma_pagamento_id')
             .eq('conta_id', conta.id)
-            .order('pago_em', { ascending: false, nullsFirst: false });
+            .order('data_pagamento', { ascending: false, nullsFirst: false });
 
           const parcelasPagas = parcelas?.filter(p => p.pago).length || 0;
-          const parcelasPendentes = (conta.qtd_parcelas || 1) - parcelasPagas;
-          const valorPago = parcelas?.filter(p => p.pago).reduce((sum, p) => sum + (p.valor_pago_centavos || p.valor_parcela_centavos), 0) || 0;
-          const valorPendente = parcelas?.filter(p => !p.pago).reduce((sum, p) => sum + p.valor_parcela_centavos, 0) || 0;
+          const numParcelas = conta.num_parcelas || 1;
+          const parcelasPendentes = numParcelas - parcelasPagas;
+          const valorPago = parcelas?.filter(p => p.pago).reduce((sum, p) => sum + (p.valor_centavos || 0), 0) || 0;
+          const valorPendente = parcelas?.filter(p => !p.pago).reduce((sum, p) => sum + (p.valor_centavos || 0), 0) || 0;
           
           // Pegar a última data de pagamento
-          const ultimaParcelaPaga = parcelas?.find(p => p.pago && p.pago_em);
-          const ultimaDataPagamento = ultimaParcelaPaga?.pago_em;
-          const formaPagamento = ultimaParcelaPaga?.formas_pagamento?.nome;
+          const ultimaParcelaPaga = parcelas?.find(p => p.pago && p.data_pagamento);
+          const ultimaDataPagamento = ultimaParcelaPaga?.data_pagamento || undefined;
 
           return {
             ...conta,
+            num_parcelas: numParcelas,
             parcelas_pagas: parcelasPagas,
             parcelas_pendentes: parcelasPendentes,
             valor_pago: valorPago,
             valor_pendente: valorPendente,
             ultima_data_pagamento: ultimaDataPagamento,
-            forma_pagamento: formaPagamento
-          };
+          } as ContaFornecedor;
         })
       );
 
       setContas(contasComParcelas);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao carregar detalhes do fornecedor:', error);
       toast({
         title: 'Erro',
@@ -220,7 +206,7 @@ export function FornecedorDetalhes() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Pago</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success">{formatCurrency(totais.totalPago)}</div>
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(totais.totalPago)}</div>
           </CardContent>
         </Card>
         
@@ -229,7 +215,7 @@ export function FornecedorDetalhes() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Pendente</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-warning">{formatCurrency(totais.totalPendente)}</div>
+            <div className="text-2xl font-bold text-amber-600">{formatCurrency(totais.totalPendente)}</div>
           </CardContent>
         </Card>
       </div>
@@ -252,21 +238,20 @@ export function FornecedorDetalhes() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Descrição/NFe</TableHead>
-                      <TableHead>Data Emissão</TableHead>
+                      <TableHead>Data</TableHead>
                       <TableHead>Valor Total</TableHead>
                       <TableHead>Parcelas</TableHead>
                       <TableHead>Pagas</TableHead>
                       <TableHead>Valor Pago</TableHead>
                       <TableHead>Valor Pendente</TableHead>
                       <TableHead>Último Pagamento</TableHead>
-                      <TableHead>Forma Pagamento</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {contas.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center text-muted-foreground">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground">
                           Nenhuma conta encontrada
                         </TableCell>
                       </TableRow>
@@ -278,23 +263,20 @@ export function FornecedorDetalhes() {
                           onClick={() => navigate(`/financeiro/conta/${conta.id}`)}
                         >
                           <TableCell className="font-medium">
-                            {conta.numero_nota ? `NFe ${conta.numero_nota}` : conta.descricao}
+                            {conta.numero_nota ? `NFe ${conta.numero_nota}` : conta.descricao || '-'}
                           </TableCell>
-                          <TableCell>{conta.data_emissao ? formatDate(conta.data_emissao) : '-'}</TableCell>
+                          <TableCell>{conta.created_at ? formatDate(conta.created_at) : '-'}</TableCell>
                           <TableCell>{formatCurrency(conta.valor_total_centavos)}</TableCell>
-                          <TableCell>{conta.qtd_parcelas || 1}x</TableCell>
+                          <TableCell>{conta.num_parcelas}x</TableCell>
                           <TableCell>
                             <Badge variant="outline">
-                              {conta.parcelas_pagas}/{conta.qtd_parcelas || 1}
+                              {conta.parcelas_pagas}/{conta.num_parcelas}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-success">{formatCurrency(conta.valor_pago)}</TableCell>
-                          <TableCell className="text-warning">{formatCurrency(conta.valor_pendente)}</TableCell>
+                          <TableCell className="text-green-600">{formatCurrency(conta.valor_pago)}</TableCell>
+                          <TableCell className="text-amber-600">{formatCurrency(conta.valor_pendente)}</TableCell>
                           <TableCell>
                             {conta.ultima_data_pagamento ? formatDate(conta.ultima_data_pagamento) : '-'}
-                          </TableCell>
-                          <TableCell>
-                            {conta.forma_pagamento || '-'}
                           </TableCell>
                           <TableCell>
                             <Button 
@@ -360,9 +342,9 @@ export function FornecedorDetalhes() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Phone className="h-4 w-4" />
-                    <span className="text-sm font-medium">Celular</span>
+                    <span className="text-sm font-medium">Telefone</span>
                   </div>
-                  <p>{fornecedor.celular || '-'}</p>
+                  <p>{fornecedor.telefone || '-'}</p>
                 </div>
 
                 <div className="space-y-2">

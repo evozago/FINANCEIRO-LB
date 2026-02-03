@@ -43,7 +43,9 @@ import {
   GripVertical,
   Play,
   ArrowLeft,
+  Upload,
 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { normalizarTexto } from '@/lib/classificador';
@@ -92,6 +94,9 @@ const initialForm: RegraForm = {
 export default function RegrasClassificacao() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importMarcasOpen, setImportMarcasOpen] = useState(false);
+  const [marcasInput, setMarcasInput] = useState('');
+  const [importandoMarcas, setImportandoMarcas] = useState(false);
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [form, setForm] = useState<RegraForm>(initialForm);
   const [testInput, setTestInput] = useState('');
@@ -249,6 +254,57 @@ export default function RegrasClassificacao() {
     setTestResult(matches.length > 0 ? matches.join('\n') : 'Nenhuma regra aplicada');
   };
 
+  // Importar marcas em lote (separadas por ponto e vírgula)
+  const importarMarcasEmLote = async () => {
+    if (!marcasInput.trim()) {
+      toast.error('Digite as marcas separadas por ponto e vírgula');
+      return;
+    }
+
+    setImportandoMarcas(true);
+    try {
+      const marcas = marcasInput
+        .split(';')
+        .map(m => m.trim())
+        .filter(Boolean);
+
+      if (marcas.length === 0) {
+        toast.error('Nenhuma marca válida encontrada');
+        return;
+      }
+
+      // Criar regra para cada marca
+      const regrasParaInserir = marcas.map((marca, idx) => ({
+        nome: `Marca: ${marca}`,
+        tipo: 'contains',
+        termos: [marca.toUpperCase()],
+        termos_exclusao: [],
+        campo_destino: 'marca',
+        valor_destino: marca,
+        pontuacao: 100,
+        genero_automatico: null,
+        ativo: true,
+        ordem: regras.length + idx,
+      }));
+
+      const { error } = await supabase
+        .from('regras_classificacao')
+        .insert(regrasParaInserir);
+
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ['regras-classificacao'] });
+      toast.success(`${marcas.length} marcas importadas com sucesso!`);
+      setMarcasInput('');
+      setImportMarcasOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao importar marcas');
+    } finally {
+      setImportandoMarcas(false);
+    }
+  };
+
   const regrasPorCampo = camposDestino.map(campo => ({
     ...campo,
     regras: regras.filter(r => r.campo_destino === campo.value),
@@ -275,13 +331,49 @@ export default function RegrasClassificacao() {
           </p>
         </div>
 
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Regra
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          {/* Botão importar marcas em lote */}
+          <Dialog open={importMarcasOpen} onOpenChange={setImportMarcasOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Importar Marcas
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Importar Marcas em Lote</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Marcas (separadas por ponto e vírgula)</Label>
+                  <Textarea
+                    value={marcasInput}
+                    onChange={e => setMarcasInput(e.target.value)}
+                    placeholder="Ex: Nike; Adidas; Puma; Reebok"
+                    rows={5}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Uma regra será criada para cada marca, detectando automaticamente pelo nome do produto.
+                  </p>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setImportMarcasOpen(false)}>Cancelar</Button>
+                  <Button onClick={importarMarcasEmLote} disabled={importandoMarcas}>
+                    {importandoMarcas ? 'Importando...' : 'Importar Marcas'}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Regra
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>{editandoId ? 'Editar Regra' : 'Nova Regra'}</DialogTitle>
@@ -411,6 +503,7 @@ export default function RegrasClassificacao() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Testador */}
