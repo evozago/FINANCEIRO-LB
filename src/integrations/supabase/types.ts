@@ -141,7 +141,10 @@ export type Database = {
           created_at: string | null
           descricao: string | null
           id: number
+          nome_arquivo: string | null
           pedido_id: number | null
+          storage_path: string | null
+          tamanho_bytes: number | null
           tipo_anexo: string
           url_anexo: string
         }
@@ -149,7 +152,10 @@ export type Database = {
           created_at?: string | null
           descricao?: string | null
           id?: number
+          nome_arquivo?: string | null
           pedido_id?: number | null
+          storage_path?: string | null
+          tamanho_bytes?: number | null
           tipo_anexo: string
           url_anexo: string
         }
@@ -157,7 +163,10 @@ export type Database = {
           created_at?: string | null
           descricao?: string | null
           id?: number
+          nome_arquivo?: string | null
           pedido_id?: number | null
+          storage_path?: string | null
+          tamanho_bytes?: number | null
           tipo_anexo?: string
           url_anexo?: string
         }
@@ -209,14 +218,54 @@ export type Database = {
           },
         ]
       }
+      compras_pedido_marcas: {
+        Row: {
+          created_at: string | null
+          id: number
+          marca_id: number | null
+          pedido_id: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: number
+          marca_id?: number | null
+          pedido_id?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          marca_id?: number | null
+          pedido_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compras_pedido_marcas_marca_id_fkey"
+            columns: ["marca_id"]
+            isOneToOne: false
+            referencedRelation: "marcas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compras_pedido_marcas_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "compras_pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       compras_pedidos: {
         Row: {
+          condicoes_pagamento: string | null
           created_at: string | null
           data_entrega: string | null
           data_pedido: string | null
+          desconto_centavos: number | null
           filial_id: number | null
+          forma_pagamento_id: number | null
           fornecedor_id: number | null
           id: number
+          negociacao: string | null
           numero_pedido: string | null
           observacoes: string | null
           status: string | null
@@ -224,12 +273,16 @@ export type Database = {
           valor_total_centavos: number | null
         }
         Insert: {
+          condicoes_pagamento?: string | null
           created_at?: string | null
           data_entrega?: string | null
           data_pedido?: string | null
+          desconto_centavos?: number | null
           filial_id?: number | null
+          forma_pagamento_id?: number | null
           fornecedor_id?: number | null
           id?: number
+          negociacao?: string | null
           numero_pedido?: string | null
           observacoes?: string | null
           status?: string | null
@@ -237,12 +290,16 @@ export type Database = {
           valor_total_centavos?: number | null
         }
         Update: {
+          condicoes_pagamento?: string | null
           created_at?: string | null
           data_entrega?: string | null
           data_pedido?: string | null
+          desconto_centavos?: number | null
           filial_id?: number | null
+          forma_pagamento_id?: number | null
           fornecedor_id?: number | null
           id?: number
+          negociacao?: string | null
           numero_pedido?: string | null
           observacoes?: string | null
           status?: string | null
@@ -255,6 +312,13 @@ export type Database = {
             columns: ["filial_id"]
             isOneToOne: false
             referencedRelation: "filiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compras_pedidos_forma_pagamento_id_fkey"
+            columns: ["forma_pagamento_id"]
+            isOneToOne: false
+            referencedRelation: "formas_pagamento"
             referencedColumns: ["id"]
           },
           {

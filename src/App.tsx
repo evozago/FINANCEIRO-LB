@@ -24,6 +24,7 @@ import PessoaJuridicaDetalhes from "@/pages/cadastros/PessoaJuridicaDetalhes";
 import { MarcaDetalhes } from "@/pages/cadastros/MarcaDetalhes";
 import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
 import { Pedidos } from "@/pages/compras/Pedidos";
+import PedidoDetalhes from "@/pages/compras/PedidoDetalhes";
 import { Relatorios } from "@/pages/Relatorios";
 import TesteGemini from "./pages/TesteGemini";
 import Index from "./pages/Index";
@@ -85,6 +86,7 @@ const App = () => (
 
             {/* Compras */}
             <Route path="compras/pedidos" element={<Pedidos />} />
+            <Route path="compras/pedido/:id" element={<PedidoDetalhes />} />
 
             {/* Produtos */}
             <Route path="produtos/categorias" element={<CategoriasProdutos />} />

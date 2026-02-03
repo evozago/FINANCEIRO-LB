@@ -4,19 +4,13 @@ import { Plus, Search, Edit, Trash2, ShoppingCart, Eye } from 'lucide-react';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { CurrencyInput } from '@/components/ui/currency-input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { AnexosPedido } from '@/components/compras/AnexosPedido';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { NovoPedidoForm } from '@/components/compras/NovoPedidoForm';
 
 interface Pedido {
   id: number;
@@ -25,6 +19,7 @@ interface Pedido {
   data_entrega?: string;
   status: string;
   valor_total_centavos?: number;
+  desconto_centavos?: number;
   observacoes?: string;
   fornecedor_id?: number;
   filial_id?: number;
@@ -37,50 +32,24 @@ interface Pedido {
   };
 }
 
-interface PessoaJuridica {
-  id: number;
-  nome_fantasia: string;
-  razao_social: string;
-}
-
-interface Filial {
-  id: number;
-  nome: string;
-}
-
 const statusOptions = [
-  { value: 'pendente', label: 'Pendente', color: 'bg-yellow-500' },
-  { value: 'confirmado', label: 'Confirmado', color: 'bg-blue-500' },
-  { value: 'entregue', label: 'Entregue', color: 'bg-green-500' },
-  { value: 'cancelado', label: 'Cancelado', color: 'bg-red-500' },
+  { value: 'pendente', label: 'Pendente', className: 'bg-warning text-warning-foreground' },
+  { value: 'confirmado', label: 'Confirmado', className: 'bg-blue-500 text-white' },
+  { value: 'entregue', label: 'Entregue', className: 'bg-green-500 text-white' },
+  { value: 'cancelado', label: 'Cancelado', className: 'bg-destructive text-destructive-foreground' },
 ];
 
 export function Pedidos() {
   const navigate = useNavigate();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
-  const [fornecedores, setFornecedores] = useState<PessoaJuridica[]>([]);
-  const [filiais, setFiliais] = useState<Filial[]>([]);
   const [searchTerm, setSearchTerm] = usePersistentState('pedidos-search', '');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPedido, setEditingPedido] = useState<Pedido | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const [formData, setFormData] = useState({
-    numero_pedido: '',
-    data_pedido: new Date(),
-    data_entrega: undefined as Date | undefined,
-    status: 'pendente',
-    valor_total_centavos: 0,
-    observacoes: '',
-    fornecedor_id: '',
-    filial_id: '',
-  });
-
   useEffect(() => {
     fetchPedidos();
-    fetchFornecedores();
-    fetchFiliais();
   }, []);
 
   const fetchPedidos = async () => {
@@ -108,100 +77,8 @@ export function Pedidos() {
     }
   };
 
-  const fetchFornecedores = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('pessoas_juridicas')
-        .select('id, nome_fantasia, razao_social')
-        .order('nome_fantasia');
-
-      if (error) throw error;
-      setFornecedores(data || []);
-    } catch (error) {
-      console.error('Erro ao buscar fornecedores:', error);
-    }
-  };
-
-  const fetchFiliais = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('filiais')
-        .select('id, nome')
-        .order('nome');
-
-      if (error) throw error;
-      setFiliais(data || []);
-    } catch (error) {
-      console.error('Erro ao buscar filiais:', error);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      const dataToSubmit = {
-        numero_pedido: formData.numero_pedido,
-        data_pedido: formData.data_pedido.toISOString().split('T')[0],
-        data_entrega: formData.data_entrega?.toISOString().split('T')[0] || null,
-        status: formData.status,
-        valor_total_centavos: formData.valor_total_centavos || null,
-        observacoes: formData.observacoes || null,
-        fornecedor_id: formData.fornecedor_id ? parseInt(formData.fornecedor_id) : null,
-        filial_id: formData.filial_id ? parseInt(formData.filial_id) : null,
-      };
-
-      if (editingPedido) {
-        const { error } = await supabase
-          .from('compras_pedidos')
-          .update(dataToSubmit)
-          .eq('id', editingPedido.id);
-
-        if (error) throw error;
-
-        toast({
-          title: 'Sucesso',
-          description: 'Pedido atualizado com sucesso.',
-        });
-      } else {
-        const { error } = await supabase
-          .from('compras_pedidos')
-          .insert([dataToSubmit]);
-
-        if (error) throw error;
-
-        toast({
-          title: 'Sucesso',
-          description: 'Pedido cadastrado com sucesso.',
-        });
-      }
-
-      setIsDialogOpen(false);
-      setEditingPedido(null);
-      resetForm();
-      fetchPedidos();
-    } catch (error) {
-      console.error('Erro ao salvar pedido:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível salvar o pedido.',
-        variant: 'destructive',
-      });
-    }
-  };
-
   const handleEdit = (pedido: Pedido) => {
     setEditingPedido(pedido);
-    setFormData({
-      numero_pedido: pedido.numero_pedido,
-      data_pedido: new Date(pedido.data_pedido),
-      data_entrega: pedido.data_entrega ? new Date(pedido.data_entrega) : undefined,
-      status: pedido.status,
-      valor_total_centavos: pedido.valor_total_centavos || 0,
-      observacoes: pedido.observacoes || '',
-      fornecedor_id: pedido.fornecedor_id?.toString() || '',
-      filial_id: pedido.filial_id?.toString() || '',
-    });
     setIsDialogOpen(true);
   };
 
@@ -231,17 +108,15 @@ export function Pedidos() {
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      numero_pedido: '',
-      data_pedido: new Date(),
-      data_entrega: undefined,
-      status: 'pendente',
-      valor_total_centavos: 0,
-      observacoes: '',
-      fornecedor_id: '',
-      filial_id: '',
-    });
+  const handleFormSuccess = () => {
+    setIsDialogOpen(false);
+    setEditingPedido(null);
+    fetchPedidos();
+  };
+
+  const handleFormCancel = () => {
+    setIsDialogOpen(false);
+    setEditingPedido(null);
   };
 
   const formatCurrency = (centavos: number) => {
@@ -254,7 +129,7 @@ export function Pedidos() {
   const getStatusBadge = (status: string) => {
     const statusConfig = statusOptions.find(s => s.value === status);
     return (
-      <Badge className={`${statusConfig?.color} text-white`}>
+      <Badge className={statusConfig?.className}>
         {statusConfig?.label || status}
       </Badge>
     );
@@ -278,7 +153,11 @@ export function Pedidos() {
   });
 
   if (loading) {
-    return <div>Carregando...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   return (
@@ -290,120 +169,31 @@ export function Pedidos() {
             Gerencie os pedidos de compra da empresa
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) setEditingPedido(null);
+        }}>
           <DialogTrigger asChild>
-            <Button onClick={() => { resetForm(); setEditingPedido(null); }}>
+            <Button onClick={() => setEditingPedido(null)}>
               <Plus className="mr-2 h-4 w-4" />
               Novo Pedido
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
-                {editingPedido ? 'Editar Pedido' : 'Novo Pedido'}
+                {editingPedido ? 'Editar Pedido' : 'Novo Pedido de Compra'}
               </DialogTitle>
               <DialogDescription>
-                Preencha as informações do pedido de compra
+                Preencha as informações do pedido
               </DialogDescription>
             </DialogHeader>
             
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="numero_pedido">Número do Pedido *</Label>
-                  <Input
-                    id="numero_pedido"
-                    value={formData.numero_pedido}
-                    onChange={(e) => setFormData({ ...formData, numero_pedido: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="status">Status</Label>
-                  <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.map((status) => (
-                        <SelectItem key={status.value} value={status.value}>
-                          {status.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="data_pedido">Data do Pedido *</Label>
-                  <DatePicker
-                    date={formData.data_pedido}
-                    onSelect={(date) => setFormData({ ...formData, data_pedido: date || new Date() })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="data_entrega">Previsão de Entrega</Label>
-                  <DatePicker
-                    date={formData.data_entrega}
-                    onSelect={(date) => setFormData({ ...formData, data_entrega: date })}
-                    placeholder="Selecione a data de entrega"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="fornecedor_id">Fornecedor</Label>
-                  <Select value={formData.fornecedor_id} onValueChange={(value) => setFormData({ ...formData, fornecedor_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um fornecedor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fornecedores.map((fornecedor) => (
-                        <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                          {fornecedor.nome_fantasia || fornecedor.razao_social}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="filial_id">Filial</Label>
-                  <Select value={formData.filial_id} onValueChange={(value) => setFormData({ ...formData, filial_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma filial" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filiais.map((filial) => (
-                        <SelectItem key={filial.id} value={filial.id.toString()}>
-                          {filial.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="valor_total_centavos">Valor Total</Label>
-                  <CurrencyInput
-                    value={formData.valor_total_centavos}
-                    onValueChange={(value) => setFormData({ ...formData, valor_total_centavos: value })}
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="observacoes">Observações</Label>
-                <Textarea
-                  id="observacoes"
-                  value={formData.observacoes}
-                  onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                  rows={3}
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit">
-                  {editingPedido ? 'Atualizar' : 'Cadastrar'}
-                </Button>
-              </div>
-            </form>
+            <NovoPedidoForm
+              editingPedido={editingPedido}
+              onSuccess={handleFormSuccess}
+              onCancel={handleFormCancel}
+            />
           </DialogContent>
         </Dialog>
       </div>
@@ -448,49 +238,72 @@ export function Pedidos() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPedidos.map((pedido) => (
-                <TableRow key={pedido.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center space-x-2">
-                      <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                      <span>{pedido.numero_pedido}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {pedido.pessoas_juridicas?.nome_fantasia || pedido.pessoas_juridicas?.razao_social || '-'}
-                  </TableCell>
-                  <TableCell>
-                    {new Date(pedido.data_pedido).toLocaleDateString('pt-BR')}
-                  </TableCell>
-                  <TableCell>
-                    {pedido.data_entrega ? new Date(pedido.data_entrega).toLocaleDateString('pt-BR') : '-'}
-                  </TableCell>
-                  <TableCell>
-                    {getStatusBadge(pedido.status)}
-                  </TableCell>
-                  <TableCell>
-                    {pedido.valor_total_centavos ? formatCurrency(pedido.valor_total_centavos) : '-'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(pedido)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(pedido.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {filteredPedidos.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    Nenhum pedido encontrado
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                filteredPedidos.map((pedido) => (
+                  <TableRow 
+                    key={pedido.id} 
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`/compras/pedido/${pedido.id}`)}
+                  >
+                    <TableCell className="font-medium">
+                      <div className="flex items-center space-x-2">
+                        <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                        <span>{pedido.numero_pedido}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {pedido.pessoas_juridicas?.nome_fantasia || pedido.pessoas_juridicas?.razao_social || '-'}
+                    </TableCell>
+                    <TableCell>
+                      {new Date(pedido.data_pedido).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                    <TableCell>
+                      {pedido.data_entrega ? new Date(pedido.data_entrega).toLocaleDateString('pt-BR') : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(pedido.status)}
+                    </TableCell>
+                    <TableCell>
+                      {pedido.valor_total_centavos ? formatCurrency(pedido.valor_total_centavos) : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end space-x-1" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => navigate(`/compras/pedido/${pedido.id}`)}
+                          title="Ver detalhes"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(pedido)}
+                          title="Editar"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(pedido.id)}
+                          title="Excluir"
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
