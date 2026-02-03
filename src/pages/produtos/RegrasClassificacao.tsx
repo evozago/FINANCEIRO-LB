@@ -50,7 +50,7 @@ import {
   ArrowDown,
   CheckSquare,
   Power,
-  PowerOff,
+  Edit3,
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
@@ -114,6 +114,14 @@ export default function RegrasClassificacao() {
   
   // Seleção de linhas
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  
+  // Modal de edição em lote
+  const [batchEditOpen, setBatchEditOpen] = useState(false);
+  const [batchForm, setBatchForm] = useState({
+    tipo: '' as string,
+    campo_destino: '' as string,
+    valor_destino: '' as string,
+  });
   
   // Ordenação
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -456,6 +464,44 @@ export default function RegrasClassificacao() {
     alterarStatusMutation.mutate({ ids: Array.from(selectedIds), ativo: false });
   };
 
+  // Edição em lote
+  const editarLoteMutation = useMutation({
+    mutationFn: async (payload: { ids: number[]; updates: Record<string, string> }) => {
+      const { error } = await supabase
+        .from('regras_classificacao')
+        .update(payload.updates)
+        .in('id', payload.ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['regras-classificacao'] });
+      toast.success(`${selectedIds.size} regras atualizadas!`);
+      setSelectedIds(new Set());
+      setBatchEditOpen(false);
+      setBatchForm({ tipo: '', campo_destino: '', valor_destino: '' });
+    },
+    onError: () => toast.error('Erro ao atualizar regras'),
+  });
+
+  const handleEditarEmLote = () => {
+    const updates: Record<string, string> = {};
+    if (batchForm.tipo) updates.tipo = batchForm.tipo;
+    if (batchForm.campo_destino) updates.campo_destino = batchForm.campo_destino;
+    if (batchForm.valor_destino) updates.valor_destino = batchForm.valor_destino;
+
+    if (Object.keys(updates).length === 0) {
+      toast.error('Selecione pelo menos um campo para alterar');
+      return;
+    }
+
+    editarLoteMutation.mutate({ ids: Array.from(selectedIds), updates });
+  };
+
+  const openBatchEdit = () => {
+    setBatchForm({ tipo: '', campo_destino: '', valor_destino: '' });
+    setBatchEditOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -588,9 +634,9 @@ export default function RegrasClassificacao() {
                   value={form.termos_exclusao}
                   onChange={e => setForm({ ...form, termos_exclusao: e.target.value })}
                   placeholder="Ex: PRAIA, PISCINA"
-                  className="border-amber-300 focus:border-amber-500"
+                  className="border-warning focus:border-warning"
                 />
-                <p className="text-xs text-amber-600 mt-1">
+                <p className="text-xs text-warning mt-1">
                   Se o produto contiver algum desses termos, a regra NÃO será aplicada
                 </p>
               </div>
@@ -702,12 +748,16 @@ export default function RegrasClassificacao() {
                       {selectedCount} {selectedCount === 1 ? 'regra selecionada' : 'regras selecionadas'}
                     </span>
                     <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={openBatchEdit}>
+                        <Edit3 className="h-3.5 w-3.5 mr-1" />
+                        Editar
+                      </Button>
                       <Button size="sm" variant="outline" onClick={handleAtivarSelecionadas}>
                         <Power className="h-3.5 w-3.5 mr-1" />
                         Ativar
                       </Button>
                       <Button size="sm" variant="outline" onClick={handleDesativarSelecionadas}>
-                        <PowerOff className="h-3.5 w-3.5 mr-1" />
+                        <Power className="h-3.5 w-3.5 mr-1" />
                         Desativar
                       </Button>
                       <Button size="sm" variant="destructive" onClick={handleExcluirSelecionadas}>
@@ -843,6 +893,79 @@ export default function RegrasClassificacao() {
           );
         })}
       </Tabs>
+
+      {/* Modal de edição em lote */}
+      <Dialog open={batchEditOpen} onOpenChange={setBatchEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar {selectedIds.size} regras em lote</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Deixe em branco os campos que não deseja alterar.
+            </p>
+            
+            <div>
+              <Label>Tipo de Regra</Label>
+              <Select 
+                value={batchForm.tipo || 'none'} 
+                onValueChange={(v) => setBatchForm({ ...batchForm, tipo: v === 'none' ? '' : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Manter atual" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Manter atual</SelectItem>
+                  {tiposRegra.map(t => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label} - {t.desc}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Campo Destino</Label>
+              <Select 
+                value={batchForm.campo_destino || 'none'} 
+                onValueChange={(v) => setBatchForm({ ...batchForm, campo_destino: v === 'none' ? '' : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Manter atual" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Manter atual</SelectItem>
+                  {camposDestino.map(c => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Valor Destino</Label>
+              <Input
+                value={batchForm.valor_destino}
+                onChange={(e) => setBatchForm({ ...batchForm, valor_destino: e.target.value })}
+                placeholder="Deixe vazio para manter atual"
+              />
+            </div>
+          </div>
+          
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setBatchEditOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleEditarEmLote} 
+              disabled={editarLoteMutation.isPending}
+            >
+              {editarLoteMutation.isPending ? 'Salvando...' : 'Aplicar Alterações'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
