@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -44,11 +45,20 @@ import {
   Play,
   ArrowLeft,
   Upload,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  CheckSquare,
+  Power,
+  PowerOff,
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { normalizarTexto } from '@/lib/classificador';
+
+type SortKey = 'nome' | 'tipo' | 'termos' | 'valor_destino' | 'pontuacao' | 'ativo';
+type SortDirection = 'asc' | 'desc' | null;
 
 interface RegraForm {
   nome: string;
@@ -101,7 +111,13 @@ export default function RegrasClassificacao() {
   const [form, setForm] = useState<RegraForm>(initialForm);
   const [testInput, setTestInput] = useState('');
   const [testResult, setTestResult] = useState<string | null>(null);
-
+  
+  // Seleção de linhas
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  
+  // Ordenação
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const { data: regras = [], isLoading } = useQuery({
     queryKey: ['regras-classificacao'],
     queryFn: async () => {
@@ -305,10 +321,140 @@ export default function RegrasClassificacao() {
     }
   };
 
-  const regrasPorCampo = camposDestino.map(campo => ({
-    ...campo,
-    regras: regras.filter(r => r.campo_destino === campo.value),
-  }));
+  // Função de ordenação
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      if (sortDirection === 'asc') setSortDirection('desc');
+      else if (sortDirection === 'desc') { setSortKey(null); setSortDirection(null); }
+      else setSortDirection('asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (key: SortKey) => {
+    if (sortKey !== key) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
+    if (sortDirection === 'asc') return <ArrowUp className="h-3 w-3 ml-1" />;
+    return <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  // Ordena e agrupa regras por campo
+  const regrasPorCampo = useMemo(() => {
+    return camposDestino.map(campo => {
+      let regrasFiltered = regras.filter(r => r.campo_destino === campo.value);
+      
+      if (sortKey && sortDirection) {
+        regrasFiltered = [...regrasFiltered].sort((a, b) => {
+          let valA: string | number | boolean;
+          let valB: string | number | boolean;
+          
+          switch (sortKey) {
+            case 'nome':
+              valA = a.nome.toLowerCase();
+              valB = b.nome.toLowerCase();
+              break;
+            case 'tipo':
+              valA = a.tipo;
+              valB = b.tipo;
+              break;
+            case 'termos':
+              valA = a.termos.join(', ').toLowerCase();
+              valB = b.termos.join(', ').toLowerCase();
+              break;
+            case 'valor_destino':
+              valA = a.valor_destino.toLowerCase();
+              valB = b.valor_destino.toLowerCase();
+              break;
+            case 'pontuacao':
+              valA = a.pontuacao ?? 0;
+              valB = b.pontuacao ?? 0;
+              break;
+            case 'ativo':
+              valA = a.ativo ? 1 : 0;
+              valB = b.ativo ? 1 : 0;
+              break;
+            default:
+              return 0;
+          }
+          
+          if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+          if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+          return 0;
+        });
+      }
+      
+      return { ...campo, regras: regrasFiltered };
+    });
+  }, [regras, sortKey, sortDirection]);
+
+  // Funções de seleção
+  const toggleSelection = (id: number) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
+  };
+
+  const toggleSelectAll = (regrasTab: typeof regras) => {
+    const idsTab = regrasTab.map(r => r.id);
+    const allSelected = idsTab.every(id => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(idsTab));
+    }
+  };
+
+  // Ações em lote
+  const excluirSelecionadasMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const { error } = await supabase
+        .from('regras_classificacao')
+        .delete()
+        .in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['regras-classificacao'] });
+      toast.success(`${selectedIds.size} regras excluídas!`);
+      setSelectedIds(new Set());
+    },
+    onError: () => toast.error('Erro ao excluir regras'),
+  });
+
+  const alterarStatusMutation = useMutation({
+    mutationFn: async ({ ids, ativo }: { ids: number[]; ativo: boolean }) => {
+      const { error } = await supabase
+        .from('regras_classificacao')
+        .update({ ativo })
+        .in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: (_, { ativo }) => {
+      queryClient.invalidateQueries({ queryKey: ['regras-classificacao'] });
+      toast.success(`${selectedIds.size} regras ${ativo ? 'ativadas' : 'desativadas'}!`);
+      setSelectedIds(new Set());
+    },
+    onError: () => toast.error('Erro ao alterar status'),
+  });
+
+  const handleExcluirSelecionadas = () => {
+    if (selectedIds.size === 0) return;
+    if (confirm(`Excluir ${selectedIds.size} regras selecionadas?`)) {
+      excluirSelecionadasMutation.mutate(Array.from(selectedIds));
+    }
+  };
+
+  const handleAtivarSelecionadas = () => {
+    if (selectedIds.size === 0) return;
+    alterarStatusMutation.mutate({ ids: Array.from(selectedIds), ativo: true });
+  };
+
+  const handleDesativarSelecionadas = () => {
+    if (selectedIds.size === 0) return;
+    alterarStatusMutation.mutate({ ids: Array.from(selectedIds), ativo: false });
+  };
 
   return (
     <div className="space-y-6">
@@ -540,78 +686,162 @@ export default function RegrasClassificacao() {
           ))}
         </TabsList>
 
-        {regrasPorCampo.map(campo => (
-          <TabsContent key={campo.value} value={campo.value} className="mt-4">
-            <Card>
-              <CardContent className="pt-6">
-                {campo.regras.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    Nenhuma regra para {campo.label.toLowerCase()}
-                  </p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-8"></TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Termos</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Pts</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {campo.regras.map((regra) => (
-                        <TableRow key={regra.id}>
-                          <TableCell>
-                            <GripVertical className="h-4 w-4 text-muted-foreground" />
-                          </TableCell>
-                          <TableCell className="font-medium">{regra.nome}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">
-                              {tiposRegra.find(t => t.value === regra.tipo)?.label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate">
-                            {regra.termos.join(', ')}
-                          </TableCell>
-                          <TableCell>{regra.valor_destino}</TableCell>
-                          <TableCell>{regra.pontuacao}</TableCell>
-                          <TableCell>
-                            <Badge variant={regra.ativo ? 'default' : 'secondary'}>
-                              {regra.ativo ? 'Ativa' : 'Inativa'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex gap-1 justify-end">
-                              <Button size="icon" variant="ghost" onClick={() => abrirEdicao(regra)}>
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="text-destructive"
-                                onClick={() => {
-                                  if (confirm(`Excluir regra "${regra.nome}"?`)) {
-                                    excluirMutation.mutate(regra.id);
-                                  }
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+        {regrasPorCampo.map(campo => {
+          const idsTab = campo.regras.map(r => r.id);
+          const allSelected = idsTab.length > 0 && idsTab.every(id => selectedIds.has(id));
+          const someSelected = idsTab.some(id => selectedIds.has(id));
+          const selectedCount = idsTab.filter(id => selectedIds.has(id)).length;
+
+          return (
+            <TabsContent key={campo.value} value={campo.value} className="mt-4">
+              <Card>
+                {/* Barra de ações em lote */}
+                {selectedCount > 0 && (
+                  <div className="border-b px-4 py-3 flex items-center gap-4 bg-muted/30">
+                    <span className="text-sm font-medium">
+                      {selectedCount} {selectedCount === 1 ? 'regra selecionada' : 'regras selecionadas'}
+                    </span>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={handleAtivarSelecionadas}>
+                        <Power className="h-3.5 w-3.5 mr-1" />
+                        Ativar
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleDesativarSelecionadas}>
+                        <PowerOff className="h-3.5 w-3.5 mr-1" />
+                        Desativar
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={handleExcluirSelecionadas}>
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        Excluir
+                      </Button>
+                    </div>
+                  </div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
+                <CardContent className="pt-6">
+                  {campo.regras.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      Nenhuma regra para {campo.label.toLowerCase()}
+                    </p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10">
+                            <Checkbox
+                              checked={allSelected}
+                              onCheckedChange={() => toggleSelectAll(campo.regras)}
+                              aria-label="Selecionar todas"
+                            />
+                          </TableHead>
+                          <TableHead 
+                            className="cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={() => handleSort('nome')}
+                          >
+                            <div className="flex items-center">
+                              Nome {getSortIcon('nome')}
+                            </div>
+                          </TableHead>
+                          <TableHead 
+                            className="cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={() => handleSort('tipo')}
+                          >
+                            <div className="flex items-center">
+                              Tipo {getSortIcon('tipo')}
+                            </div>
+                          </TableHead>
+                          <TableHead 
+                            className="cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={() => handleSort('termos')}
+                          >
+                            <div className="flex items-center">
+                              Termos {getSortIcon('termos')}
+                            </div>
+                          </TableHead>
+                          <TableHead 
+                            className="cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={() => handleSort('valor_destino')}
+                          >
+                            <div className="flex items-center">
+                              Valor {getSortIcon('valor_destino')}
+                            </div>
+                          </TableHead>
+                          <TableHead 
+                            className="cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={() => handleSort('pontuacao')}
+                          >
+                            <div className="flex items-center">
+                              Pts {getSortIcon('pontuacao')}
+                            </div>
+                          </TableHead>
+                          <TableHead 
+                            className="cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={() => handleSort('ativo')}
+                          >
+                            <div className="flex items-center">
+                              Status {getSortIcon('ativo')}
+                            </div>
+                          </TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {campo.regras.map((regra) => (
+                          <TableRow 
+                            key={regra.id}
+                            className={selectedIds.has(regra.id) ? 'bg-muted/50' : ''}
+                          >
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedIds.has(regra.id)}
+                                onCheckedChange={() => toggleSelection(regra.id)}
+                                aria-label={`Selecionar ${regra.nome}`}
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium">{regra.nome}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {tiposRegra.find(t => t.value === regra.tipo)?.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="max-w-[200px] truncate">
+                              {regra.termos.join(', ')}
+                            </TableCell>
+                            <TableCell>{regra.valor_destino}</TableCell>
+                            <TableCell>{regra.pontuacao}</TableCell>
+                            <TableCell>
+                              <Badge variant={regra.ativo ? 'default' : 'secondary'}>
+                                {regra.ativo ? 'Ativa' : 'Inativa'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex gap-1 justify-end">
+                                <Button size="icon" variant="ghost" onClick={() => abrirEdicao(regra)}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="text-destructive"
+                                  onClick={() => {
+                                    if (confirm(`Excluir regra "${regra.nome}"?`)) {
+                                      excluirMutation.mutate(regra.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          );
+        })}
       </Tabs>
     </div>
   );
