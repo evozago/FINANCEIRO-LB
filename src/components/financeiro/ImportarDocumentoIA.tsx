@@ -154,12 +154,12 @@ export function ImportarDocumentoIA({
   // Carregar contas bancárias e formas de pagamento
   const loadPaymentOptions = useCallback(async () => {
     const [contasRes, formasRes] = await Promise.all([
-      supabase.from('contas_bancarias').select('id, nome_conta').eq('ativa', true),
+      supabase.from('contas_bancarias').select('id, nome').eq('ativo', true),
       supabase.from('formas_pagamento').select('id, nome')
     ]);
     
     if (contasRes.data) {
-      setContasBancarias(contasRes.data.map(c => ({ id: c.id, nome: c.nome_conta })));
+      setContasBancarias(contasRes.data.map(c => ({ id: c.id, nome: c.nome })));
     }
     if (formasRes.data) {
       setFormasPagamento(formasRes.data);
@@ -388,14 +388,17 @@ export function ImportarDocumentoIA({
       const pagamento = extractedData.pagamento;
       const valorPago = pagamento.valor_pago_centavos;
 
-      // Usar a função pagar_parcela do banco
-      const { error } = await supabase.rpc('pagar_parcela', {
-        parcela_id: parcelaSelecionada.id,
-        valor_pago_centavos: valorPago,
-        conta_bancaria_id: parseInt(contaBancariaId),
-        forma_pagamento_id: formaPagamentoId ? parseInt(formaPagamentoId) : null,
-        observacao_param: `Pago via comprovante. ${pagamento.juros_centavos ? `Juros: R$ ${(pagamento.juros_centavos/100).toFixed(2)}` : ''} ${pagamento.desconto_centavos ? `Desconto: R$ ${(pagamento.desconto_centavos/100).toFixed(2)}` : ''} ${pagamento.multa_centavos ? `Multa: R$ ${(pagamento.multa_centavos/100).toFixed(2)}` : ''}`
-      });
+      // Atualizar parcela diretamente 
+      const { error } = await supabase
+        .from('contas_pagar_parcelas')
+        .update({
+          pago: true,
+          data_pagamento: pagamento.data_pagamento || new Date().toISOString().split('T')[0],
+          forma_pagamento_id: formaPagamentoId ? parseInt(formaPagamentoId) : null,
+          conta_bancaria_id: parseInt(contaBancariaId),
+          observacoes: `Pago via comprovante. ${pagamento.juros_centavos ? `Juros: R$ ${(pagamento.juros_centavos/100).toFixed(2)}` : ''} ${pagamento.desconto_centavos ? `Desconto: R$ ${(pagamento.desconto_centavos/100).toFixed(2)}` : ''} ${pagamento.multa_centavos ? `Multa: R$ ${(pagamento.multa_centavos/100).toFixed(2)}` : ''}`
+        })
+        .eq('id', parcelaSelecionada.id);
 
       if (error) throw error;
 

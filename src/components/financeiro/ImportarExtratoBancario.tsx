@@ -16,7 +16,7 @@ import { Upload, FileSpreadsheet, Check, X, AlertTriangle, Search, Loader2, Aler
 
 interface ContaBancaria {
   id: number;
-  nome_conta: string;
+  nome: string;
   banco?: string;
 }
 
@@ -104,11 +104,11 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
   // Carregar dados auxiliares
   const loadAuxData = async () => {
     const [contasRes, formasRes] = await Promise.all([
-      supabase.from('contas_bancarias').select('id, nome_conta, banco'),
+      supabase.from('contas_bancarias').select('id, nome, banco'),
       supabase.from('formas_pagamento').select('id, nome')
     ]);
     
-    if (contasRes.data) setContasBancarias(contasRes.data);
+    if (contasRes.data) setContasBancarias(contasRes.data as ContaBancaria[]);
     if (formasRes.data) setFormasPagamento(formasRes.data);
   };
 
@@ -390,18 +390,17 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         id,
         conta_id,
         numero_parcela,
-        valor_parcela_centavos,
-        valor_pago_centavos,
+        valor_centavos,
         vencimento,
         pago,
-        pago_em,
-        observacao,
+        data_pagamento,
+        observacoes,
         contas_pagar!inner (
           id,
           descricao,
           fornecedor_id,
-          fornecedor_pf_id,
-          qtd_parcelas
+          pessoa_fisica_id,
+          num_parcelas
         )
       `);
 
@@ -412,11 +411,11 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
 
     // Buscar nomes dos fornecedores
     const pjIds = [...new Set(parcelas.map(p => (p.contas_pagar as any)?.fornecedor_id).filter(Boolean))];
-    const pfIds = [...new Set(parcelas.map(p => (p.contas_pagar as any)?.fornecedor_pf_id).filter(Boolean))];
+    const pfIds = [...new Set(parcelas.map(p => (p.contas_pagar as any)?.pessoa_fisica_id).filter(Boolean))];
 
     const [pjRes, pfRes] = await Promise.all([
       pjIds.length > 0 ? supabase.from('pessoas_juridicas').select('id, nome_fantasia, razao_social').in('id', pjIds) : { data: [] },
-      pfIds.length > 0 ? supabase.from('pessoas_fisicas').select('id, nome_completo').in('id', pfIds) : { data: [] }
+      pfIds.length > 0 ? supabase.from('pessoas_fisicas').select('id, nome').in('id', pfIds) : { data: [] }
     ]);
 
     const pjMap: Record<number, string> = {};
@@ -426,7 +425,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
       pjMap[pj.id] = pj.nome_fantasia || pj.razao_social || 'PJ sem nome';
     });
     pfRes.data?.forEach((pf: any) => {
-      pfMap[pf.id] = pf.nome_completo || 'PF sem nome';
+      pfMap[pf.id] = pf.nome || 'PF sem nome';
     });
 
     return parcelas.map(p => {
@@ -435,23 +434,23 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
       
       if (conta?.fornecedor_id && pjMap[conta.fornecedor_id]) {
         fornecedorNome = pjMap[conta.fornecedor_id];
-      } else if (conta?.fornecedor_pf_id && pfMap[conta.fornecedor_pf_id]) {
-        fornecedorNome = pfMap[conta.fornecedor_pf_id];
+      } else if (conta?.pessoa_fisica_id && pfMap[conta.pessoa_fisica_id]) {
+        fornecedorNome = pfMap[conta.pessoa_fisica_id];
       }
 
       return {
         id: p.id,
         conta_id: p.conta_id,
         numero_parcela: p.numero_parcela,
-        valor_parcela_centavos: p.valor_parcela_centavos,
+        valor_parcela_centavos: p.valor_centavos,
         vencimento: p.vencimento,
         descricao: conta?.descricao || '',
         fornecedor_nome: fornecedorNome,
-        total_parcelas: conta?.qtd_parcelas || 1,
+        total_parcelas: conta?.num_parcelas || 1,
         pago: p.pago,
-        pago_em: p.pago_em,
-        valor_pago_centavos: p.valor_pago_centavos,
-        observacao: p.observacao
+        pago_em: p.data_pagamento,
+        valor_pago_centavos: p.valor_centavos,
+        observacao: p.observacoes
       };
     });
   };
@@ -611,13 +610,18 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
         }
       }
       
-      const { error } = await supabase.rpc('pagar_parcela', {
-        parcela_id: match.parcela_id,
-        valor_pago_centavos: valorPagoCentavos,
-        forma_pagamento_id: formaIdFinal,
-        conta_bancaria_id: parseInt(contaBancariaId),
-        observacao_param: observacao
-      });
+      // Atualizar parcela diretamente já que pagar_parcela não existe como função
+      const { error } = await supabase
+        .from('contas_pagar_parcelas')
+        .update({
+          pago: true,
+          data_pagamento: new Date().toISOString().split('T')[0],
+          valor_centavos: valorPagoCentavos,
+          forma_pagamento_id: formaIdFinal,
+          conta_bancaria_id: parseInt(contaBancariaId),
+          observacoes: observacao
+        })
+        .eq('id', match.parcela_id);
       
       if (error) {
         console.error('Erro ao dar baixa:', error);
@@ -831,7 +835,7 @@ export function ImportarExtratoBancario({ isOpen, onClose, onComplete }: Importa
                   <SelectContent>
                     {contasBancarias.map(conta => (
                       <SelectItem key={conta.id} value={String(conta.id)}>
-                        {conta.nome_conta} {conta.banco && `(${conta.banco})`}
+                        {conta.nome} {conta.banco && `(${conta.banco})`}
                       </SelectItem>
                     ))}
                   </SelectContent>

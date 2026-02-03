@@ -198,7 +198,7 @@ export function ExportImportFinanceiro({ isOpen, onClose, onComplete }: ExportIm
 
       // Recorrências
       if (exportOptions.recorrencias) {
-        const { data } = await supabase.from('recorrencias').select('*').order('id');
+        const { data } = await supabase.from('contas_recorrentes').select('*').order('id');
         exportData.recorrencias = data || [];
         currentStep++;
         setExportProgress((currentStep / totalSteps) * 100);

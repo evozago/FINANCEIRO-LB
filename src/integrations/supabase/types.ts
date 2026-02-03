@@ -871,7 +871,9 @@ export type Database = {
           confianca: number | null
           cor: string | null
           created_at: string | null
+          custo_unitario_centavos: number | null
           estilo: string | null
+          estoque: number | null
           faixa_etaria: string | null
           genero: string | null
           id: number
@@ -884,6 +886,9 @@ export type Database = {
           subcategoria: string | null
           tamanho: string | null
           updated_at: string | null
+          valor_venda_centavos: number | null
+          variacao_1: string | null
+          variacao_2: string | null
         }
         Insert: {
           ativo?: boolean | null
@@ -894,7 +899,9 @@ export type Database = {
           confianca?: number | null
           cor?: string | null
           created_at?: string | null
+          custo_unitario_centavos?: number | null
           estilo?: string | null
+          estoque?: number | null
           faixa_etaria?: string | null
           genero?: string | null
           id?: number
@@ -907,6 +914,9 @@ export type Database = {
           subcategoria?: string | null
           tamanho?: string | null
           updated_at?: string | null
+          valor_venda_centavos?: number | null
+          variacao_1?: string | null
+          variacao_2?: string | null
         }
         Update: {
           ativo?: boolean | null
@@ -917,7 +927,9 @@ export type Database = {
           confianca?: number | null
           cor?: string | null
           created_at?: string | null
+          custo_unitario_centavos?: number | null
           estilo?: string | null
+          estoque?: number | null
           faixa_etaria?: string | null
           genero?: string | null
           id?: number
@@ -930,6 +942,9 @@ export type Database = {
           subcategoria?: string | null
           tamanho?: string | null
           updated_at?: string | null
+          valor_venda_centavos?: number | null
+          variacao_1?: string | null
+          variacao_2?: string | null
         }
         Relationships: [
           {

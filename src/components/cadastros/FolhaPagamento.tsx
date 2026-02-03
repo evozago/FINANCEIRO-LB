@@ -186,9 +186,8 @@ export function FolhaPagamento({ pessoaFisicaId, pessoaNome }: FolhaPagamentoPro
               .from('contas_pagar_parcelas')
               .insert({
                 conta_id: conta.id,
-                parcela_num: 1,
                 numero_parcela: 1,
-                valor_parcela_centavos: valorLiquido,
+                valor_centavos: valorLiquido,
                 vencimento: dataVencimento.toISOString().split('T')[0],
                 pago: false,
               });

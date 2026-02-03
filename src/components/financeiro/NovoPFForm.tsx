@@ -9,24 +9,24 @@ import { Plus } from "lucide-react";
 import { toUpperCaseText } from "@/lib/utils";
 
 interface NovoPFFormProps {
-  onSuccess: (newPF: { id: number; nome_completo: string }) => void;
+  onSuccess: (newPF: { id: number; nome: string }) => void;
 }
 
 export function NovoPFForm({ onSuccess }: NovoPFFormProps) {
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    nome_completo: "",
+    nome: "",
     cpf: "",
     email: "",
-    celular: "",
+    telefone: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.nome_completo.trim()) {
-      toast.error("Nome completo é obrigatório");
+    if (!formData.nome.trim()) {
+      toast.error("Nome é obrigatório");
       return;
     }
 
@@ -35,10 +35,10 @@ export function NovoPFForm({ onSuccess }: NovoPFFormProps) {
       const { data, error } = await supabase
         .from("pessoas_fisicas")
         .insert({
-          nome_completo: toUpperCaseText(formData.nome_completo.trim()),
+          nome: toUpperCaseText(formData.nome.trim()),
           cpf: formData.cpf.trim() || null,
           email: formData.email.trim().toLowerCase() || null,
-          celular: formData.celular.trim() || null,
+          telefone: formData.telefone.trim() || null,
         })
         .select()
         .single();
@@ -46,13 +46,13 @@ export function NovoPFForm({ onSuccess }: NovoPFFormProps) {
       if (error) throw error;
 
       toast.success("Fornecedor cadastrado com sucesso!");
-      onSuccess(data);
+      onSuccess({ id: data.id, nome: data.nome });
       setOpen(false);
       setFormData({
-        nome_completo: "",
+        nome: "",
         cpf: "",
         email: "",
-        celular: "",
+        telefone: "",
       });
     } catch (error: any) {
       console.error("Erro ao cadastrar fornecedor:", error);
@@ -77,11 +77,11 @@ export function NovoPFForm({ onSuccess }: NovoPFFormProps) {
         <form onSubmit={handleSubmit}>
           <div className="space-y-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="nome_completo">Nome Completo *</Label>
+              <Label htmlFor="nome">Nome Completo *</Label>
               <Input
-                id="nome_completo"
-                value={formData.nome_completo}
-                onChange={(e) => setFormData({ ...formData, nome_completo: toUpperCaseText(e.target.value) })}
+                id="nome"
+                value={formData.nome}
+                onChange={(e) => setFormData({ ...formData, nome: toUpperCaseText(e.target.value) })}
                 placeholder="Nome completo"
                 required
               />
@@ -97,11 +97,11 @@ export function NovoPFForm({ onSuccess }: NovoPFFormProps) {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="celular">Celular</Label>
+                <Label htmlFor="telefone">Telefone</Label>
                 <Input
-                  id="celular"
-                  value={formData.celular}
-                  onChange={(e) => setFormData({ ...formData, celular: e.target.value })}
+                  id="telefone"
+                  value={formData.telefone}
+                  onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                   placeholder="(00) 00000-0000"
                 />
               </div>
