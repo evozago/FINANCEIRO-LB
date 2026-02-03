@@ -975,6 +975,7 @@ export type Database = {
           ordem: number | null
           pontuacao: number | null
           termos: string[]
+          termos_exclusao: string[] | null
           tipo: string
           valor_destino: string
         }
@@ -989,6 +990,7 @@ export type Database = {
           ordem?: number | null
           pontuacao?: number | null
           termos: string[]
+          termos_exclusao?: string[] | null
           tipo: string
           valor_destino: string
         }
@@ -1003,6 +1005,7 @@ export type Database = {
           ordem?: number | null
           pontuacao?: number | null
           termos?: string[]
+          termos_exclusao?: string[] | null
           tipo?: string
           valor_destino?: string
         }

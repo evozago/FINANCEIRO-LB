@@ -267,12 +267,12 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
 
     // Busca vendedoras e filiais
     const { data: vendedoras } = await supabase
-      .from("pessoas_fisicas")
-      .select("id, nome_completo");
+      .from("vendedoras")
+      .select("id, nome");
     const { data: filiais } = await supabase.from("filiais").select("id, nome");
 
     const vendedorasMap = new Map(
-      vendedoras?.map((v) => [v.nome_completo.toLowerCase(), v.id]) || []
+      vendedoras?.map((v) => [v.nome.toLowerCase(), v.id]) || []
     );
     const filiaisMap = new Map(filiais?.map((f) => [f.nome.toLowerCase(), f.id]) || []);
 
@@ -287,15 +287,13 @@ export function ImportadorVendas({ onSuccess }: ImportadorVendasProps) {
         continue;
       }
 
-      const { error } = await supabase.from("vendas_diarias").insert({
-        data: row.data, // YYYY-MM-01
-        vendedora_pf_id: vendedoraId,
+      // Inserir na tabela vendas que existe
+      const { error } = await supabase.from("vendas").insert({
+        data_venda: row.data, // YYYY-MM-01
+        vendedora_id: vendedoraId,
         filial_id: filialId,
-        valor_bruto_centavos: row.valor_bruto_centavos,
-        desconto_centavos: row.desconto_centavos,
-        valor_liquido_centavos: row.valor_bruto_centavos - row.desconto_centavos,
-        qtd_itens: row.qtd_itens,
-        atendimentos: row.atendimentos ?? 0, // <-- novo
+        valor_centavos: row.valor_bruto_centavos - row.desconto_centavos,
+        observacoes: `Importado - Bruto: ${row.valor_bruto_centavos/100}, Desc: ${row.desconto_centavos/100}, Itens: ${row.qtd_itens}`,
       });
 
       if (error) errorCount++; else successCount++;

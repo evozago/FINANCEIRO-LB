@@ -14,13 +14,12 @@ import { useToast } from '@/hooks/use-toast';
 
 interface PessoaFisica {
   id: number;
-  nome_completo: string;
-  cpf: string;
-  celular?: string;
+  nome: string;
+  cpf?: string;
+  telefone?: string;
   email?: string;
   endereco?: string;
-  nascimento?: string;
-  num_cadastro_folha: string;
+  data_nascimento?: string;
   filial_id?: number;
   cargo_id?: number;
   created_at: string;
@@ -50,13 +49,12 @@ export function PessoasFisicas() {
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
-    nome_completo: '',
+    nome: '',
     cpf: '',
-    celular: '',
+    telefone: '',
     email: '',
     endereco: '',
-    nascimento: '',
-    num_cadastro_folha: '',
+    data_nascimento: '',
     filial_id: '',
     cargo_id: '',
   });
@@ -82,10 +80,10 @@ export function PessoasFisicas() {
           filiais(nome),
           cargos(nome)
         `)
-        .order('nome_completo');
+        .order('nome');
 
       if (error) throw error;
-      setPessoas(data || []);
+      setPessoas((data || []) as any);
     } catch (error) {
       console.error('Erro ao buscar pessoas físicas:', error);
       toast({
@@ -131,13 +129,12 @@ export function PessoasFisicas() {
     
     try {
       const dataToSubmit = {
-        nome_completo: formData.nome_completo,
+        nome: formData.nome,
         cpf: formData.cpf && formData.cpf.trim() !== '' ? formData.cpf : null,
-        celular: formData.celular && formData.celular.trim() !== '' ? formData.celular : null,
+        telefone: formData.telefone && formData.telefone.trim() !== '' ? formData.telefone : null,
         email: formData.email && formData.email.trim() !== '' ? formData.email : null,
         endereco: formData.endereco && formData.endereco.trim() !== '' ? formData.endereco : null,
-        nascimento: formData.nascimento && formData.nascimento.trim() !== '' ? formData.nascimento : null,
-        num_cadastro_folha: formData.num_cadastro_folha && formData.num_cadastro_folha.trim() !== '' ? formData.num_cadastro_folha : null,
+        data_nascimento: formData.data_nascimento && formData.data_nascimento.trim() !== '' ? formData.data_nascimento : null,
         filial_id: formData.filial_id ? parseInt(formData.filial_id) : null,
         cargo_id: formData.cargo_id ? parseInt(formData.cargo_id) : null,
       };
@@ -184,13 +181,12 @@ export function PessoasFisicas() {
   const handleEdit = (pessoa: PessoaFisica) => {
     setEditingPessoa(pessoa);
     setFormData({
-      nome_completo: pessoa.nome_completo,
-      cpf: pessoa.cpf,
-      celular: pessoa.celular || '',
+      nome: pessoa.nome,
+      cpf: pessoa.cpf || '',
+      telefone: pessoa.telefone || '',
       email: pessoa.email || '',
       endereco: pessoa.endereco || '',
-      nascimento: pessoa.nascimento || '',
-      num_cadastro_folha: pessoa.num_cadastro_folha,
+      data_nascimento: pessoa.data_nascimento || '',
       filial_id: pessoa.filial_id?.toString() || '',
       cargo_id: pessoa.cargo_id?.toString() || '',
     });

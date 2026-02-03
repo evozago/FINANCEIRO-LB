@@ -104,23 +104,22 @@ export function Relatorios() {
 
   const fetchVendasMensais = async () => {
     try {
-      // Buscar vendas por filial do mês selecionado
+      // Buscar vendas por filial do mês selecionado usando tabela vendas
       const { data: vendas, error } = await supabase
-        .from('vendas_diarias')
+        .from('vendas')
         .select(`
-          valor_liquido_centavos,
-          qtd_itens,
+          valor_centavos,
           filial_id,
           filiais(nome)
         `)
-        .gte('data', `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-01`)
-        .lte('data', `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-31`);
+        .gte('data_venda', `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-01`)
+        .lte('data_venda', `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-31`);
 
       if (error) throw error;
       
       // Agrupar por filial
       const filiaisMap = new Map();
-      vendas?.forEach(venda => {
+      vendas?.forEach((venda: any) => {
         const filialId = venda.filial_id || 0;
         const filialNome = venda.filiais?.nome || 'Não informado';
         
@@ -137,7 +136,7 @@ export function Relatorios() {
         
         const filial = filiaisMap.get(filialId);
         filial.total_vendas += 1;
-        filial.valor_liquido_total += venda.valor_liquido_centavos;
+        filial.valor_liquido_total += venda.valor_centavos || 0;
         filial.ticket_medio = filial.valor_liquido_total / filial.total_vendas;
       });
       
@@ -152,24 +151,24 @@ export function Relatorios() {
 
   const fetchVendedorasPerformance = async () => {
     try {
-      // Buscar vendas por vendedora do mês selecionado
+      // Buscar vendas por vendedora do mês selecionado usando tabela vendas
       const { data: vendas, error } = await supabase
-        .from('vendas_diarias')
+        .from('vendas')
         .select(`
-          vendedora_pf_id,
-          valor_liquido_centavos,
-          pessoas_fisicas(nome_completo)
+          vendedora_id,
+          valor_centavos,
+          vendedoras(nome)
         `)
-        .gte('data', `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-01`)
-        .lte('data', `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-31`);
+        .gte('data_venda', `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-01`)
+        .lte('data_venda', `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-31`);
 
       if (error) throw error;
       
       // Agrupar por vendedora
       const vendedorasMap = new Map();
-      vendas?.forEach(venda => {
-        const vendedoraId = venda.vendedora_pf_id;
-        const nome = venda.pessoas_fisicas?.nome_completo || 'Não informado';
+      vendas?.forEach((venda: any) => {
+        const vendedoraId = venda.vendedora_id;
+        const nome = venda.vendedoras?.nome || 'Não informado';
         
         if (!vendedorasMap.has(vendedoraId)) {
           vendedorasMap.set(vendedoraId, {
@@ -182,7 +181,7 @@ export function Relatorios() {
         }
         
         const vendedora = vendedorasMap.get(vendedoraId);
-        vendedora.valor_liquido_total += venda.valor_liquido_centavos;
+        vendedora.valor_liquido_total += venda.valor_centavos || 0;
         vendedora.percentual_meta = (vendedora.valor_liquido_total / vendedora.meta_ajustada) * 100;
       });
       
@@ -201,7 +200,7 @@ export function Relatorios() {
         .from('contas_pagar_parcelas')
         .select(`
           id,
-          valor_parcela_centavos,
+          valor_centavos,
           vencimento,
           contas_pagar!inner(
             id,
@@ -214,12 +213,12 @@ export function Relatorios() {
 
       if (error) throw error;
       
-      const formattedData = data?.map(item => ({
+      const formattedData = data?.map((item: any) => ({
         conta_id: item.contas_pagar?.id || 0,
         descricao: item.contas_pagar?.descricao || '',
         fornecedor: item.contas_pagar?.pessoas_juridicas?.razao_social || 
                    item.contas_pagar?.pessoas_juridicas?.nome_fantasia || 'Não informado',
-        valor_em_aberto: item.valor_parcela_centavos,
+        valor_em_aberto: item.valor_centavos,
         proximo_vencimento: item.vencimento,
         status_pagamento: 'Aberto'
       })) || [];

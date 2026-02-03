@@ -15,29 +15,16 @@ interface MarcaData {
   id: number;
   nome: string;
   descricao?: string;
-  pj_vinculada_id?: number;
+  ativo?: boolean;
   created_at: string;
-  pessoas_juridicas?: {
-    id: number;
-    nome_fantasia?: string;
-    razao_social: string;
-    cnpj?: string;
-    celular?: string;
-    email?: string;
-  };
 }
 
 interface Pedido {
   id: number;
-  numero_pedido: string;
-  data_pedido: string;
-  valor_liquido_centavos?: number;
-  status: string;
-  pessoas_juridicas?: {
-    id: number;
-    nome_fantasia?: string;
-    razao_social: string;
-  };
+  numero_pedido?: string;
+  data_pedido?: string;
+  valor_total_centavos?: number;
+  status?: string;
 }
 
 export function MarcaDetalhes() {
@@ -61,43 +48,16 @@ export function MarcaDetalhes() {
       // Buscar dados da marca
       const { data: marcaData, error: marcaError } = await supabase
         .from('marcas')
-        .select(`
-          *,
-          pessoas_juridicas!pj_vinculada_id(
-            id,
-            nome_fantasia,
-            razao_social,
-            cnpj,
-            celular,
-            email
-          )
-        `)
+        .select('*')
         .eq('id', parseInt(id))
         .single();
 
       if (marcaError) throw marcaError;
-      setMarca(marcaData);
+      setMarca(marcaData as any);
 
-      // Buscar pedidos desta marca
-      const { data: pedidosData, error: pedidosError} = await supabase
-        .from('compras_pedidos')
-        .select(`
-          id,
-          numero_pedido,
-          data_pedido,
-          valor_liquido_centavos,
-          status,
-          pessoas_juridicas!fornecedor_id(
-            id,
-            nome_fantasia,
-            razao_social
-          )
-        `)
-        .eq('marca_id', parseInt(id))
-        .order('data_pedido', { ascending: false });
-
-      if (pedidosError) throw pedidosError;
-      setPedidos(pedidosData || []);
+      // A tabela compras_pedidos não tem relação direta com marcas no schema atual
+      // Deixando lista vazia por enquanto
+      setPedidos([]);
     } catch (error) {
       console.error('Erro ao buscar detalhes da marca:', error);
       toast({

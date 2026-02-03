@@ -5,6 +5,7 @@ export interface RegraClassificacao {
   nome: string;
   tipo: 'contains' | 'exact' | 'startsWith' | 'containsAll' | 'notContains';
   termos: string[];
+  termos_exclusao?: string[]; // Termos que NÃO podem estar presentes
   campo_destino: string;
   valor_destino: string;
   categoria_id: number | null;
@@ -53,7 +54,18 @@ export function normalizarTexto(texto: string): string {
 // Verifica se uma regra aplica ao nome do produto
 function verificarRegra(nomeNormalizado: string, regra: RegraClassificacao): boolean {
   const termosNormalizados = regra.termos.map(t => normalizarTexto(t));
+  
+  // Primeiro verifica os termos de exclusão (se existirem)
+  const termosExclusaoNorm = (regra.termos_exclusao || []).map(t => normalizarTexto(t));
+  if (termosExclusaoNorm.length > 0) {
+    // Se qualquer termo de exclusão estiver presente, a regra NÃO aplica
+    const temExclusao = termosExclusaoNorm.some(termo => nomeNormalizado.includes(termo));
+    if (temExclusao) {
+      return false;
+    }
+  }
 
+  // Depois verifica os termos de inclusão
   switch (regra.tipo) {
     case 'exact':
       return termosNormalizados.some(termo => nomeNormalizado === termo);
