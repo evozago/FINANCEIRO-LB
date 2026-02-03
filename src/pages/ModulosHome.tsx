@@ -9,7 +9,8 @@ import {
   Building2,
   FileText,
   Brain,
-  ArrowRight
+  ArrowRight,
+  Tags
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -76,10 +77,10 @@ const modules: ModuleCardProps[] = [
     color: 'bg-gradient-to-br from-orange-500 to-orange-600'
   },
   {
-    title: 'Categorias de Produtos',
-    description: 'Classifique produtos em categorias hierárquicas',
-    icon: Package,
-    href: '/produtos/categorias',
+    title: 'Classificador de Produtos',
+    description: 'Importe planilhas e classifique produtos automaticamente',
+    icon: Tags,
+    href: '/produtos/classificador',
     color: 'bg-gradient-to-br from-fuchsia-500 to-fuchsia-600'
   },
   {
