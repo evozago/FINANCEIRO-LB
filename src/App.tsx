@@ -29,7 +29,6 @@ import { RelatoriosVendas } from "@/pages/vendas/RelatoriosVendas";
 import { SimuladorMetas } from "@/pages/vendas/SimuladorMetas";
 import { DashboardComparativo } from "@/pages/vendas/DashboardComparativo";
 import { Pedidos } from "@/pages/compras/Pedidos";
-import ImportarXML from "@/pages/compras/ImportarXMLNew";
 import { Relatorios } from "@/pages/Relatorios";
 import TesteGemini from "./pages/TesteGemini";
 import Index from "./pages/Index";
@@ -94,7 +93,6 @@ const App = () => (
 
             {/* Compras */}
             <Route path="compras/pedidos" element={<Pedidos />} />
-            <Route path="compras/importar-xml" element={<ImportarXML />} />
 
             {/* Produtos */}
             <Route path="produtos/categorias" element={<CategoriasProdutos />} />

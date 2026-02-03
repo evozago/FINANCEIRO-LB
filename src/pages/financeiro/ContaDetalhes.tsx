@@ -36,16 +36,14 @@ type ContaPagar = {
 
 type Parcela = {
   id: number;
-  parcela_num: number;
   numero_parcela: number;
   vencimento: string;
-  valor_parcela_centavos: number;
+  valor_centavos: number;
   pago: boolean;
-  pago_em?: string | null;
-  valor_pago_centavos?: number | null;
+  data_pagamento?: string | null;
   forma_pagamento?: { nome: string } | null;
-  conta_bancaria?: { nome_conta: string; banco?: string } | null;
-  observacao?: string | null;
+  conta_bancaria?: { nome: string; banco?: string } | null;
+  observacoes?: string | null;
 };
 
 export default function ContaDetalhes() {
@@ -119,13 +117,13 @@ export default function ContaDetalhes() {
         .select(`
           *,
           forma_pagamento:formas_pagamento(nome),
-          conta_bancaria:contas_bancarias(nome_conta, banco)
+          conta_bancaria:contas_bancarias(nome, banco)
         `)
         .eq("conta_id", contaId)
-        .order("parcela_num", { ascending: true });
+        .order("numero_parcela", { ascending: true });
 
       if (parcelasError) throw parcelasError;
-      setParcelas(parcelasData || []);
+      setParcelas((parcelasData || []) as Parcela[]);
 
     } catch (error) {
       console.error("Erro ao carregar conta:", error);
@@ -441,20 +439,20 @@ export default function ContaDetalhes() {
                   parcelas.map((parcela) => (
                     <TableRow key={parcela.id}>
                       <TableCell className="font-medium">
-                        {parcela.parcela_num || parcela.numero_parcela}/{parcelas.length}
+                        {parcela.numero_parcela}/{parcelas.length}
                       </TableCell>
                       <TableCell>{formatDate(parcela.vencimento)}</TableCell>
-                      <TableCell>{formatCurrency(parcela.valor_parcela_centavos)}</TableCell>
+                      <TableCell>{formatCurrency(parcela.valor_centavos)}</TableCell>
                       <TableCell>
                         <Badge variant={parcela.pago ? "default" : "secondary"}>
                           {parcela.pago ? "Pago" : "Pendente"}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {parcela.pago_em ? formatDate(parcela.pago_em) : '-'}
+                        {parcela.data_pagamento ? formatDate(parcela.data_pagamento) : '-'}
                       </TableCell>
                       <TableCell>
-                        {parcela.valor_pago_centavos ? formatCurrency(parcela.valor_pago_centavos) : '-'}
+                        {parcela.pago ? formatCurrency(parcela.valor_centavos) : '-'}
                       </TableCell>
                       <TableCell>
                         {parcela.forma_pagamento?.nome || '-'}
@@ -462,7 +460,7 @@ export default function ContaDetalhes() {
                       <TableCell>
                         {parcela.conta_bancaria ? (
                           <div className="text-sm">
-                            <div className="font-medium">{parcela.conta_bancaria.nome_conta}</div>
+                            <div className="font-medium">{parcela.conta_bancaria.nome}</div>
                             {parcela.conta_bancaria.banco && (
                               <div className="text-muted-foreground">{parcela.conta_bancaria.banco}</div>
                             )}
@@ -470,7 +468,7 @@ export default function ContaDetalhes() {
                         ) : '-'}
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate">
-                        {parcela.observacao || '-'}
+                        {parcela.observacoes || '-'}
                       </TableCell>
                     </TableRow>
                   ))

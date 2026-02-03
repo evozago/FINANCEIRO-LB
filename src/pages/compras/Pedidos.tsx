@@ -22,27 +22,18 @@ interface Pedido {
   id: number;
   numero_pedido: string;
   data_pedido: string;
-  previsao_entrega?: string;
+  data_entrega?: string;
   status: string;
-  quantidade_pecas?: number;
-  quantidade_referencias?: number;
-  valor_bruto_centavos?: number;
-  desconto_percentual?: number;
-  desconto_valor_centavos?: number;
-  valor_liquido_centavos?: number;
-  valor_medio_peca_centavos?: number;
+  valor_total_centavos?: number;
   observacoes?: string;
   fornecedor_id?: number;
-  marca_id?: number;
-  representante_pf_id?: number;
+  filial_id?: number;
   pessoas_juridicas?: {
     nome_fantasia: string;
+    razao_social: string;
   };
-  marcas?: {
+  filiais?: {
     nome: string;
-  };
-  pessoas_fisicas?: {
-    nome_completo: string;
   };
 }
 
@@ -52,20 +43,15 @@ interface PessoaJuridica {
   razao_social: string;
 }
 
-interface Marca {
+interface Filial {
   id: number;
   nome: string;
 }
 
-interface PessoaFisica {
-  id: number;
-  nome_completo: string;
-}
-
 const statusOptions = [
-  { value: 'aberto', label: 'Aberto', color: 'bg-yellow-500' },
-  { value: 'parcial', label: 'Parcial', color: 'bg-blue-500' },
-  { value: 'recebido', label: 'Recebido', color: 'bg-green-500' },
+  { value: 'pendente', label: 'Pendente', color: 'bg-yellow-500' },
+  { value: 'confirmado', label: 'Confirmado', color: 'bg-blue-500' },
+  { value: 'entregue', label: 'Entregue', color: 'bg-green-500' },
   { value: 'cancelado', label: 'Cancelado', color: 'bg-red-500' },
 ];
 
@@ -73,49 +59,28 @@ export function Pedidos() {
   const navigate = useNavigate();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [fornecedores, setFornecedores] = useState<PessoaJuridica[]>([]);
-  const [marcas, setMarcas] = useState<Marca[]>([]);
-  const [representantes, setRepresentantes] = useState<PessoaFisica[]>([]);
+  const [filiais, setFiliais] = useState<Filial[]>([]);
   const [searchTerm, setSearchTerm] = usePersistentState('pedidos-search', '');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPedido, setEditingPedido] = useState<Pedido | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isQuickFornecedorOpen, setIsQuickFornecedorOpen] = useState(false);
-  const [isQuickMarcaOpen, setIsQuickMarcaOpen] = useState(false);
   const { toast } = useToast();
-
-  const [quickFornecedor, setQuickFornecedor] = useState({
-    nome_fantasia: '',
-    razao_social: '',
-    cnpj: '',
-  });
-
-  const [quickMarca, setQuickMarca] = useState({
-    nome: '',
-    descricao: '',
-  });
 
   const [formData, setFormData] = useState({
     numero_pedido: '',
     data_pedido: new Date(),
-    previsao_entrega: undefined as Date | undefined,
-    status: 'aberto',
-    quantidade_pecas: '',
-    quantidade_referencias: '',
-    valor_bruto_centavos: 0,
-    desconto_percentual: '',
-    desconto_valor_centavos: 0,
-    valor_liquido_centavos: 0,
+    data_entrega: undefined as Date | undefined,
+    status: 'pendente',
+    valor_total_centavos: 0,
     observacoes: '',
     fornecedor_id: '',
-    marca_id: '',
-    representante_pf_id: '',
+    filial_id: '',
   });
 
   useEffect(() => {
     fetchPedidos();
     fetchFornecedores();
-    fetchMarcas();
-    fetchRepresentantes();
+    fetchFiliais();
   }, []);
 
   const fetchPedidos = async () => {
@@ -124,14 +89,13 @@ export function Pedidos() {
         .from('compras_pedidos')
         .select(`
           *,
-          pessoas_juridicas(nome_fantasia),
-          marcas(nome),
-          pessoas_fisicas(nome_completo)
+          pessoas_juridicas(nome_fantasia, razao_social),
+          filiais(nome)
         `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setPedidos(data || []);
+      setPedidos((data || []) as Pedido[]);
     } catch (error) {
       console.error('Erro ao buscar pedidos:', error);
       toast({
@@ -158,31 +122,17 @@ export function Pedidos() {
     }
   };
 
-  const fetchMarcas = async () => {
+  const fetchFiliais = async () => {
     try {
       const { data, error } = await supabase
-        .from('marcas')
+        .from('filiais')
         .select('id, nome')
         .order('nome');
 
       if (error) throw error;
-      setMarcas(data || []);
+      setFiliais(data || []);
     } catch (error) {
-      console.error('Erro ao buscar marcas:', error);
-    }
-  };
-
-  const fetchRepresentantes = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('pessoas_fisicas')
-        .select('id, nome_completo')
-        .order('nome_completo');
-
-      if (error) throw error;
-      setRepresentantes(data || []);
-    } catch (error) {
-      console.error('Erro ao buscar representantes:', error);
+      console.error('Erro ao buscar filiais:', error);
     }
   };
 
@@ -193,18 +143,12 @@ export function Pedidos() {
       const dataToSubmit = {
         numero_pedido: formData.numero_pedido,
         data_pedido: formData.data_pedido.toISOString().split('T')[0],
-        previsao_entrega: formData.previsao_entrega?.toISOString().split('T')[0] || null,
-        status: formData.status as 'aberto' | 'cancelado' | 'parcial' | 'recebido',
-        quantidade_pecas: formData.quantidade_pecas ? parseInt(formData.quantidade_pecas) : null,
-        quantidade_referencias: formData.quantidade_referencias ? parseInt(formData.quantidade_referencias) : null,
-        valor_bruto_centavos: formData.valor_bruto_centavos || null,
-        desconto_percentual: formData.desconto_percentual ? parseFloat(formData.desconto_percentual) : null,
-        desconto_valor_centavos: formData.desconto_valor_centavos || null,
-        valor_liquido_centavos: formData.valor_liquido_centavos || null,
+        data_entrega: formData.data_entrega?.toISOString().split('T')[0] || null,
+        status: formData.status,
+        valor_total_centavos: formData.valor_total_centavos || null,
         observacoes: formData.observacoes || null,
         fornecedor_id: formData.fornecedor_id ? parseInt(formData.fornecedor_id) : null,
-        marca_id: formData.marca_id ? parseInt(formData.marca_id) : null,
-        representante_pf_id: formData.representante_pf_id ? parseInt(formData.representante_pf_id) : null,
+        filial_id: formData.filial_id ? parseInt(formData.filial_id) : null,
       };
 
       if (editingPedido) {
@@ -251,18 +195,12 @@ export function Pedidos() {
     setFormData({
       numero_pedido: pedido.numero_pedido,
       data_pedido: new Date(pedido.data_pedido),
-      previsao_entrega: pedido.previsao_entrega ? new Date(pedido.previsao_entrega) : undefined,
+      data_entrega: pedido.data_entrega ? new Date(pedido.data_entrega) : undefined,
       status: pedido.status,
-      quantidade_pecas: pedido.quantidade_pecas?.toString() || '',
-      quantidade_referencias: pedido.quantidade_referencias?.toString() || '',
-      valor_bruto_centavos: pedido.valor_bruto_centavos || 0,
-      desconto_percentual: pedido.desconto_percentual?.toString() || '',
-      desconto_valor_centavos: pedido.desconto_valor_centavos || 0,
-      valor_liquido_centavos: pedido.valor_liquido_centavos || 0,
+      valor_total_centavos: pedido.valor_total_centavos || 0,
       observacoes: pedido.observacoes || '',
       fornecedor_id: pedido.fornecedor_id?.toString() || '',
-      marca_id: pedido.marca_id?.toString() || '',
-      representante_pf_id: pedido.representante_pf_id?.toString() || '',
+      filial_id: pedido.filial_id?.toString() || '',
     });
     setIsDialogOpen(true);
   };
@@ -293,80 +231,16 @@ export function Pedidos() {
     }
   };
 
-  const handleQuickFornecedor = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('pessoas_juridicas')
-        .insert([quickFornecedor])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      toast({
-        title: 'Sucesso',
-        description: 'Fornecedor cadastrado com sucesso.',
-      });
-
-      setQuickFornecedor({ nome_fantasia: '', razao_social: '', cnpj: '' });
-      setIsQuickFornecedorOpen(false);
-      await fetchFornecedores();
-      setFormData({ ...formData, fornecedor_id: data.id.toString() });
-    } catch (error) {
-      console.error('Erro ao cadastrar fornecedor:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível cadastrar o fornecedor.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleQuickMarca = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('marcas')
-        .insert([quickMarca])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      toast({
-        title: 'Sucesso',
-        description: 'Marca cadastrada com sucesso.',
-      });
-
-      setQuickMarca({ nome: '', descricao: '' });
-      setIsQuickMarcaOpen(false);
-      await fetchMarcas();
-      setFormData({ ...formData, marca_id: data.id.toString() });
-    } catch (error) {
-      console.error('Erro ao cadastrar marca:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível cadastrar a marca.',
-        variant: 'destructive',
-      });
-    }
-  };
-
   const resetForm = () => {
     setFormData({
       numero_pedido: '',
       data_pedido: new Date(),
-      previsao_entrega: undefined,
-      status: 'aberto',
-      quantidade_pecas: '',
-      quantidade_referencias: '',
-      valor_bruto_centavos: 0,
-      desconto_percentual: '',
-      desconto_valor_centavos: 0,
-      valor_liquido_centavos: 0,
+      data_entrega: undefined,
+      status: 'pendente',
+      valor_total_centavos: 0,
       observacoes: '',
       fornecedor_id: '',
-      marca_id: '',
-      representante_pf_id: '',
+      filial_id: '',
     });
   };
 
@@ -390,15 +264,13 @@ export function Pedidos() {
     const searchLower = searchTerm.toLowerCase();
     const statusConfig = statusOptions.find(s => s.value === pedido.status);
     const statusLabel = (statusConfig?.label || pedido.status).toLowerCase();
-    const valorStr = pedido.valor_liquido_centavos ? formatCurrency(pedido.valor_liquido_centavos).toLowerCase() : '';
+    const valorStr = pedido.valor_total_centavos ? formatCurrency(pedido.valor_total_centavos).toLowerCase() : '';
     const dataStr = new Date(pedido.data_pedido).toLocaleDateString('pt-BR');
-    const fornecedorStr = pedido.pessoas_juridicas?.nome_fantasia?.toLowerCase() || '';
-    const marcaStr = pedido.marcas?.nome?.toLowerCase() || '';
+    const fornecedorStr = (pedido.pessoas_juridicas?.nome_fantasia || pedido.pessoas_juridicas?.razao_social || '').toLowerCase();
     
     return (
-      pedido.numero_pedido.toLowerCase().includes(searchLower) ||
+      (pedido.numero_pedido || '').toLowerCase().includes(searchLower) ||
       fornecedorStr.includes(searchLower) ||
-      marcaStr.includes(searchLower) ||
       statusLabel.includes(searchLower) ||
       valorStr.includes(searchLower) ||
       dataStr.includes(searchLower)
@@ -425,7 +297,7 @@ export function Pedidos() {
               Novo Pedido
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingPedido ? 'Editar Pedido' : 'Novo Pedido'}
@@ -435,14 +307,7 @@ export function Pedidos() {
               </DialogDescription>
             </DialogHeader>
             
-            {editingPedido ? (
-              <Tabs defaultValue="dados" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="dados">Dados do Pedido</TabsTrigger>
-                  <TabsTrigger value="anexos">Anexos</TabsTrigger>
-                </TabsList>
-                <TabsContent value="dados">
-                  <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="numero_pedido">Número do Pedido *</Label>
@@ -476,110 +341,48 @@ export function Pedidos() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="previsao_entrega">Previsão de Entrega</Label>
+                  <Label htmlFor="data_entrega">Previsão de Entrega</Label>
                   <DatePicker
-                    date={formData.previsao_entrega}
-                    onSelect={(date) => setFormData({ ...formData, previsao_entrega: date })}
+                    date={formData.data_entrega}
+                    onSelect={(date) => setFormData({ ...formData, data_entrega: date })}
                     placeholder="Selecione a data de entrega"
                   />
                 </div>
                 <div>
                   <Label htmlFor="fornecedor_id">Fornecedor</Label>
-                  <div className="flex gap-2">
-                    <Select value={formData.fornecedor_id} onValueChange={(value) => setFormData({ ...formData, fornecedor_id: value })}>
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Selecione um fornecedor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {fornecedores.map((fornecedor) => (
-                          <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                            {fornecedor.nome_fantasia || fornecedor.razao_social}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickFornecedorOpen(true)}>
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="marca_id">Marca</Label>
-                  <div className="flex gap-2">
-                    <Select value={formData.marca_id} onValueChange={(value) => setFormData({ ...formData, marca_id: value })}>
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Selecione uma marca" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {marcas.map((marca) => (
-                          <SelectItem key={marca.id} value={marca.id.toString()}>
-                            {marca.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickMarcaOpen(true)}>
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="representante_pf_id">Representante</Label>
-                  <Select value={formData.representante_pf_id} onValueChange={(value) => setFormData({ ...formData, representante_pf_id: value })}>
+                  <Select value={formData.fornecedor_id} onValueChange={(value) => setFormData({ ...formData, fornecedor_id: value })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione um representante" />
+                      <SelectValue placeholder="Selecione um fornecedor" />
                     </SelectTrigger>
                     <SelectContent>
-                      {representantes.map((rep) => (
-                        <SelectItem key={rep.id} value={rep.id.toString()}>
-                          {rep.nome_completo}
+                      {fornecedores.map((fornecedor) => (
+                        <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
+                          {fornecedor.nome_fantasia || fornecedor.razao_social}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="quantidade_pecas">Qtd. Peças Total</Label>
-                  <Input
-                    id="quantidade_pecas"
-                    type="number"
-                    value={formData.quantidade_pecas}
-                    onChange={(e) => setFormData({ ...formData, quantidade_pecas: e.target.value })}
-                  />
+                  <Label htmlFor="filial_id">Filial</Label>
+                  <Select value={formData.filial_id} onValueChange={(value) => setFormData({ ...formData, filial_id: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma filial" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filiais.map((filial) => (
+                        <SelectItem key={filial.id} value={filial.id.toString()}>
+                          {filial.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
-                  <Label htmlFor="quantidade_referencias">Qtd. Referências</Label>
-                  <Input
-                    id="quantidade_referencias"
-                    type="number"
-                    value={formData.quantidade_referencias}
-                    onChange={(e) => setFormData({ ...formData, quantidade_referencias: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="valor_bruto_centavos">Valor Bruto (R$)</Label>
+                  <Label htmlFor="valor_total_centavos">Valor Total</Label>
                   <CurrencyInput
-                    id="valor_bruto_centavos"
-                    value={formData.valor_bruto_centavos}
-                    onValueChange={(value) => setFormData({ ...formData, valor_bruto_centavos: value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="desconto_percentual">Desconto (%)</Label>
-                  <Input
-                    id="desconto_percentual"
-                    type="number"
-                    step="0.01"
-                    value={formData.desconto_percentual}
-                    onChange={(e) => setFormData({ ...formData, desconto_percentual: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="valor_liquido_centavos">Valor Líquido (R$)</Label>
-                  <CurrencyInput
-                    id="valor_liquido_centavos"
-                    value={formData.valor_liquido_centavos}
-                    onValueChange={(value) => setFormData({ ...formData, valor_liquido_centavos: value })}
+                    value={formData.valor_total_centavos}
+                    onValueChange={(value) => setFormData({ ...formData, valor_total_centavos: value })}
                   />
                 </div>
               </div>
@@ -601,259 +404,6 @@ export function Pedidos() {
                 </Button>
               </div>
             </form>
-                </TabsContent>
-                <TabsContent value="anexos">
-                  <AnexosPedido pedidoId={editingPedido.id} />
-                </TabsContent>
-              </Tabs>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="numero_pedido">Número do Pedido *</Label>
-                    <Input
-                      id="numero_pedido"
-                      value={formData.numero_pedido}
-                      onChange={(e) => setFormData({ ...formData, numero_pedido: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="status">Status</Label>
-                    <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statusOptions.map((status) => (
-                          <SelectItem key={status.value} value={status.value}>
-                            {status.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="data_pedido">Data do Pedido *</Label>
-                    <DatePicker
-                      date={formData.data_pedido}
-                      onSelect={(date) => setFormData({ ...formData, data_pedido: date || new Date() })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="previsao_entrega">Previsão de Entrega</Label>
-                    <DatePicker
-                      date={formData.previsao_entrega}
-                      onSelect={(date) => setFormData({ ...formData, previsao_entrega: date })}
-                      placeholder="Selecione a data de entrega"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="fornecedor_id">Fornecedor</Label>
-                    <div className="flex gap-2">
-                      <Select value={formData.fornecedor_id} onValueChange={(value) => setFormData({ ...formData, fornecedor_id: value })}>
-                        <SelectTrigger className="flex-1">
-                          <SelectValue placeholder="Selecione um fornecedor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {fornecedores.map((fornecedor) => (
-                            <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                              {fornecedor.nome_fantasia || fornecedor.razao_social}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickFornecedorOpen(true)}>
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="marca_id">Marca</Label>
-                    <div className="flex gap-2">
-                      <Select value={formData.marca_id} onValueChange={(value) => setFormData({ ...formData, marca_id: value })}>
-                        <SelectTrigger className="flex-1">
-                          <SelectValue placeholder="Selecione uma marca" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {marcas.map((marca) => (
-                            <SelectItem key={marca.id} value={marca.id.toString()}>
-                              {marca.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickMarcaOpen(true)}>
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="representante_pf_id">Representante</Label>
-                    <Select value={formData.representante_pf_id} onValueChange={(value) => setFormData({ ...formData, representante_pf_id: value })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione um representante" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {representantes.map((rep) => (
-                          <SelectItem key={rep.id} value={rep.id.toString()}>
-                            {rep.nome_completo}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="quantidade_pecas">Qtd. Peças Total</Label>
-                    <Input
-                      id="quantidade_pecas"
-                      type="number"
-                      value={formData.quantidade_pecas}
-                      onChange={(e) => setFormData({ ...formData, quantidade_pecas: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="quantidade_referencias">Qtd. Referências</Label>
-                    <Input
-                      id="quantidade_referencias"
-                      type="number"
-                      value={formData.quantidade_referencias}
-                      onChange={(e) => setFormData({ ...formData, quantidade_referencias: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="valor_bruto_centavos">Valor Bruto (R$)</Label>
-                    <CurrencyInput
-                      id="valor_bruto_centavos"
-                      value={formData.valor_bruto_centavos}
-                      onValueChange={(value) => setFormData({ ...formData, valor_bruto_centavos: value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="desconto_percentual">Desconto (%)</Label>
-                    <Input
-                      id="desconto_percentual"
-                      type="number"
-                      step="0.01"
-                      value={formData.desconto_percentual}
-                      onChange={(e) => setFormData({ ...formData, desconto_percentual: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="valor_liquido_centavos">Valor Líquido (R$)</Label>
-                    <CurrencyInput
-                      id="valor_liquido_centavos"
-                      value={formData.valor_liquido_centavos}
-                      onValueChange={(value) => setFormData({ ...formData, valor_liquido_centavos: value })}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="observacoes">Observações</Label>
-                  <Textarea
-                    id="observacoes"
-                    value={formData.observacoes}
-                    onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                    rows={3}
-                  />
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit">
-                    Cadastrar
-                  </Button>
-                </div>
-              </form>
-            )}
-          </DialogContent>
-        </Dialog>
-        
-        {/* Dialog Cadastro Rápido Fornecedor */}
-        <Dialog open={isQuickFornecedorOpen} onOpenChange={setIsQuickFornecedorOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Cadastro Rápido - Fornecedor</DialogTitle>
-              <DialogDescription>
-                Cadastre um novo fornecedor rapidamente
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="quick-nome-fantasia">Nome Fantasia *</Label>
-                <Input
-                  id="quick-nome-fantasia"
-                  value={quickFornecedor.nome_fantasia}
-                  onChange={(e) => setQuickFornecedor({ ...quickFornecedor, nome_fantasia: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="quick-razao-social">Razão Social</Label>
-                <Input
-                  id="quick-razao-social"
-                  value={quickFornecedor.razao_social}
-                  onChange={(e) => setQuickFornecedor({ ...quickFornecedor, razao_social: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="quick-cnpj">CNPJ</Label>
-                <Input
-                  id="quick-cnpj"
-                  value={quickFornecedor.cnpj}
-                  onChange={(e) => setQuickFornecedor({ ...quickFornecedor, cnpj: e.target.value })}
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setIsQuickFornecedorOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleQuickFornecedor}>
-                  Cadastrar
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Dialog Cadastro Rápido Marca */}
-        <Dialog open={isQuickMarcaOpen} onOpenChange={setIsQuickMarcaOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Cadastro Rápido - Marca</DialogTitle>
-              <DialogDescription>
-                Cadastre uma nova marca rapidamente
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="quick-marca-nome">Nome *</Label>
-                <Input
-                  id="quick-marca-nome"
-                  value={quickMarca.nome}
-                  onChange={(e) => setQuickMarca({ ...quickMarca, nome: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="quick-marca-descricao">Descrição</Label>
-                <Textarea
-                  id="quick-marca-descricao"
-                  value={quickMarca.descricao}
-                  onChange={(e) => setQuickMarca({ ...quickMarca, descricao: e.target.value })}
-                  rows={3}
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setIsQuickMarcaOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleQuickMarca}>
-                  Cadastrar
-                </Button>
-              </div>
-            </div>
           </DialogContent>
         </Dialog>
       </div>
@@ -869,7 +419,7 @@ export function Pedidos() {
           <div className="flex items-center space-x-2">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por número, fornecedor ou marca..."
+              placeholder="Buscar por número, fornecedor, status..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -879,7 +429,7 @@ export function Pedidos() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Pedidos de Compra</CardTitle>
+          <CardTitle>Pedidos Cadastrados</CardTitle>
           <CardDescription>
             {filteredPedidos.length} pedido(s) encontrado(s)
           </CardDescription>
@@ -890,10 +440,10 @@ export function Pedidos() {
               <TableRow>
                 <TableHead>Número</TableHead>
                 <TableHead>Fornecedor</TableHead>
-                <TableHead>Marca</TableHead>
+                <TableHead>Data Pedido</TableHead>
+                <TableHead>Data Entrega</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Valor</TableHead>
-                <TableHead>Data</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -907,37 +457,19 @@ export function Pedidos() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {pedido.fornecedor_id ? (
-                      <span
-                        className="text-primary hover:underline cursor-pointer"
-                        onClick={() => navigate(`/cadastros/pessoa-juridica/${pedido.fornecedor_id}`)}
-                      >
-                        {pedido.pessoas_juridicas?.nome_fantasia || 'Não informado'}
-                      </span>
-                    ) : (
-                      'Não informado'
-                    )}
+                    {pedido.pessoas_juridicas?.nome_fantasia || pedido.pessoas_juridicas?.razao_social || '-'}
                   </TableCell>
                   <TableCell>
-                    {pedido.marca_id ? (
-                      <span
-                        className="text-primary hover:underline cursor-pointer"
-                        onClick={() => navigate(`/cadastros/marcas/${pedido.marca_id}`)}
-                      >
-                        {pedido.marcas?.nome || 'Não informado'}
-                      </span>
-                    ) : (
-                      'Não informado'
-                    )}
+                    {new Date(pedido.data_pedido).toLocaleDateString('pt-BR')}
+                  </TableCell>
+                  <TableCell>
+                    {pedido.data_entrega ? new Date(pedido.data_entrega).toLocaleDateString('pt-BR') : '-'}
                   </TableCell>
                   <TableCell>
                     {getStatusBadge(pedido.status)}
                   </TableCell>
                   <TableCell>
-                    {pedido.valor_liquido_centavos ? formatCurrency(pedido.valor_liquido_centavos) : 'N/A'}
-                  </TableCell>
-                  <TableCell>
-                    {new Date(pedido.data_pedido).toLocaleDateString('pt-BR')}
+                    {pedido.valor_total_centavos ? formatCurrency(pedido.valor_total_centavos) : '-'}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end space-x-2">

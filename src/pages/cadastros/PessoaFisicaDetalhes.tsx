@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -78,7 +77,7 @@ export function PessoaFisicaDetalhes() {
         .single();
 
       if (error) throw error;
-      setPessoa(data as any);
+      setPessoa(data as PessoaFisica);
     } catch (error) {
       console.error('Erro ao buscar pessoa física:', error);
       toast({
@@ -118,7 +117,7 @@ export function PessoaFisicaDetalhes() {
         .limit(50);
 
       if (error) throw error;
-      setVendas((data || []) as any);
+      setVendas((data || []) as Venda[]);
     } catch (error) {
       console.error('Erro ao buscar vendas:', error);
     }
@@ -130,22 +129,15 @@ export function PessoaFisicaDetalhes() {
     try {
       const pfId = parseInt(id);
       
-      // Usando fetch direto para evitar problemas de type inference
-      const supabaseUrl = 'https://tntvymprraevwhmrcjio.supabase.co';
-      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRudHZ5bXBycmFldndobXJjamlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNDkxMTAsImV4cCI6MjA3NDcyNTExMH0.d16oYzYRw04sMfP5F0hcw0Swmy1y_9mxIcUQNYUclSw';
-      
       // Buscar contas onde esta PF é fornecedora
-      const contasRes = await fetch(
-        `${supabaseUrl}/rest/v1/contas_pagar?fornecedor_pf_id=eq.${pfId}&select=id`,
-        {
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`
-          }
-        }
-      );
-      const contasData = await contasRes.json();
-      const contaIds = contasData.map((c: any) => c.id);
+      const { data: contasData, error: contasError } = await supabase
+        .from('contas_pagar')
+        .select('id')
+        .eq('pessoa_fisica_id', pfId);
+
+      if (contasError) throw contasError;
+      
+      const contaIds = (contasData || []).map((c) => c.id);
       
       if (contaIds.length === 0) {
         setParcelas([]);
@@ -153,43 +145,35 @@ export function PessoaFisicaDetalhes() {
       }
 
       // Buscar parcelas dessas contas
-      const parcelasRes = await fetch(
-        `${supabaseUrl}/rest/v1/contas_pagar_parcelas?conta_id=in.(${contaIds.join(',')})&select=id,vencimento,valor_parcela_centavos,pago,pago_em,conta_id&order=vencimento.desc&limit=50`,
-        {
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`
-          }
-        }
-      );
-      const parcelasData = await parcelasRes.json();
+      const { data: parcelasData, error: parcelasError } = await supabase
+        .from('contas_pagar_parcelas')
+        .select('id, vencimento, valor_centavos, pago, data_pagamento, conta_id')
+        .in('conta_id', contaIds)
+        .order('vencimento', { ascending: false })
+        .limit(50);
+
+      if (parcelasError) throw parcelasError;
 
       // Buscar info das contas
-      const contasInfoRes = await fetch(
-        `${supabaseUrl}/rest/v1/contas_pagar?id=in.(${contaIds.join(',')})&select=id,descricao,numero_nota`,
-        {
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`
-          }
-        }
-      );
-      const contasInfoData = await contasInfoRes.json();
+      const { data: contasInfoData } = await supabase
+        .from('contas_pagar')
+        .select('id, descricao, numero_nota')
+        .in('id', contaIds);
 
       // Mapear contas por ID
-      const contasMap: Record<number, any> = {};
-      contasInfoData.forEach((conta: any) => {
-        contasMap[conta.id] = conta;
+      const contasMap: Record<number, { descricao: string; numero_nota?: string }> = {};
+      (contasInfoData || []).forEach((conta) => {
+        contasMap[conta.id] = { descricao: conta.descricao || '', numero_nota: conta.numero_nota || undefined };
       });
 
       // Combinar parcelas com info das contas
-      const parcelasFinais: Parcela[] = parcelasData.map((parcela: any) => ({
+      const parcelasFinais: Parcela[] = (parcelasData || []).map((parcela) => ({
         id: parcela.id,
         vencimento: parcela.vencimento,
-        valor_parcela_centavos: parcela.valor_parcela_centavos,
-        pago: parcela.pago,
-        pago_em: parcela.pago_em,
-        contas_pagar: contasMap[parcela.conta_id] || { descricao: 'N/A', numero_nota: '' }
+        valor_centavos: parcela.valor_centavos,
+        pago: parcela.pago || false,
+        data_pagamento: parcela.data_pagamento || undefined,
+        contas_pagar: contasMap[parcela.conta_id!] || { descricao: 'N/A', numero_nota: '' }
       }));
 
       setParcelas(parcelasFinais);
@@ -208,10 +192,6 @@ export function PessoaFisicaDetalhes() {
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('pt-BR');
-  };
-
-  const formatDateTime = (date: string) => {
-    return new Date(date).toLocaleString('pt-BR');
   };
 
   if (loading) {
@@ -239,8 +219,7 @@ export function PessoaFisicaDetalhes() {
     );
   }
 
-  const totalVendas = vendas.reduce((sum, v) => sum + v.valor_liquido_centavos, 0);
-  const totalItensVendidos = vendas.reduce((sum, v) => sum + v.qtd_itens, 0);
+  const totalVendas = vendas.reduce((sum, v) => sum + (v.valor_centavos || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -250,7 +229,7 @@ export function PessoaFisicaDetalhes() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">{pessoa.nome_completo}</h1>
+            <h1 className="text-3xl font-bold tracking-tight">{pessoa.nome}</h1>
             <p className="text-muted-foreground">
               Cadastrado em {formatDate(pessoa.created_at)}
             </p>
@@ -293,12 +272,11 @@ export function PessoaFisicaDetalhes() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Produtos Vendidos</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Salário</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalItensVendidos}</div>
-            <p className="text-xs text-muted-foreground">Total de itens</p>
+            <div className="text-2xl font-bold">{formatCurrency(pessoa.salario_centavos || 0)}</div>
           </CardContent>
         </Card>
       </div>
@@ -324,15 +302,15 @@ export function PessoaFisicaDetalhes() {
                 Data de Nascimento
               </div>
               <div className="font-medium">
-                {pessoa.nascimento ? formatDate(pessoa.nascimento) : 'Não informado'}
+                {pessoa.data_nascimento ? formatDate(pessoa.data_nascimento) : 'Não informado'}
               </div>
             </div>
             <div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                 <Phone className="h-4 w-4" />
-                Celular
+                Telefone
               </div>
-              <div className="font-medium">{pessoa.celular || 'Não informado'}</div>
+              <div className="font-medium">{pessoa.telefone || 'Não informado'}</div>
             </div>
             <div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
@@ -347,13 +325,6 @@ export function PessoaFisicaDetalhes() {
                 Endereço
               </div>
               <div className="font-medium">{pessoa.endereco || 'Não informado'}</div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <FileText className="h-4 w-4" />
-                Nº Cadastro Folha
-              </div>
-              <div className="font-medium">{pessoa.num_cadastro_folha || 'Não informado'}</div>
             </div>
           </div>
         </CardContent>
@@ -380,26 +351,24 @@ export function PessoaFisicaDetalhes() {
                   <TableRow>
                     <TableHead>Data</TableHead>
                     <TableHead>Filial</TableHead>
-                    <TableHead className="text-center">Qtd Itens</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {vendas.map((venda) => (
                     <TableRow key={venda.id}>
-                      <TableCell>{formatDate(venda.data)}</TableCell>
+                      <TableCell>{formatDate(venda.data_venda)}</TableCell>
                       <TableCell>
                         <Badge variant="outline">{venda.filiais?.nome || 'Sem filial'}</Badge>
                       </TableCell>
-                      <TableCell className="text-center">{venda.qtd_itens}</TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(venda.valor_liquido_centavos)}
+                        {formatCurrency(venda.valor_centavos || 0)}
                       </TableCell>
                     </TableRow>
                   ))}
                   {vendas.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      <TableCell colSpan={3} className="text-center text-muted-foreground">
                         Nenhuma venda registrada
                       </TableCell>
                     </TableRow>
@@ -413,7 +382,7 @@ export function PessoaFisicaDetalhes() {
         <TabsContent value="folha" className="space-y-4">
           <FolhaPagamento 
             pessoaFisicaId={pessoa.id} 
-            pessoaNome={pessoa.nome_completo}
+            pessoaNome={pessoa.nome}
           />
         </TabsContent>
 
@@ -444,10 +413,10 @@ export function PessoaFisicaDetalhes() {
                       <TableCell>{parcela.contas_pagar?.numero_nota || '-'}</TableCell>
                       <TableCell>{formatDate(parcela.vencimento)}</TableCell>
                       <TableCell>
-                        {parcela.pago_em ? formatDate(parcela.pago_em) : '-'}
+                        {parcela.data_pagamento ? formatDate(parcela.data_pagamento) : '-'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(parcela.valor_parcela_centavos)}
+                        {formatCurrency(parcela.valor_centavos)}
                       </TableCell>
                       <TableCell>
                         <Badge variant={parcela.pago ? 'default' : 'destructive'}>
@@ -482,24 +451,21 @@ export function PessoaFisicaDetalhes() {
                     <History className="h-4 w-4 text-primary" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium">Cadastro criado</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDateTime(pessoa.created_at)}
-                    </p>
+                    <p className="text-sm font-medium">Cadastro criado</p>
+                    <p className="text-sm text-muted-foreground">{formatDate(pessoa.created_at)}</p>
                   </div>
                 </div>
-                <Separator />
-                <div className="flex items-start gap-4">
-                  <div className="rounded-full bg-primary/10 p-2">
-                    <History className="h-4 w-4 text-primary" />
+                {pessoa.updated_at && pessoa.updated_at !== pessoa.created_at && (
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-full bg-primary/10 p-2">
+                      <History className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Última atualização</p>
+                      <p className="text-sm text-muted-foreground">{formatDate(pessoa.updated_at)}</p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium">Última atualização</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDateTime(pessoa.updated_at)}
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
             </CardContent>
           </Card>

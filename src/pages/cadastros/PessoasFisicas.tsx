@@ -8,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -83,7 +82,7 @@ export function PessoasFisicas() {
         .order('nome');
 
       if (error) throw error;
-      setPessoas((data || []) as any);
+      setPessoas((data || []) as PessoaFisica[]);
     } catch (error) {
       console.error('Erro ao buscar pessoas físicas:', error);
       toast({
@@ -221,22 +220,20 @@ export function PessoasFisicas() {
 
   const resetForm = () => {
     setFormData({
-      nome_completo: '',
+      nome: '',
       cpf: '',
-      celular: '',
+      telefone: '',
       email: '',
       endereco: '',
-      nascimento: '',
-      num_cadastro_folha: '',
+      data_nascimento: '',
       filial_id: '',
       cargo_id: '',
     });
   };
 
   const filteredPessoas = pessoas.filter(pessoa =>
-    pessoa.nome_completo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (pessoa.cpf && pessoa.cpf.includes(searchTerm)) ||
-    (pessoa.num_cadastro_folha && pessoa.num_cadastro_folha.includes(searchTerm))
+    pessoa.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (pessoa.cpf && pessoa.cpf.includes(searchTerm))
   );
 
   if (loading) {
@@ -271,11 +268,11 @@ export function PessoasFisicas() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="nome_completo">Nome Completo *</Label>
+                  <Label htmlFor="nome">Nome Completo *</Label>
                   <Input
-                    id="nome_completo"
-                    value={formData.nome_completo}
-                    onChange={(e) => setFormData({ ...formData, nome_completo: e.target.value })}
+                    id="nome"
+                    value={formData.nome}
+                    onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                     required
                   />
                 </div>
@@ -289,11 +286,11 @@ export function PessoasFisicas() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="celular">Celular</Label>
+                  <Label htmlFor="telefone">Telefone</Label>
                   <Input
-                    id="celular"
-                    value={formData.celular}
-                    onChange={(e) => setFormData({ ...formData, celular: e.target.value })}
+                    id="telefone"
+                    value={formData.telefone}
+                    onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                   />
                 </div>
                 <div>
@@ -306,21 +303,12 @@ export function PessoasFisicas() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="nascimento">Data de Nascimento</Label>
+                  <Label htmlFor="data_nascimento">Data de Nascimento</Label>
                   <Input
-                    id="nascimento"
+                    id="data_nascimento"
                     type="date"
-                    value={formData.nascimento}
-                    onChange={(e) => setFormData({ ...formData, nascimento: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="num_cadastro_folha">Nº Cadastro Folha</Label>
-                  <Input
-                    id="num_cadastro_folha"
-                    value={formData.num_cadastro_folha}
-                    onChange={(e) => setFormData({ ...formData, num_cadastro_folha: e.target.value })}
-                    placeholder="Número opcional"
+                    value={formData.data_nascimento}
+                    onChange={(e) => setFormData({ ...formData, data_nascimento: e.target.value })}
                   />
                 </div>
                 <div>
@@ -386,7 +374,7 @@ export function PessoasFisicas() {
           <div className="flex items-center space-x-2">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome, CPF ou cadastro..."
+              placeholder="Buscar por nome ou CPF..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="max-w-sm"
@@ -399,7 +387,6 @@ export function PessoasFisicas() {
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>CPF</TableHead>
-                <TableHead>Cadastro Folha</TableHead>
                 <TableHead>Filial</TableHead>
                 <TableHead>Cargo</TableHead>
                 <TableHead>Contato</TableHead>
@@ -414,11 +401,10 @@ export function PessoasFisicas() {
                       className="text-primary hover:underline cursor-pointer"
                       onClick={() => navigate(`/cadastros/pessoas-fisicas/${pessoa.id}`)}
                     >
-                      {pessoa.nome_completo}
+                      {pessoa.nome}
                     </span>
                   </TableCell>
-                  <TableCell>{pessoa.cpf}</TableCell>
-                  <TableCell>{pessoa.num_cadastro_folha}</TableCell>
+                  <TableCell>{pessoa.cpf || '-'}</TableCell>
                   <TableCell>
                     {pessoa.filiais?.nome && (
                       <Badge variant="outline">{pessoa.filiais.nome}</Badge>
@@ -431,7 +417,7 @@ export function PessoasFisicas() {
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">
-                      {pessoa.celular && <div>{pessoa.celular}</div>}
+                      {pessoa.telefone && <div>{pessoa.telefone}</div>}
                       {pessoa.email && <div className="text-muted-foreground">{pessoa.email}</div>}
                     </div>
                   </TableCell>
@@ -440,7 +426,7 @@ export function PessoasFisicas() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.location.href = `/cadastros/pessoas-fisicas/${pessoa.id}`}
+                        onClick={() => navigate(`/cadastros/pessoas-fisicas/${pessoa.id}`)}
                       >
                         Ver Detalhes
                       </Button>

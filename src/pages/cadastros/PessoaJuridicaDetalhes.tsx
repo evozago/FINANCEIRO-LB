@@ -96,12 +96,74 @@ export default function PessoaJuridicaDetalhes() {
           setResumo((resData as any) ?? null);
         }
 
-        // 3) Contas + Parcelas (RPC robusta)
-        const { data: linhasData, error: rpcErr } = await supabase
-          .rpc("pj_fin_listar_contas" as any, { _fornecedor_id: fornecedorId, _limit: 200 });
-        if (rpcErr) throw rpcErr;
+        // 3) Contas + Parcelas (busca direta nas tabelas)
+        const { data: contasData, error: contasErr } = await supabase
+          .from("contas_pagar")
+          .select("id, descricao, numero_nota, valor_total_centavos, num_parcelas, created_at")
+          .eq("fornecedor_id", fornecedorId)
+          .order("created_at", { ascending: false })
+          .limit(200);
+        
+        if (contasErr) throw contasErr;
         if (!mounted) return;
-        setLinhas((linhasData || []) as LinhaRPC[]);
+
+        // Buscar parcelas de todas as contas
+        const contaIds = (contasData || []).map(c => c.id);
+        let parcelasData: any[] = [];
+        
+        if (contaIds.length > 0) {
+          const { data: parcelas, error: parcelasErr } = await supabase
+            .from("contas_pagar_parcelas")
+            .select("id, conta_id, numero_parcela, vencimento, pago, data_pagamento, valor_centavos")
+            .in("conta_id", contaIds);
+          
+          if (parcelasErr) throw parcelasErr;
+          parcelasData = parcelas || [];
+        }
+
+        // Montar as linhas combinando contas e parcelas
+        const linhasTemp: LinhaRPC[] = [];
+        for (const conta of (contasData || [])) {
+          const parcelasDaConta = parcelasData.filter(p => p.conta_id === conta.id);
+          
+          if (parcelasDaConta.length === 0) {
+            // Conta sem parcelas
+            linhasTemp.push({
+              conta_id: conta.id,
+              descricao: conta.descricao,
+              numero_nota: conta.numero_nota,
+              valor_total_centavos: conta.valor_total_centavos,
+              num_parcelas: conta.num_parcelas || 0,
+              created_at: conta.created_at,
+              parcela_id: null,
+              parcela_num: null,
+              vencimento: null,
+              pago: null,
+              data_pagamento: null,
+              valor_parcela_centavos: null,
+            });
+          } else {
+            // Conta com parcelas
+            for (const parcela of parcelasDaConta) {
+              linhasTemp.push({
+                conta_id: conta.id,
+                descricao: conta.descricao,
+                numero_nota: conta.numero_nota,
+                valor_total_centavos: conta.valor_total_centavos,
+                num_parcelas: conta.num_parcelas || parcelasDaConta.length,
+                created_at: conta.created_at,
+                parcela_id: parcela.id,
+                parcela_num: parcela.numero_parcela,
+                vencimento: parcela.vencimento,
+                pago: parcela.pago,
+                data_pagamento: parcela.data_pagamento,
+                valor_parcela_centavos: parcela.valor_centavos,
+              });
+            }
+          }
+        }
+        
+        setLinhas(linhasTemp);
       } catch (err: any) {
         console.error(err);
         toast({
