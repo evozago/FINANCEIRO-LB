@@ -65,6 +65,47 @@ export type Database = {
         }
         Relationships: []
       }
+      categorias_produtos: {
+        Row: {
+          ativo: boolean | null
+          categoria_pai_id: number | null
+          cor: string | null
+          created_at: string | null
+          descricao: string | null
+          id: number
+          nome: string
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          categoria_pai_id?: number | null
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: number
+          nome: string
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          categoria_pai_id?: number | null
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: number
+          nome?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categorias_produtos_categoria_pai_id_fkey"
+            columns: ["categoria_pai_id"]
+            isOneToOne: false
+            referencedRelation: "categorias_produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       compras_pedido_anexos: {
         Row: {
           created_at: string | null
