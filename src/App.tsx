@@ -36,6 +36,10 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import CerebroIA from "./pages/ia/CerebroIA";
 import CategoriasProdutos from "./pages/produtos/CategoriasProdutos";
+import ClassificadorProdutos from "./pages/produtos/ClassificadorProdutos";
+import RegrasClassificacao from "./pages/produtos/RegrasClassificacao";
+import DashboardProdutos from "./pages/produtos/DashboardProdutos";
+import ListaProdutos from "./pages/produtos/ListaProdutos";
 
 const queryClient = new QueryClient();
 
@@ -94,6 +98,10 @@ const App = () => (
 
             {/* Produtos */}
             <Route path="produtos/categorias" element={<CategoriasProdutos />} />
+            <Route path="produtos/classificador" element={<ClassificadorProdutos />} />
+            <Route path="produtos/regras" element={<RegrasClassificacao />} />
+            <Route path="produtos/dashboard" element={<DashboardProdutos />} />
+            <Route path="produtos/lista" element={<ListaProdutos />} />
 
             {/* Módulos futuros - placeholders */}
             <Route path="estoque" element={<PlaceholderModule title="Estoque" />} />

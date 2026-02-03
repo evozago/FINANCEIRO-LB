@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      atributos_customizados: {
+        Row: {
+          ativo: boolean | null
+          configuracao: Json | null
+          created_at: string | null
+          id: number
+          nome: string
+          tipo: string
+          valores: string[] | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          configuracao?: Json | null
+          created_at?: string | null
+          id?: number
+          nome: string
+          tipo: string
+          valores?: string[] | null
+        }
+        Update: {
+          ativo?: boolean | null
+          configuracao?: Json | null
+          created_at?: string | null
+          id?: number
+          nome?: string
+          tipo?: string
+          valores?: string[] | null
+        }
+        Relationships: []
+      }
       cargos: {
         Row: {
           ativo: boolean | null
@@ -827,6 +857,182 @@ export type Database = {
           razao_social?: string
           telefone?: string | null
           tipo?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      produtos: {
+        Row: {
+          ativo: boolean | null
+          atributos_extras: Json | null
+          categoria_id: number | null
+          classificado: boolean | null
+          codigo: string | null
+          confianca: number | null
+          cor: string | null
+          created_at: string | null
+          estilo: string | null
+          faixa_etaria: string | null
+          genero: string | null
+          id: number
+          marca: string | null
+          material: string | null
+          nome: string
+          nome_original: string | null
+          preco_centavos: number | null
+          sessao_id: number | null
+          subcategoria: string | null
+          tamanho: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          atributos_extras?: Json | null
+          categoria_id?: number | null
+          classificado?: boolean | null
+          codigo?: string | null
+          confianca?: number | null
+          cor?: string | null
+          created_at?: string | null
+          estilo?: string | null
+          faixa_etaria?: string | null
+          genero?: string | null
+          id?: number
+          marca?: string | null
+          material?: string | null
+          nome: string
+          nome_original?: string | null
+          preco_centavos?: number | null
+          sessao_id?: number | null
+          subcategoria?: string | null
+          tamanho?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          atributos_extras?: Json | null
+          categoria_id?: number | null
+          classificado?: boolean | null
+          codigo?: string | null
+          confianca?: number | null
+          cor?: string | null
+          created_at?: string | null
+          estilo?: string | null
+          faixa_etaria?: string | null
+          genero?: string | null
+          id?: number
+          marca?: string | null
+          material?: string | null
+          nome?: string
+          nome_original?: string | null
+          preco_centavos?: number | null
+          sessao_id?: number | null
+          subcategoria?: string | null
+          tamanho?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produtos_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "categorias_produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produtos_sessao_id_fkey"
+            columns: ["sessao_id"]
+            isOneToOne: false
+            referencedRelation: "sessoes_importacao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      regras_classificacao: {
+        Row: {
+          ativo: boolean | null
+          campo_destino: string
+          categoria_id: number | null
+          created_at: string | null
+          genero_automatico: string | null
+          id: number
+          nome: string
+          ordem: number | null
+          pontuacao: number | null
+          termos: string[]
+          tipo: string
+          valor_destino: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          campo_destino: string
+          categoria_id?: number | null
+          created_at?: string | null
+          genero_automatico?: string | null
+          id?: number
+          nome: string
+          ordem?: number | null
+          pontuacao?: number | null
+          termos: string[]
+          tipo: string
+          valor_destino: string
+        }
+        Update: {
+          ativo?: boolean | null
+          campo_destino?: string
+          categoria_id?: number | null
+          created_at?: string | null
+          genero_automatico?: string | null
+          id?: number
+          nome?: string
+          ordem?: number | null
+          pontuacao?: number | null
+          termos?: string[]
+          tipo?: string
+          valor_destino?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "regras_classificacao_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "categorias_produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sessoes_importacao: {
+        Row: {
+          classificados: number | null
+          confianca_media: number | null
+          created_at: string | null
+          id: number
+          mapeamento_colunas: Json | null
+          nome: string
+          nome_arquivo: string | null
+          total_produtos: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          classificados?: number | null
+          confianca_media?: number | null
+          created_at?: string | null
+          id?: number
+          mapeamento_colunas?: Json | null
+          nome: string
+          nome_arquivo?: string | null
+          total_produtos?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          classificados?: number | null
+          confianca_media?: number | null
+          created_at?: string | null
+          id?: number
+          mapeamento_colunas?: Json | null
+          nome?: string
+          nome_arquivo?: string | null
+          total_produtos?: number | null
           updated_at?: string | null
         }
         Relationships: []
