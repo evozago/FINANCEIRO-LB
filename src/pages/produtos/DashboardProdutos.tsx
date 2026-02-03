@@ -1,8 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import {
   Table,
   TableBody,
@@ -12,6 +14,16 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   BarChart3,
   Package,
   TrendingUp,
@@ -20,8 +32,12 @@ import {
   ArrowLeft,
   FileSpreadsheet,
   Trash2,
+  RefreshCw,
+  Loader2,
+  Eye,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
   PieChart,
   Pie,
@@ -33,12 +49,45 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
+import { classificarProduto, type RegraClassificacao, type AtributoCustomizado } from '@/lib/classificador';
 
 const COLORS = ['#ec4899', '#f97316', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
 
 export default function DashboardProdutos() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [sessaoParaExcluir, setSessaoParaExcluir] = useState<number | null>(null);
+  const [reclassificando, setReclassificando] = useState<number | null>(null);
+  const [progressoReclassificacao, setProgressoReclassificacao] = useState(0);
+
+  // Buscar regras para reclassificação
+  const { data: regras = [] } = useQuery({
+    queryKey: ['regras-classificacao'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('regras_classificacao')
+        .select('*')
+        .eq('ativo', true)
+        .order('ordem');
+      if (error) throw error;
+      return data as RegraClassificacao[];
+    },
+  });
+
+  // Buscar atributos
+  const { data: atributos = [] } = useQuery({
+    queryKey: ['atributos-customizados'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('atributos_customizados')
+        .select('*')
+        .eq('ativo', true);
+      if (error) throw error;
+      return data as AtributoCustomizado[];
+    },
+  });
+
   // Estatísticas gerais
   const { data: stats } = useQuery({
     queryKey: ['produtos-stats'],
@@ -81,6 +130,33 @@ export default function DashboardProdutos() {
     },
   });
 
+  // Distribuição por confiança
+  const { data: porConfianca = [] } = useQuery({
+    queryKey: ['produtos-por-confianca'],
+    queryFn: async () => {
+      const { data } = await supabase.from('produtos').select('confianca');
+      
+      const faixas = {
+        'Alta (≥70%)': 0,
+        'Média (40-69%)': 0,
+        'Baixa (1-39%)': 0,
+        'Não classificado (0%)': 0,
+      };
+      
+      data?.forEach(p => {
+        const conf = p.confianca || 0;
+        if (conf >= 70) faixas['Alta (≥70%)']++;
+        else if (conf >= 40) faixas['Média (40-69%)']++;
+        else if (conf > 0) faixas['Baixa (1-39%)']++;
+        else faixas['Não classificado (0%)']++;
+      });
+      
+      return Object.entries(faixas)
+        .map(([name, value]) => ({ name, value }))
+        .filter(f => f.value > 0);
+    },
+  });
+
   // Distribuição por gênero
   const { data: porGenero = [] } = useQuery({
     queryKey: ['produtos-por-genero'],
@@ -94,28 +170,14 @@ export default function DashboardProdutos() {
     },
   });
 
-  // Distribuição por faixa etária
-  const { data: porFaixaEtaria = [] } = useQuery({
-    queryKey: ['produtos-por-faixa-etaria'],
-    queryFn: async () => {
-      const { data } = await supabase.from('produtos').select('faixa_etaria').not('faixa_etaria', 'is', null);
-      const counts: Record<string, number> = {};
-      data?.forEach(p => {
-        if (p.faixa_etaria) counts[p.faixa_etaria] = (counts[p.faixa_etaria] || 0) + 1;
-      });
-      return Object.entries(counts).map(([name, value]) => ({ name, value }));
-    },
-  });
-
   // Sessões de importação
-  const { data: sessoes = [] } = useQuery({
+  const { data: sessoes = [], refetch: refetchSessoes } = useQuery({
     queryKey: ['sessoes-importacao'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('sessoes_importacao')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
+        .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -137,6 +199,116 @@ export default function DashboardProdutos() {
     },
   });
 
+  // Excluir sessão
+  const excluirSessaoMutation = useMutation({
+    mutationFn: async (sessaoId: number) => {
+      // Excluir produtos da sessão
+      await supabase.from('produtos').delete().eq('sessao_id', sessaoId);
+      
+      // Buscar sessão para pegar path do arquivo
+      const { data: sessao } = await supabase
+        .from('sessoes_importacao')
+        .select('arquivo_storage_path')
+        .eq('id', sessaoId)
+        .single();
+      
+      // Excluir arquivo do storage se existir
+      if (sessao?.arquivo_storage_path) {
+        await supabase.storage.from('planilhas-importacao').remove([sessao.arquivo_storage_path]);
+      }
+      
+      // Excluir sessão
+      const { error } = await supabase.from('sessoes_importacao').delete().eq('id', sessaoId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessoes-importacao'] });
+      queryClient.invalidateQueries({ queryKey: ['produtos-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['produtos-por-categoria'] });
+      queryClient.invalidateQueries({ queryKey: ['produtos-por-confianca'] });
+      toast.success('Sessão excluída com sucesso!');
+      setSessaoParaExcluir(null);
+    },
+    onError: () => toast.error('Erro ao excluir sessão'),
+  });
+
+  // Reclassificar produtos de uma sessão
+  const reclassificarSessao = async (sessaoId: number) => {
+    setReclassificando(sessaoId);
+    setProgressoReclassificacao(0);
+
+    try {
+      // Buscar produtos da sessão
+      const { data: produtos, error } = await supabase
+        .from('produtos')
+        .select('id, nome')
+        .eq('sessao_id', sessaoId);
+
+      if (error) throw error;
+      if (!produtos || produtos.length === 0) {
+        toast.error('Nenhum produto encontrado nesta sessão');
+        return;
+      }
+
+      let classificados = 0;
+      let totalConfianca = 0;
+
+      // Reclassificar em lotes
+      const batchSize = 50;
+      for (let i = 0; i < produtos.length; i += batchSize) {
+        const batch = produtos.slice(i, i + batchSize);
+        
+        for (const produto of batch) {
+          const resultado = classificarProduto(produto.nome, regras, atributos);
+          
+          await supabase
+            .from('produtos')
+            .update({
+              categoria_id: resultado.categoria_id,
+              subcategoria: resultado.subcategoria,
+              marca: resultado.marca,
+              genero: resultado.genero,
+              faixa_etaria: resultado.faixa_etaria,
+              tamanho: resultado.tamanho,
+              cor: resultado.cor,
+              material: resultado.material,
+              estilo: resultado.estilo,
+              atributos_extras: resultado.atributos_extras,
+              confianca: resultado.confianca,
+              classificado: resultado.confianca > 0,
+            })
+            .eq('id', produto.id);
+
+          if (resultado.confianca > 0) classificados++;
+          totalConfianca += resultado.confianca;
+        }
+        
+        setProgressoReclassificacao(Math.round(((i + batch.length) / produtos.length) * 100));
+        await new Promise(r => setTimeout(r, 10));
+      }
+
+      // Atualizar estatísticas da sessão
+      const confiancaMedia = produtos.length > 0 ? totalConfianca / produtos.length : 0;
+      await supabase
+        .from('sessoes_importacao')
+        .update({ classificados, confianca_media: confiancaMedia })
+        .eq('id', sessaoId);
+
+      queryClient.invalidateQueries({ queryKey: ['sessoes-importacao'] });
+      queryClient.invalidateQueries({ queryKey: ['produtos-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['produtos-por-categoria'] });
+      queryClient.invalidateQueries({ queryKey: ['produtos-por-confianca'] });
+      
+      toast.success(`${classificados} de ${produtos.length} produtos reclassificados!`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao reclassificar produtos');
+    } finally {
+      setReclassificando(null);
+      setProgressoReclassificacao(0);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -154,9 +326,16 @@ export default function DashboardProdutos() {
             </h1>
           </div>
           <p className="text-muted-foreground ml-10">
-            Visualize estatísticas dos produtos classificados
+            Histórico de importações e estatísticas de classificação
           </p>
         </div>
+        
+        <Button asChild>
+          <Link to="/produtos/classificador">
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Nova Importação
+          </Link>
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -215,12 +394,120 @@ export default function DashboardProdutos() {
         </Card>
       </div>
 
+      {/* Histórico de Importações */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5" />
+            Histórico de Importações
+          </CardTitle>
+          <CardDescription>
+            Clique em uma sessão para reclassificar com as regras atuais
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sessoes.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <FileSpreadsheet className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium mb-2">Nenhuma importação realizada</p>
+              <p className="text-sm">Faça upload de uma planilha para começar a classificar produtos</p>
+              <Button asChild className="mt-4">
+                <Link to="/produtos/classificador">Importar Planilha</Link>
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome da Sessão</TableHead>
+                  <TableHead>Arquivo</TableHead>
+                  <TableHead className="text-center">Total</TableHead>
+                  <TableHead className="text-center">Classificados</TableHead>
+                  <TableHead className="text-center">Confiança</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sessoes.map((sessao) => (
+                  <TableRow key={sessao.id} className="group">
+                    <TableCell className="font-medium">{sessao.nome}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {sessao.nome_arquivo || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">{sessao.total_produtos}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge 
+                        variant={sessao.classificados === sessao.total_produtos ? 'default' : 'secondary'}
+                      >
+                        {sessao.classificados}/{sessao.total_produtos}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={
+                        Number(sessao.confianca_media) >= 70 ? 'default' :
+                        Number(sessao.confianca_media) >= 40 ? 'secondary' : 'outline'
+                      }>
+                        {Number(sessao.confianca_media).toFixed(0)}%
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(sessao.created_at!).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-1 justify-end">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => navigate(`/produtos/lista?sessao=${sessao.id}`)}
+                          title="Ver produtos"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => reclassificarSessao(sessao.id)}
+                          disabled={reclassificando === sessao.id}
+                          title="Reclassificar com regras atuais"
+                        >
+                          {reclassificando === sessao.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setSessaoParaExcluir(sessao.id)}
+                          className="text-destructive hover:text-destructive"
+                          title="Excluir sessão"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {reclassificando === sessao.id && (
+                        <div className="mt-2">
+                          <Progress value={progressoReclassificacao} className="h-1" />
+                          <span className="text-xs text-muted-foreground">{progressoReclassificacao}%</span>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Charts Row */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Por Categoria */}
         <Card>
           <CardHeader>
-            <CardTitle>Produtos por Categoria</CardTitle>
+            <CardTitle>Distribuição por Categoria</CardTitle>
           </CardHeader>
           <CardContent>
             {porCategoria.length > 0 ? (
@@ -228,7 +515,7 @@ export default function DashboardProdutos() {
                 <BarChart data={porCategoria} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={100} />
+                  <YAxis dataKey="name" type="category" width={100} fontSize={12} />
                   <Tooltip />
                   <Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
                 </BarChart>
@@ -241,26 +528,26 @@ export default function DashboardProdutos() {
           </CardContent>
         </Card>
 
-        {/* Por Gênero */}
+        {/* Por Confiança */}
         <Card>
           <CardHeader>
-            <CardTitle>Distribuição por Gênero</CardTitle>
+            <CardTitle>Distribuição por Confiança</CardTitle>
           </CardHeader>
           <CardContent>
-            {porGenero.length > 0 ? (
+            {porConfianca.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
-                    data={porGenero}
+                    data={porConfianca}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
                     outerRadius={100}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    label={({ name, percent }) => `${name.split(' ')[0]} (${(percent * 100).toFixed(0)}%)`}
                   >
-                    {porGenero.map((_, index) => (
+                    {porConfianca.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -276,17 +563,17 @@ export default function DashboardProdutos() {
         </Card>
       </div>
 
-      {/* Segunda linha de charts */}
+      {/* Segunda linha */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Por Faixa Etária */}
+        {/* Por Gênero */}
         <Card>
           <CardHeader>
-            <CardTitle>Por Faixa Etária</CardTitle>
+            <CardTitle>Distribuição por Gênero</CardTitle>
           </CardHeader>
           <CardContent>
-            {porFaixaEtaria.length > 0 ? (
+            {porGenero.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={porFaixaEtaria}>
+                <BarChart data={porGenero}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
@@ -337,54 +624,27 @@ export default function DashboardProdutos() {
         </Card>
       </div>
 
-      {/* Sessões de Importação */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5" />
-            Histórico de Importações
-          </CardTitle>
-          <CardDescription>Últimas 10 sessões de importação</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {sessoes.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              Nenhuma importação realizada ainda
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Arquivo</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Classificados</TableHead>
-                  <TableHead>Confiança</TableHead>
-                  <TableHead>Data</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sessoes.map((sessao) => (
-                  <TableRow key={sessao.id}>
-                    <TableCell className="font-medium">{sessao.nome}</TableCell>
-                    <TableCell className="text-muted-foreground">{sessao.nome_arquivo}</TableCell>
-                    <TableCell>{sessao.total_produtos}</TableCell>
-                    <TableCell>
-                      <Badge variant={sessao.classificados === sessao.total_produtos ? 'default' : 'secondary'}>
-                        {sessao.classificados}/{sessao.total_produtos}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{Number(sessao.confianca_media).toFixed(0)}%</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(sessao.created_at!).toLocaleDateString('pt-BR')}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      {/* Dialog de confirmação de exclusão */}
+      <AlertDialog open={sessaoParaExcluir !== null} onOpenChange={() => setSessaoParaExcluir(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir sessão de importação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação irá excluir permanentemente a sessão e todos os produtos importados nela.
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => sessaoParaExcluir && excluirSessaoMutation.mutate(sessaoParaExcluir)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

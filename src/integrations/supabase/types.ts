@@ -1021,6 +1021,9 @@ export type Database = {
       }
       sessoes_importacao: {
         Row: {
+          arquivo_mime_type: string | null
+          arquivo_storage_path: string | null
+          arquivo_tamanho_bytes: number | null
           classificados: number | null
           confianca_media: number | null
           created_at: string | null
@@ -1032,6 +1035,9 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          arquivo_mime_type?: string | null
+          arquivo_storage_path?: string | null
+          arquivo_tamanho_bytes?: number | null
           classificados?: number | null
           confianca_media?: number | null
           created_at?: string | null
@@ -1043,6 +1049,9 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          arquivo_mime_type?: string | null
+          arquivo_storage_path?: string | null
+          arquivo_tamanho_bytes?: number | null
           classificados?: number | null
           confianca_media?: number | null
           created_at?: string | null

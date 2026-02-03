@@ -75,6 +75,7 @@ export default function ClassificadorProdutos() {
   const queryClient = useQueryClient();
   const [etapa, setEtapa] = useState<Etapa>('upload');
   const [arquivoNome, setArquivoNome] = useState('');
+  const [arquivoOriginal, setArquivoOriginal] = useState<File | null>(null); // Guardar arquivo para upload
   const [dadosPlanilha, setDadosPlanilha] = useState<Record<string, unknown>[]>([]);
   const [colunas, setColunas] = useState<string[]>([]);
   const [mapeamento, setMapeamento] = useState<MapeamentoColunas>({ nome: '', codigo: '', preco: '', custo: '', estoque: '', cor: '', tamanho: '' });
@@ -116,6 +117,7 @@ export default function ClassificadorProdutos() {
   // Processar arquivo
   const processarArquivo = useCallback((file: File) => {
     setArquivoNome(file.name);
+    setArquivoOriginal(file); // Guardar arquivo original para upload posterior
     const reader = new FileReader();
 
     reader.onload = (e) => {
@@ -184,6 +186,22 @@ export default function ClassificadorProdutos() {
     setProgresso(0);
 
     try {
+      // Upload do arquivo original para o storage
+      let arquivoStoragePath: string | null = null;
+      if (arquivoOriginal) {
+        const timestamp = Date.now();
+        const fileName = `${timestamp}_${arquivoNome}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('planilhas-importacao')
+          .upload(fileName, arquivoOriginal);
+        
+        if (uploadError) {
+          console.warn('Não foi possível salvar o arquivo original:', uploadError);
+        } else {
+          arquivoStoragePath = uploadData.path;
+        }
+      }
+
       // Criar sessão de importação
       const { data: sessao, error: sessaoError } = await supabase
         .from('sessoes_importacao')
@@ -192,6 +210,9 @@ export default function ClassificadorProdutos() {
           nome_arquivo: arquivoNome,
           total_produtos: dadosPlanilha.length,
           mapeamento_colunas: JSON.parse(JSON.stringify(mapeamento)),
+          arquivo_storage_path: arquivoStoragePath,
+          arquivo_mime_type: arquivoOriginal?.type || null,
+          arquivo_tamanho_bytes: arquivoOriginal?.size || null,
         }])
         .select()
         .single();
@@ -317,6 +338,7 @@ export default function ClassificadorProdutos() {
   const resetar = () => {
     setEtapa('upload');
     setArquivoNome('');
+    setArquivoOriginal(null);
     setDadosPlanilha([]);
     setColunas([]);
     setMapeamento({ nome: '', codigo: '', preco: '', custo: '', estoque: '', cor: '', tamanho: '' });
