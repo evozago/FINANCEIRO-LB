@@ -303,16 +303,17 @@ export function Dashboard() {
       const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
       const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
+      // Usando tabela vendas que existe no banco
       const { data: vendas, error } = await supabase
-        .from("vendas_diarias")
-        .select("valor_liquido_centavos, qtd_itens")
-        .gte("data", inicioMes.toISOString().split("T")[0])
-        .lte("data", fimMes.toISOString().split("T")[0]);
+        .from("vendas")
+        .select("valor_centavos")
+        .gte("data_venda", inicioMes.toISOString().split("T")[0])
+        .lte("data_venda", fimMes.toISOString().split("T")[0]);
 
       if (error) throw error;
 
       const totalVendas = vendas?.length || 0;
-      const valorVendasMes = vendas?.reduce((sum, venda) => sum + venda.valor_liquido_centavos, 0) || 0;
+      const valorVendasMes = vendas?.reduce((sum, venda) => sum + (venda.valor_centavos || 0), 0) || 0;
       const ticketMedio = totalVendas > 0 ? valorVendasMes / totalVendas : 0;
 
       setSalesMetrics((prev) => ({
@@ -337,7 +338,7 @@ export function Dashboard() {
         .select(
           `
           id,
-          valor_parcela_centavos,
+          valor_centavos,
           vencimento,
           contas_pagar!inner(
             id,
@@ -355,14 +356,14 @@ export function Dashboard() {
       if (error) throw error;
 
       const formattedData =
-        data?.map((item) => ({
+        data?.map((item: any) => ({
           conta_id: item.contas_pagar?.id || 0,
           descricao: item.contas_pagar?.descricao || "",
           fornecedor:
             item.contas_pagar?.pessoas_juridicas?.razao_social ||
             item.contas_pagar?.pessoas_juridicas?.nome_fantasia ||
             "Não informado",
-          valor_em_aberto: item.valor_parcela_centavos,
+          valor_em_aberto: item.valor_centavos,
           proximo_vencimento: item.vencimento,
         })) || [];
 
@@ -378,24 +379,25 @@ export function Dashboard() {
       const ano = hoje.getFullYear();
       const mes = hoje.getMonth() + 1;
 
+      // Usando tabela vendas com vendedoras
       const { data: vendas, error } = await supabase
-        .from("vendas_diarias")
+        .from("vendas")
         .select(
           `
-          vendedora_pf_id,
-          valor_liquido_centavos,
-          pessoas_fisicas(nome_completo)
+          vendedora_id,
+          valor_centavos,
+          vendedoras!inner(id, nome)
         `,
         )
-        .gte("data", `${ano}-${mes.toString().padStart(2, "0")}-01`)
-        .lte("data", `${ano}-${mes.toString().padStart(2, "0")}-31`);
+        .gte("data_venda", `${ano}-${mes.toString().padStart(2, "0")}-01`)
+        .lte("data_venda", `${ano}-${mes.toString().padStart(2, "0")}-31`);
 
       if (error) throw error;
 
       const vendedorasMap = new Map();
-      vendas?.forEach((venda) => {
-        const vendedoraId = venda.vendedora_pf_id;
-        const nome = venda.pessoas_fisicas?.nome_completo || "Não informado";
+      vendas?.forEach((venda: any) => {
+        const vendedoraId = venda.vendedora_id;
+        const nome = venda.vendedoras?.nome || "Não informado";
 
         if (!vendedorasMap.has(vendedoraId)) {
           vendedorasMap.set(vendedoraId, {
@@ -407,7 +409,7 @@ export function Dashboard() {
         }
 
         const vendedora = vendedorasMap.get(vendedoraId);
-        vendedora.valor_liquido_total += venda.valor_liquido_centavos;
+        vendedora.valor_liquido_total += venda.valor_centavos || 0;
         vendedora.percentual_meta = (vendedora.valor_liquido_total / vendedora.meta_ajustada) * 100;
       });
 

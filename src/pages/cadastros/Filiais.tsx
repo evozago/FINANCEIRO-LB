@@ -13,12 +13,11 @@ import { useToast } from '@/hooks/use-toast';
 interface Filial {
   id: number;
   nome: string;
-  pj_id: number;
+  cnpj?: string;
+  endereco?: string;
+  telefone?: string;
+  ativo?: boolean;
   created_at: string;
-  pessoas_juridicas: {
-    nome_fantasia: string;
-    razao_social: string;
-  };
 }
 
 interface PessoaJuridica {
@@ -38,7 +37,9 @@ export function Filiais() {
 
   const [formData, setFormData] = useState({
     nome: '',
-    pj_id: '',
+    cnpj: '',
+    endereco: '',
+    telefone: '',
   });
 
   useEffect(() => {
@@ -50,14 +51,11 @@ export function Filiais() {
     try {
       const { data, error } = await supabase
         .from('filiais')
-        .select(`
-          *,
-          pessoas_juridicas(nome_fantasia, razao_social)
-        `)
+        .select('*')
         .order('nome');
 
       if (error) throw error;
-      setFiliais(data || []);
+      setFiliais((data || []) as any);
     } catch (error) {
       console.error('Erro ao buscar filiais:', error);
       toast({

@@ -14,15 +14,15 @@ import { FolhaPagamento } from '@/components/cadastros/FolhaPagamento';
 
 interface PessoaFisica {
   id: number;
-  nome_completo: string;
+  nome: string;
   cpf?: string;
-  celular?: string;
+  telefone?: string;
   email?: string;
   endereco?: string;
-  nascimento?: string;
-  num_cadastro_folha?: string;
+  data_nascimento?: string;
   filial_id?: number;
   cargo_id?: number;
+  salario_centavos?: number;
   created_at: string;
   updated_at: string;
   filiais?: { nome: string };
@@ -31,18 +31,17 @@ interface PessoaFisica {
 
 interface Venda {
   id: number;
-  data: string;
-  valor_liquido_centavos: number;
-  qtd_itens: number;
+  data_venda: string;
+  valor_centavos: number;
   filiais?: { nome: string };
 }
 
 interface Parcela {
   id: number;
   vencimento: string;
-  valor_parcela_centavos: number;
+  valor_centavos: number;
   pago: boolean;
-  pago_em?: string;
+  data_pagamento?: string;
   contas_pagar: {
     descricao: string;
     numero_nota?: string;
@@ -79,7 +78,7 @@ export function PessoaFisicaDetalhes() {
         .single();
 
       if (error) throw error;
-      setPessoa(data);
+      setPessoa(data as any);
     } catch (error) {
       console.error('Erro ao buscar pessoa física:', error);
       toast({
@@ -94,21 +93,32 @@ export function PessoaFisicaDetalhes() {
 
   const fetchVendas = async () => {
     try {
+      // Primeiro buscar a vendedora vinculada a esta pessoa física
+      const { data: vendedora } = await supabase
+        .from('vendedoras')
+        .select('id')
+        .eq('pessoa_fisica_id', parseInt(id!))
+        .single();
+      
+      if (!vendedora) {
+        setVendas([]);
+        return;
+      }
+
       const { data, error } = await supabase
-        .from('vendas_diarias')
+        .from('vendas')
         .select(`
           id,
-          data,
-          valor_liquido_centavos,
-          qtd_itens,
+          data_venda,
+          valor_centavos,
           filiais(nome)
         `)
-        .eq('vendedora_pf_id', parseInt(id!))
-        .order('data', { ascending: false })
+        .eq('vendedora_id', vendedora.id)
+        .order('data_venda', { ascending: false })
         .limit(50);
 
       if (error) throw error;
-      setVendas(data || []);
+      setVendas((data || []) as any);
     } catch (error) {
       console.error('Erro ao buscar vendas:', error);
     }

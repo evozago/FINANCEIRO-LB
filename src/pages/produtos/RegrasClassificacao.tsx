@@ -52,6 +52,7 @@ interface RegraForm {
   nome: string;
   tipo: 'contains' | 'exact' | 'startsWith' | 'containsAll' | 'notContains';
   termos: string;
+  termos_exclusao: string; // Novo campo para termos de exclusão
   campo_destino: string;
   valor_destino: string;
   pontuacao: number;
@@ -63,7 +64,7 @@ const tiposRegra = [
   { value: 'contains', label: 'Contém', desc: 'Busca o termo em qualquer posição' },
   { value: 'exact', label: 'Exato', desc: 'Nome exatamente igual' },
   { value: 'startsWith', label: 'Começa com', desc: 'Nome inicia com o termo' },
-  { value: 'containsAll', label: 'Contém todos', desc: 'Deve ter TODOS os termos' },
+  { value: 'containsAll', label: 'Contém todos', desc: 'Deve ter TODOS os termos (ideal para conjuntos!)' },
   { value: 'notContains', label: 'Não contém', desc: 'Exclui se tiver o termo' },
 ];
 
@@ -80,6 +81,7 @@ const initialForm: RegraForm = {
   nome: '',
   tipo: 'contains',
   termos: '',
+  termos_exclusao: '', // Inicializa vazio
   campo_destino: 'categoria',
   valor_destino: '',
   pontuacao: 100,
@@ -114,10 +116,17 @@ export default function RegrasClassificacao() {
         .map(t => t.trim())
         .filter(Boolean);
 
+      // Processar termos de exclusão
+      const termosExclusaoArray = dados.termos_exclusao
+        .split(',')
+        .map(t => t.trim())
+        .filter(Boolean);
+
       const payload = {
         nome: dados.nome,
         tipo: dados.tipo,
         termos: termosArray,
+        termos_exclusao: termosExclusaoArray, // Novo campo
         campo_destino: dados.campo_destino,
         valor_destino: dados.valor_destino,
         pontuacao: dados.pontuacao,
@@ -171,9 +180,10 @@ export default function RegrasClassificacao() {
       nome: regra.nome,
       tipo: regra.tipo as RegraForm['tipo'],
       termos: regra.termos.join(', '),
+      termos_exclusao: (regra.termos_exclusao || []).join(', '), // Carregar termos de exclusão
       campo_destino: regra.campo_destino,
       valor_destino: regra.valor_destino,
-      pontuacao: regra.pontuacao,
+      pontuacao: regra.pontuacao ?? 100,
       genero_automatico: regra.genero_automatico || '',
       ativo: regra.ativo ?? true,
     });
@@ -189,7 +199,7 @@ export default function RegrasClassificacao() {
     salvarMutation.mutate({ ...form, id: editandoId || undefined });
   };
 
-  // Testar regra
+  // Testar regra - agora considera termos de exclusão
   const testarRegra = () => {
     if (!testInput.trim()) return;
     
@@ -198,6 +208,16 @@ export default function RegrasClassificacao() {
 
     for (const regra of regras.filter(r => r.ativo)) {
       const termosNorm = regra.termos.map(t => normalizarTexto(t));
+      const termosExclusaoNorm = (regra.termos_exclusao || []).map(t => normalizarTexto(t));
+      
+      // Primeiro verifica exclusões
+      if (termosExclusaoNorm.length > 0) {
+        const temExclusao = termosExclusaoNorm.some(t => nomeNorm.includes(t));
+        if (temExclusao) {
+          continue; // Pula esta regra se tem termo de exclusão
+        }
+      }
+      
       let match = false;
 
       switch (regra.tipo) {
@@ -219,7 +239,10 @@ export default function RegrasClassificacao() {
       }
 
       if (match) {
-        matches.push(`✓ ${regra.nome} → ${regra.campo_destino}: ${regra.valor_destino}`);
+        const exclusaoInfo = termosExclusaoNorm.length > 0 
+          ? ` (exceto: ${regra.termos_exclusao?.join(', ')})` 
+          : '';
+        matches.push(`✓ ${regra.nome} → ${regra.campo_destino}: ${regra.valor_destino}${exclusaoInfo}`);
       }
     }
 
@@ -314,8 +337,24 @@ export default function RegrasClassificacao() {
                 <Input
                   value={form.termos}
                   onChange={e => setForm({ ...form, termos: e.target.value })}
-                  placeholder="Ex: VESTIDO, FESTA"
+                  placeholder="Ex: CONJUNTO, BERMUDA, CAMISETA"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Para "Contém todos": produto deve ter TODOS os termos
+                </p>
+              </div>
+
+              <div>
+                <Label>Termos de Exclusão (opcional, separados por vírgula)</Label>
+                <Input
+                  value={form.termos_exclusao}
+                  onChange={e => setForm({ ...form, termos_exclusao: e.target.value })}
+                  placeholder="Ex: PRAIA, PISCINA"
+                  className="border-amber-300 focus:border-amber-500"
+                />
+                <p className="text-xs text-amber-600 mt-1">
+                  Se o produto contiver algum desses termos, a regra NÃO será aplicada
+                </p>
               </div>
 
               <div>
@@ -323,7 +362,7 @@ export default function RegrasClassificacao() {
                 <Input
                   value={form.valor_destino}
                   onChange={e => setForm({ ...form, valor_destino: e.target.value })}
-                  placeholder="Ex: Vestido Festa"
+                  placeholder="Ex: Conjunto Camiseta Bermuda"
                 />
               </div>
 
