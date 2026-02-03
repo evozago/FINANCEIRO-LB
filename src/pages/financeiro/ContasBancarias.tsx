@@ -16,16 +16,14 @@ import { useToast } from '@/hooks/use-toast';
 
 interface ContaBancaria {
   id: number;
-  banco: string;
+  nome: string;
+  banco?: string;
   agencia?: string;
-  numero_conta?: string;
-  nome_conta: string;
-  saldo_atual_centavos: number;
-  ativa: boolean;
-  pj_id: number | null;
-  pf_id?: number | null;
+  conta?: string;
+  tipo?: string;
+  saldo_inicial_centavos?: number;
+  ativo?: boolean;
   created_at: string;
-  updated_at: string;
 }
 
 const tiposConta = [
@@ -44,72 +42,29 @@ export function ContasBancarias() {
   const [showSaldos, setShowSaldos] = useState(false);
   const { toast } = useToast();
 
-  const [pessoasJuridicas, setPessoasJuridicas] = useState<{ id: number; razao_social: string }[]>([]);
-  const [pessoasFisicas, setPessoasFisicas] = useState<{ id: number; nome_completo: string }[]>([]);
   const [formData, setFormData] = useState({
+    nome: '',
     banco: '',
     agencia: '',
     conta: '',
-    tipo_conta: 'corrente',
-    saldo_atual_centavos: 0,
-    limite_credito_centavos: '',
-    ativa: true,
-    observacoes: '',
-    pj_id: '', // Adicionado para selecionar a Pessoa Jurídica
-    pf_id: '', // Adicionado para selecionar a Pessoa Física
+    tipo: 'corrente',
+    saldo_inicial_centavos: 0,
+    ativo: true,
   });
 
   useEffect(() => {
     fetchContas();
-    fetchPessoasJuridicas();
-    fetchPessoasFisicas();
   }, []);
-
-  const fetchPessoasJuridicas = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("pessoas_juridicas")
-        .select("id, razao_social")
-        .order("razao_social");
-      if (error) throw error;
-      setPessoasJuridicas(data || []);
-    } catch (error) {
-      console.error("Erro ao buscar Pessoas Jurídicas:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as Pessoas Jurídicas.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const fetchPessoasFisicas = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("pessoas_fisicas")
-        .select("id, nome_completo")
-        .order("nome_completo");
-      if (error) throw error;
-      setPessoasFisicas(data || []);
-    } catch (error) {
-      console.error("Erro ao buscar Pessoas Físicas:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as Pessoas Físicas.",
-        variant: "destructive",
-      });
-    }
-  };
 
   const fetchContas = async () => {
     try {
       const { data, error } = await supabase
         .from('contas_bancarias')
         .select('*')
-        .order('banco');
+        .order('nome');
 
       if (error) throw error;
-      setContas(data || []);
+      setContas((data || []) as ContaBancaria[]);
     } catch (error) {
       console.error('Erro ao buscar contas bancárias:', error);
       toast({
@@ -127,14 +82,13 @@ export function ContasBancarias() {
     
     try {
       const dataToSubmit = {
-        nome_conta: formData.banco + ' - ' + formData.agencia + ' - ' + formData.conta,
-        banco: formData.banco,
-        agencia: formData.agencia,
-        numero_conta: formData.conta,
-        saldo_atual_centavos: formData.saldo_atual_centavos,
-        ativa: formData.ativa,
-        pj_id: formData.pj_id ? parseInt(formData.pj_id) : null,
-        pf_id: formData.pf_id ? parseInt(formData.pf_id) : null,
+        nome: formData.nome,
+        banco: formData.banco || null,
+        agencia: formData.agencia || null,
+        conta: formData.conta || null,
+        tipo: formData.tipo,
+        saldo_inicial_centavos: formData.saldo_inicial_centavos,
+        ativo: formData.ativo,
       };
 
       if (editingConta) {
@@ -179,16 +133,13 @@ export function ContasBancarias() {
   const handleEdit = (conta: ContaBancaria) => {
     setEditingConta(conta);
     setFormData({
-      banco: conta.banco,
+      nome: conta.nome,
+      banco: conta.banco || '',
       agencia: conta.agencia || '',
-      conta: conta.numero_conta || '',
-      tipo_conta: 'corrente', // Default since tipo_conta doesn't exist in DB
-      saldo_atual_centavos: conta.saldo_atual_centavos,
-      limite_credito_centavos: '', // This field doesn't exist in DB
-      ativa: conta.ativa,
-      observacoes: '', // This field doesn't exist in DB
-      pj_id: conta.pj_id ? String(conta.pj_id) : '',
-      pf_id: conta.pf_id ? String(conta.pf_id) : '',
+      conta: conta.conta || '',
+      tipo: conta.tipo || 'corrente',
+      saldo_inicial_centavos: conta.saldo_inicial_centavos || 0,
+      ativo: conta.ativo ?? true,
     });
     setIsDialogOpen(true);
   };
@@ -221,16 +172,13 @@ export function ContasBancarias() {
 
   const resetForm = () => {
     setFormData({
+      nome: '',
       banco: '',
       agencia: '',
       conta: '',
-      tipo_conta: 'corrente',
-      saldo_atual_centavos: 0,
-      limite_credito_centavos: '',
-      ativa: true,
-      observacoes: '',
-      pj_id: '',
-      pf_id: '',
+      tipo: 'corrente',
+      saldo_inicial_centavos: 0,
+      ativo: true,
     });
   };
 
@@ -247,24 +195,22 @@ export function ContasBancarias() {
 
   const filteredContas = contas.filter(conta => {
     const searchLower = searchTerm.toLowerCase();
-    const nomeContaStr = conta.nome_conta?.toLowerCase() || '';
+    const nomeStr = conta.nome?.toLowerCase() || '';
     const bancoStr = conta.banco?.toLowerCase() || '';
     const agenciaStr = conta.agencia?.toLowerCase() || '';
-    const numeroContaStr = conta.numero_conta?.toLowerCase() || '';
-    const saldoStr = formatCurrency(conta.saldo_atual_centavos).toLowerCase();
-    const statusStr = conta.ativa ? 'ativa' : 'inativa';
+    const contaStr = conta.conta?.toLowerCase() || '';
+    const statusStr = conta.ativo ? 'ativa' : 'inativa';
     
     return (
-      nomeContaStr.includes(searchLower) ||
+      nomeStr.includes(searchLower) ||
       bancoStr.includes(searchLower) ||
       agenciaStr.includes(searchLower) ||
-      numeroContaStr.includes(searchLower) ||
-      saldoStr.includes(searchLower) ||
+      contaStr.includes(searchLower) ||
       statusStr.includes(searchLower)
     );
   });
 
-  const totalSaldo = contas.reduce((sum, conta) => sum + conta.saldo_atual_centavos, 0);
+  const totalSaldo = contas.reduce((sum, conta) => sum + (conta.saldo_inicial_centavos || 0), 0);
 
   if (loading) {
     return <div>Carregando...</div>;
@@ -298,18 +244,27 @@ export function ContasBancarias() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="banco">Banco *</Label>
+                  <Label htmlFor="nome">Nome da Conta *</Label>
+                  <Input
+                    id="nome"
+                    value={formData.nome}
+                    onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                    placeholder="Ex: Conta Principal"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="banco">Banco</Label>
                   <Input
                     id="banco"
                     value={formData.banco}
                     onChange={(e) => setFormData({ ...formData, banco: e.target.value })}
                     placeholder="Ex: Banco do Brasil, Itaú..."
-                    required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="tipo_conta">Tipo de Conta *</Label>
-                  <Select value={formData.tipo_conta} onValueChange={(value) => setFormData({ ...formData, tipo_conta: value })}>
+                  <Label htmlFor="tipo">Tipo de Conta</Label>
+                  <Select value={formData.tipo} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -323,95 +278,40 @@ export function ContasBancarias() {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="agencia">Agência *</Label>
+                  <Label htmlFor="agencia">Agência</Label>
                   <Input
                     id="agencia"
                     value={formData.agencia}
                     onChange={(e) => setFormData({ ...formData, agencia: e.target.value })}
                     placeholder="Ex: 1234-5"
-                    required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="conta">Conta *</Label>
+                  <Label htmlFor="conta">Conta</Label>
                   <Input
                     id="conta"
                     value={formData.conta}
                     onChange={(e) => setFormData({ ...formData, conta: e.target.value })}
                     placeholder="Ex: 12345-6"
-                    required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="pj_id">Pessoa Jurídica</Label>
-                  <select
-                    id="pj_id"
-                    value={formData.pj_id}
-                    onChange={(e) => setFormData({ ...formData, pj_id: e.target.value, pf_id: '' })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="">Nenhuma</option>
-                    {pessoasJuridicas.map((pj) => (
-                      <option key={pj.id} value={String(pj.id)}>
-                        {pj.razao_social}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label htmlFor="pf_id">Pessoa Física</Label>
-                  <select
-                    id="pf_id"
-                    value={formData.pf_id}
-                    onChange={(e) => setFormData({ ...formData, pf_id: e.target.value, pj_id: '' })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="">Nenhuma</option>
-                    {pessoasFisicas.map((pf) => (
-                      <option key={pf.id} value={String(pf.id)}>
-                        {pf.nome_completo}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label htmlFor="saldo_atual_centavos">Saldo Atual (R$)</Label>
+                  <Label htmlFor="saldo_inicial_centavos">Saldo Inicial (R$)</Label>
                   <CurrencyInput
-                    id="saldo_atual_centavos"
-                    value={formData.saldo_atual_centavos}
-                    onValueChange={(value) => setFormData({ ...formData, saldo_atual_centavos: value })}
-                    placeholder="0,00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="limite_credito_centavos">Limite de Crédito (R$)</Label>
-                  <Input
-                    id="limite_credito_centavos"
-                    type="number"
-                    step="0.01"
-                    value={formData.limite_credito_centavos}
-                    onChange={(e) => setFormData({ ...formData, limite_credito_centavos: e.target.value })}
+                    id="saldo_inicial_centavos"
+                    value={formData.saldo_inicial_centavos}
+                    onValueChange={(value) => setFormData({ ...formData, saldo_inicial_centavos: value })}
                     placeholder="0,00"
                   />
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <Switch
-                  id="ativa"
-                  checked={formData.ativa}
-                  onCheckedChange={(checked) => setFormData({ ...formData, ativa: checked })}
+                  id="ativo"
+                  checked={formData.ativo}
+                  onCheckedChange={(checked) => setFormData({ ...formData, ativo: checked })}
                 />
-                <Label htmlFor="ativa">Conta ativa</Label>
-              </div>
-              <div>
-                <Label htmlFor="observacoes">Observações</Label>
-                <Textarea
-                  id="observacoes"
-                  value={formData.observacoes}
-                  onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                  placeholder="Observações sobre a conta..."
-                  rows={3}
-                />
+                <Label htmlFor="ativo">Conta ativa</Label>
               </div>
               <div className="flex justify-end space-x-2">
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -438,7 +338,7 @@ export function ContasBancarias() {
               {showSaldos ? formatCurrency(totalSaldo) : '••••••'}
             </div>
             <p className="text-xs text-muted-foreground">
-              {contas.filter(c => c.ativa).length} contas ativas
+              {contas.filter(c => c.ativo).length} contas ativas
             </p>
           </CardContent>
         </Card>
@@ -451,7 +351,7 @@ export function ContasBancarias() {
           <CardContent>
             <div className="text-2xl font-bold">{contas.length}</div>
             <p className="text-xs text-muted-foreground">
-              {contas.filter(c => !c.ativa).length} inativas
+              {contas.filter(c => !c.ativo).length} inativas
             </p>
           </CardContent>
         </Card>
@@ -472,7 +372,7 @@ export function ContasBancarias() {
               {showSaldos ? 'Saldos visíveis' : 'Saldos ocultos'}
             </div>
             <p className="text-xs text-muted-foreground">
-              Clique no ícone para alternar
+              Clique para {showSaldos ? 'ocultar' : 'mostrar'}
             </p>
           </CardContent>
         </Card>
@@ -489,7 +389,7 @@ export function ContasBancarias() {
           <div className="flex items-center space-x-2">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por banco, agência ou conta..."
+              placeholder="Buscar por nome, banco, agência..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -499,7 +399,7 @@ export function ContasBancarias() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Contas Bancárias</CardTitle>
+          <CardTitle>Contas Bancárias Cadastradas</CardTitle>
           <CardDescription>
             {filteredContas.length} conta(s) encontrada(s)
           </CardDescription>
@@ -508,11 +408,12 @@ export function ContasBancarias() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Nome</TableHead>
                 <TableHead>Banco</TableHead>
+                <TableHead>Agência</TableHead>
+                <TableHead>Conta</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead>Agência/Conta</TableHead>
-                <TableHead>Saldo</TableHead>
-                <TableHead>Limite</TableHead>
+                <TableHead>Saldo Inicial</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -523,27 +424,19 @@ export function ContasBancarias() {
                   <TableCell className="font-medium">
                     <div className="flex items-center space-x-2">
                       <CreditCard className="h-4 w-4 text-muted-foreground" />
-                      <span>{conta.banco}</span>
+                      <span>{conta.nome}</span>
                     </div>
                   </TableCell>
-                  <TableCell>Conta Corrente</TableCell>
+                  <TableCell>{conta.banco || '-'}</TableCell>
+                  <TableCell>{conta.agencia || '-'}</TableCell>
+                  <TableCell>{conta.conta || '-'}</TableCell>
+                  <TableCell>{getTipoContaLabel(conta.tipo || 'corrente')}</TableCell>
                   <TableCell>
-                    <div>
-                      <div className="font-medium">Ag: {conta.agencia || 'N/A'}</div>
-                      <div className="text-sm text-muted-foreground">Cc: {conta.numero_conta || 'N/A'}</div>
-                    </div>
+                    {showSaldos ? formatCurrency(conta.saldo_inicial_centavos || 0) : '••••••'}
                   </TableCell>
                   <TableCell>
-                    <span className={conta.saldo_atual_centavos < 0 ? 'text-red-600' : 'text-green-600'}>
-                      {showSaldos ? formatCurrency(conta.saldo_atual_centavos) : '••••••'}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    N/A
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={conta.ativa ? 'default' : 'secondary'}>
-                      {conta.ativa ? 'Ativa' : 'Inativa'}
+                    <Badge variant={conta.ativo ? 'default' : 'secondary'}>
+                      {conta.ativo ? 'Ativa' : 'Inativa'}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">

@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -20,15 +19,8 @@ interface Filial {
   created_at: string;
 }
 
-interface PessoaJuridica {
-  id: number;
-  nome_fantasia: string;
-  razao_social: string;
-}
-
 export function Filiais() {
   const [filiais, setFiliais] = useState<Filial[]>([]);
-  const [pessoasJuridicas, setPessoasJuridicas] = useState<PessoaJuridica[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingFilial, setEditingFilial] = useState<Filial | null>(null);
@@ -44,7 +36,6 @@ export function Filiais() {
 
   useEffect(() => {
     fetchFiliais();
-    fetchPessoasJuridicas();
   }, []);
 
   const fetchFiliais = async () => {
@@ -55,7 +46,7 @@ export function Filiais() {
         .order('nome');
 
       if (error) throw error;
-      setFiliais((data || []) as any);
+      setFiliais((data || []) as Filial[]);
     } catch (error) {
       console.error('Erro ao buscar filiais:', error);
       toast({
@@ -68,27 +59,15 @@ export function Filiais() {
     }
   };
 
-  const fetchPessoasJuridicas = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('pessoas_juridicas')
-        .select('id, nome_fantasia, razao_social')
-        .order('nome_fantasia');
-
-      if (error) throw error;
-      setPessoasJuridicas(data || []);
-    } catch (error) {
-      console.error('Erro ao buscar pessoas jurídicas:', error);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
       const dataToSubmit = {
         nome: formData.nome,
-        pj_id: parseInt(formData.pj_id),
+        cnpj: formData.cnpj || null,
+        endereco: formData.endereco || null,
+        telefone: formData.telefone || null,
       };
 
       if (editingFilial) {
@@ -134,7 +113,9 @@ export function Filiais() {
     setEditingFilial(filial);
     setFormData({
       nome: filial.nome,
-      pj_id: filial.pj_id.toString(),
+      cnpj: filial.cnpj || '',
+      endereco: filial.endereco || '',
+      telefone: filial.telefone || '',
     });
     setIsDialogOpen(true);
   };
@@ -168,13 +149,15 @@ export function Filiais() {
   const resetForm = () => {
     setFormData({
       nome: '',
-      pj_id: '',
+      cnpj: '',
+      endereco: '',
+      telefone: '',
     });
   };
 
   const filteredFiliais = filiais.filter(filial =>
     filial.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    filial.pessoas_juridicas.nome_fantasia.toLowerCase().includes(searchTerm.toLowerCase())
+    (filial.cnpj && filial.cnpj.includes(searchTerm))
   );
 
   if (loading) {
@@ -217,19 +200,29 @@ export function Filiais() {
                 />
               </div>
               <div>
-                <Label htmlFor="pj_id">Empresa *</Label>
-                <Select value={formData.pj_id} onValueChange={(value) => setFormData({ ...formData, pj_id: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma empresa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pessoasJuridicas.map((pj) => (
-                      <SelectItem key={pj.id} value={pj.id.toString()}>
-                        {pj.nome_fantasia || pj.razao_social}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="cnpj">CNPJ</Label>
+                <Input
+                  id="cnpj"
+                  value={formData.cnpj}
+                  onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
+                  placeholder="00.000.000/0000-00"
+                />
+              </div>
+              <div>
+                <Label htmlFor="endereco">Endereço</Label>
+                <Input
+                  id="endereco"
+                  value={formData.endereco}
+                  onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="telefone">Telefone</Label>
+                <Input
+                  id="telefone"
+                  value={formData.telefone}
+                  onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                />
               </div>
               <div className="flex justify-end space-x-2">
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -255,7 +248,7 @@ export function Filiais() {
           <div className="flex items-center space-x-2">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome da filial ou empresa..."
+              placeholder="Buscar por nome ou CNPJ..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -275,7 +268,9 @@ export function Filiais() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
-                <TableHead>Empresa</TableHead>
+                <TableHead>CNPJ</TableHead>
+                <TableHead>Endereço</TableHead>
+                <TableHead>Telefone</TableHead>
                 <TableHead>Cadastrado em</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -289,12 +284,9 @@ export function Filiais() {
                       <span>{filial.nome}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{filial.pessoas_juridicas.nome_fantasia}</div>
-                      <div className="text-sm text-muted-foreground">{filial.pessoas_juridicas.razao_social}</div>
-                    </div>
-                  </TableCell>
+                  <TableCell>{filial.cnpj || '-'}</TableCell>
+                  <TableCell>{filial.endereco || '-'}</TableCell>
+                  <TableCell>{filial.telefone || '-'}</TableCell>
                   <TableCell>
                     {new Date(filial.created_at).toLocaleDateString('pt-BR')}
                   </TableCell>
