@@ -358,12 +358,8 @@ function Categorias() {
 
   // ===== exclusão / arquivar / mover (iguais ao anterior)
   const canDelete = async (id: number) => {
-    try {
-      const { data, error } = await supabase.rpc("can_delete_categoria" as any, { p_id: id });
-      if (!error && typeof data === "boolean") return data;
-    } catch {}
     const [{ count: filhos }, { count: uso }] = await Promise.all([
-      supabase.from("categorias_financeiras").select("*", { count: "exact", head: true }).eq("categoria_pai_id", id),
+      supabase.from("categorias_financeiras").select("*", { count: "exact", head: true }).eq("categoria_pai_id" as any, id),
       supabase.from("contas_pagar").select("*", { count: "exact", head: true }).eq("categoria_id", id),
     ]);
     return (filhos || 0) === 0 && (uso || 0) === 0;

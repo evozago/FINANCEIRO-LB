@@ -23,7 +23,7 @@ import {
   Search, Filter, Edit, Check, Trash2, Settings2, CalendarIcon,
   ArrowUpDown, X, Plus, RotateCcw, Edit2, Copy, Upload, FileText, Loader2, Download, FileSpreadsheet
 } from 'lucide-react';
-import { useXMLImport } from '@/hooks/useXMLImport';
+import { useXMLImport } from '@/hooks/useXMLImportMaster';
 import { Progress } from '@/components/ui/progress';
 import { format } from 'date-fns';
 import { parseLocalDate } from '@/lib/date';
@@ -51,10 +51,10 @@ interface ParcelaCompleta {
   conta_bancaria_id: number | null;
 }
 
-interface Fornecedor { id: number; nome_fantasia?: string; razao_social?: string; nome_completo?: string; tipo: 'PJ' | 'PF'; }
+interface Fornecedor { id: number; nome_fantasia?: string; razao_social?: string; nome?: string; tipo: 'PJ' | 'PF'; }
 interface Categoria { id: number; nome: string; }
 interface Filial { id: number; nome: string; }
-interface ContaBancaria { id: number; nome_conta: string; banco: string; }
+interface ContaBancaria { id: number; nome: string; banco?: string; }
 interface FormaPagamento { id: number; nome: string; }
 
 // Interface para dados de DAR_BAIXA vindos da IA
@@ -394,13 +394,18 @@ export function ContasPagarSimple() {
     
     for (const item of itemsParaBaixar) {
       try {
-        await supabase.rpc('pagar_parcela', {
-          parcela_id: item.parcelaSelecionada!,
-          conta_bancaria_id: baixaLoteContaBancaria ? parseInt(baixaLoteContaBancaria) : null,
-          forma_pagamento_id: parseInt(baixaLoteFormaPagamento),
-          valor_pago_centavos: item.valorPago,
-          observacao_param: item.data.observacao_ia || null
-        });
+        const { error } = await supabase
+          .from('contas_pagar_parcelas')
+          .update({
+            pago: true,
+            data_pagamento: new Date().toISOString().split('T')[0],
+            conta_bancaria_id: baixaLoteContaBancaria ? parseInt(baixaLoteContaBancaria) : null,
+            forma_pagamento_id: parseInt(baixaLoteFormaPagamento),
+            observacoes: item.data.observacao_ia || null
+          })
+          .eq('id', item.parcelaSelecionada!);
+        
+        if (error) throw error;
         sucesso++;
       } catch (error: any) {
         console.error('Erro ao dar baixa:', error);
@@ -438,13 +443,18 @@ export function ContasPagarSimple() {
     }
     
     try {
-      await supabase.rpc('pagar_parcela', {
-        parcela_id: parcelaSelecionadaBaixa,
-        conta_bancaria_id: baixaFormData.conta_bancaria_id ? parseInt(baixaFormData.conta_bancaria_id) : null,
-        forma_pagamento_id: parseInt(baixaFormData.forma_pagamento_id),
-        valor_pago_centavos: baixaFormData.valor_pago_centavos,
-        observacao_param: baixaFormData.observacao || null
-      });
+      const { error } = await supabase
+        .from('contas_pagar_parcelas')
+        .update({
+          pago: true,
+          data_pagamento: baixaFormData.data_pagamento.toISOString().split('T')[0],
+          conta_bancaria_id: baixaFormData.conta_bancaria_id ? parseInt(baixaFormData.conta_bancaria_id) : null,
+          forma_pagamento_id: parseInt(baixaFormData.forma_pagamento_id),
+          observacoes: baixaFormData.observacao || null
+        })
+        .eq('id', parcelaSelecionadaBaixa);
+      
+      if (error) throw error;
       
       toast({ title: 'Baixa realizada com sucesso!' });
       setShowDarBaixaModal(false);
@@ -586,12 +596,12 @@ export function ContasPagarSimple() {
     // Busca PFs
     const { data: pfData } = await supabase
       .from('pessoas_fisicas')
-      .select('id, nome_completo');
+      .select('id, nome');
     
-    const fornecedoresPJ = (pjData || []).map(f => ({ ...f, tipo: 'PJ' as const }));
-    const fornecedoresPF = (pfData || []).map(f => ({ ...f, tipo: 'PF' as const }));
+    const fornecedoresPJ = (pjData || []).map(f => ({ id: f.id, nome_fantasia: f.nome_fantasia, razao_social: f.razao_social, nome: f.razao_social, tipo: 'PJ' as const }));
+    const fornecedoresPF = (pfData || []).map(f => ({ id: f.id, nome: f.nome || '', tipo: 'PF' as const }));
     
-    setFornecedores([...fornecedoresPJ, ...fornecedoresPF]);
+    setFornecedores([...fornecedoresPJ, ...fornecedoresPF] as Fornecedor[]);
   };
   const fetchCategorias = async () => {
     const { data } = await supabase.from('categorias_financeiras').select('id, nome');
@@ -602,8 +612,8 @@ export function ContasPagarSimple() {
     setFiliais(data || []);
   };
   const fetchContasBancarias = async () => {
-    const { data } = await supabase.from('contas_bancarias').select('id, nome_conta, banco');
-    setContasBancarias(data || []);
+    const { data } = await supabase.from('contas_bancarias').select('id, nome, banco');
+    setContasBancarias((data || []).map(c => ({ id: c.id, nome: c.nome || '', banco: c.banco || '' })));
   };
   const fetchFormasPagamento = async () => {
     const { data } = await supabase.from('formas_pagamento').select('id, nome');
@@ -817,8 +827,8 @@ export function ContasPagarSimple() {
 
       if (fetchError) throw fetchError;
 
-      const { descricao, valor_total_centavos, fornecedor_id, fornecedor_pf_id, categoria_id, 
-              filial_id, num_parcelas, referencia, numero_nota, chave_nfe } = contaOriginal;
+      const { descricao, valor_total_centavos, fornecedor_id, pessoa_fisica_id, categoria_id, 
+              filial_id, num_parcelas, referencia, numero_nota } = contaOriginal;
 
       const { data: novaConta, error: insertError } = await supabase
         .from('contas_pagar')
@@ -826,13 +836,12 @@ export function ContasPagarSimple() {
           descricao: `${descricao} (cópia)`,
           valor_total_centavos,
           fornecedor_id,
-          fornecedor_pf_id,
+          pessoa_fisica_id,
           categoria_id,
           filial_id,
           num_parcelas: num_parcelas || 1,
           referencia: referencia ? `${referencia}-COPIA` : null,
-          numero_nota,
-          chave_nfe
+          numero_nota
         })
         .select()
         .single();
@@ -848,8 +857,8 @@ export function ContasPagarSimple() {
       if (parcelasOriginais && parcelasOriginais.length > 0) {
         const novasParcelas = parcelasOriginais.map(p => ({
           conta_id: novaConta.id,
-          parcela_num: p.parcela_num || p.numero_parcela || 1,
-          valor_parcela_centavos: p.valor_parcela_centavos,
+          numero_parcela: p.numero_parcela || 1,
+          valor_centavos: p.valor_centavos,
           vencimento: p.vencimento,
           pago: false
         }));
@@ -884,13 +893,18 @@ export function ContasPagarSimple() {
           toast({ title: 'Forma de pagamento obrigatória', description: `Selecione a forma de pagamento para ${parcela.fornecedor}`, variant: 'destructive' });
           return;
         }
-        await supabase.rpc('pagar_parcela', {
-          parcela_id: parcela.id,
-          conta_bancaria_id: payment?.conta_bancaria_id ? parseInt(payment.conta_bancaria_id) : null,
-          forma_pagamento_id: parseInt(payment.forma_pagamento_id),
-          valor_pago_centavos: payment?.valor_pago_centavos || parcela.valor_parcela_centavos,
-          observacao_param: paymentObservacao
-        });
+        const { error } = await supabase
+          .from('contas_pagar_parcelas')
+          .update({
+            pago: true,
+            data_pagamento: payment?.data_pagamento?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
+            conta_bancaria_id: payment?.conta_bancaria_id ? parseInt(payment.conta_bancaria_id) : null,
+            forma_pagamento_id: parseInt(payment.forma_pagamento_id),
+            observacoes: paymentObservacao || null
+          })
+          .eq('id', parcela.id);
+        
+        if (error) throw error;
       }
       toast({ title: `${selectedParcelas.length} parcela(s) paga(s)` });
       setShowPaymentModal(false);
@@ -1109,7 +1123,7 @@ export function ContasPagarSimple() {
                           }}
                         />
                         <label htmlFor={`fornecedor-${value}`} className="text-sm cursor-pointer flex-1">
-                          {f.tipo === 'PJ' ? (f.nome_fantasia || f.razao_social) : f.nome_completo} ({f.tipo})
+                          {f.tipo === 'PJ' ? (f.nome_fantasia || f.razao_social) : f.nome} ({f.tipo})
                         </label>
                       </div>
                     );
@@ -1684,7 +1698,7 @@ export function ContasPagarSimple() {
                             .filter((c) => c.id != null)
                             .map((c) => (
                               <SelectItem key={c.id} value={c.id.toString()}>
-                                {c.nome_conta}
+                                {c.nome}
                                 {c.banco ? ` - ${c.banco}` : ''}
                               </SelectItem>
                             ))}
@@ -2146,7 +2160,7 @@ export function ContasPagarSimple() {
                         <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
                         <SelectContent>
                           {contasBancarias.map(c => (
-                            <SelectItem key={c.id} value={c.id.toString()}>{c.nome_conta} ({c.banco})</SelectItem>
+                            <SelectItem key={c.id} value={c.id.toString()}>{c.nome} ({c.banco})</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -2233,7 +2247,7 @@ export function ContasPagarSimple() {
                 <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
                 <SelectContent>
                   {contasBancarias.map(c => (
-                    <SelectItem key={c.id} value={c.id.toString()}>{c.nome_conta} ({c.banco})</SelectItem>
+                    <SelectItem key={c.id} value={c.id.toString()}>{c.nome} ({c.banco})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
