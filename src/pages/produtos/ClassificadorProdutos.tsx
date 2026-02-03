@@ -52,6 +52,10 @@ interface ProdutoImportado {
   codigo?: string;
   nome: string;
   preco?: number;
+  custo?: number;
+  estoque?: number;
+  cor?: string;
+  tamanho?: string;
   [key: string]: unknown;
 }
 
@@ -59,6 +63,10 @@ interface MapeamentoColunas {
   nome: string;
   codigo?: string;
   preco?: string;
+  custo?: string;
+  estoque?: string;
+  cor?: string;
+  tamanho?: string;
 }
 
 type Etapa = 'upload' | 'mapeamento' | 'classificacao' | 'resultado';
@@ -69,7 +77,7 @@ export default function ClassificadorProdutos() {
   const [arquivoNome, setArquivoNome] = useState('');
   const [dadosPlanilha, setDadosPlanilha] = useState<Record<string, unknown>[]>([]);
   const [colunas, setColunas] = useState<string[]>([]);
-  const [mapeamento, setMapeamento] = useState<MapeamentoColunas>({ nome: '' });
+  const [mapeamento, setMapeamento] = useState<MapeamentoColunas>({ nome: '', codigo: '', preco: '', custo: '', estoque: '', cor: '', tamanho: '' });
   const [produtosClassificados, setProdutosClassificados] = useState<Array<{
     produto: ProdutoImportado;
     resultado: ReturnType<typeof classificarLote>[0]['resultado'];
@@ -220,6 +228,11 @@ export default function ClassificadorProdutos() {
         nome_original: produto.nome,
         codigo: produto.codigo || null,
         preco_centavos: produto.preco ? Math.round(produto.preco * 100) : 0,
+        custo_unitario_centavos: produto.custo ? Math.round(produto.custo * 100) : 0,
+        valor_venda_centavos: produto.preco ? Math.round(produto.preco * 100) : 0,
+        estoque: produto.estoque || 0,
+        variacao_1: produto.cor || resultado.cor || null,
+        variacao_2: produto.tamanho || resultado.tamanho || null,
         categoria_id: resultado.categoria_id,
         subcategoria: resultado.subcategoria,
         marca: resultado.marca,
@@ -306,7 +319,7 @@ export default function ClassificadorProdutos() {
     setArquivoNome('');
     setDadosPlanilha([]);
     setColunas([]);
-    setMapeamento({ nome: '' });
+    setMapeamento({ nome: '', codigo: '', preco: '', custo: '', estoque: '', cor: '', tamanho: '' });
     setProdutosClassificados([]);
     setProgresso(0);
     setSessaoId(null);

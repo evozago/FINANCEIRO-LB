@@ -16,29 +16,25 @@ import { parseLocalDate, formatDateToISO } from "@/lib/date";
 interface Parcela {
   id: number;
   conta_id: number;
-  parcela_num: number;
   numero_parcela: number;
-  valor_parcela_centavos: number;
+  valor_centavos: number;
   vencimento: string;
   pago: boolean;
-  pago_em?: string | null;
-  valor_pago_centavos?: number | null;
+  data_pagamento?: string | null;
   forma_pagamento_id?: number | null;
   conta_bancaria_id?: number | null;
-  observacao?: string | null;
+  observacoes?: string | null;
 }
 
 interface ContaPagar {
   id: number;
   fornecedor_id: number | null;
-  fornecedor_pf_id: number | null;
+  pessoa_fisica_id: number | null;
   categoria_id: number | null;
   filial_id: number | null;
   descricao: string | null;
   valor_total_centavos: number;
   numero_nota: string | null;
-  chave_nfe: string | null;
-  data_emissao: string | null;
   referencia: string | null;
 }
 
@@ -59,8 +55,6 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
   const [descricao, setDescricao] = useState("");
   const [valorTotalCentavos, setValorTotalCentavos] = useState(0);
   const [numeroNota, setNumeroNota] = useState("");
-  const [chaveNfe, setChaveNfe] = useState("");
-  const [dataEmissao, setDataEmissao] = useState("");
   const [referencia, setReferencia] = useState("");
 
   // Estados da Parcela
@@ -92,8 +86,8 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
     queryFn: async () => {
       const { data, error } = await supabase
         .from("pessoas_fisicas")
-        .select("id, nome_completo")
-        .order("nome_completo");
+        .select("id, nome")
+        .order("nome");
       if (error) throw error;
       return data;
     },
@@ -128,9 +122,9 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
     queryFn: async () => {
       const { data, error } = await supabase
         .from("contas_bancarias")
-        .select("id, nome_conta, banco")
-        .eq("ativa", true)
-        .order("nome_conta");
+        .select("id, nome, banco")
+        .eq("ativo", true)
+        .order("nome");
       if (error) throw error;
       return data || [];
     },
@@ -152,14 +146,14 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
   useEffect(() => {
     if (parcela && open) {
       // Carregar dados da parcela - garantir formato correto de data
-      setValorParcelaCentavos(parcela.valor_parcela_centavos);
+      setValorParcelaCentavos(parcela.valor_centavos);
       setVencimento(formatDateToISO(parseLocalDate(parcela.vencimento)));
       setPago(parcela.pago);
-      setPagoEm(parcela.pago_em ? formatDateToISO(parseLocalDate(parcela.pago_em)) : "");
-      setValorPagoCentavos(parcela.valor_pago_centavos || parcela.valor_parcela_centavos);
+      setPagoEm(parcela.data_pagamento ? formatDateToISO(parseLocalDate(parcela.data_pagamento)) : "");
+      setValorPagoCentavos(parcela.valor_centavos);
       setFormaPagamentoId(parcela.forma_pagamento_id?.toString() || "");
       setContaBancariaId(parcela.conta_bancaria_id?.toString() || "");
-      setObservacao(parcela.observacao || "");
+      setObservacao(parcela.observacoes || "");
 
       // Carregar dados da conta
       const loadContaData = async () => {
@@ -174,16 +168,24 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
           return;
         }
 
-        setContaData(conta);
+        setContaData({
+          id: conta.id,
+          fornecedor_id: conta.fornecedor_id,
+          pessoa_fisica_id: conta.pessoa_fisica_id,
+          categoria_id: conta.categoria_id,
+          filial_id: conta.filial_id,
+          descricao: conta.descricao,
+          valor_total_centavos: conta.valor_total_centavos,
+          numero_nota: conta.numero_nota,
+          referencia: conta.referencia,
+        });
         setFornecedorTipo(conta.fornecedor_id ? "pj" : "pf");
-        setFornecedorId((conta.fornecedor_id || conta.fornecedor_pf_id)?.toString() || "");
+        setFornecedorId((conta.fornecedor_id || conta.pessoa_fisica_id)?.toString() || "");
         setCategoriaId(conta.categoria_id?.toString() || "");
         setFilialId(conta.filial_id?.toString() || "");
         setDescricao(conta.descricao || "");
         setValorTotalCentavos(conta.valor_total_centavos);
         setNumeroNota(conta.numero_nota || "");
-        setChaveNfe(conta.chave_nfe || "");
-        setDataEmissao(conta.data_emissao || "");
         setReferencia(conta.referencia || "");
       };
 
@@ -223,14 +225,12 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
         .from("contas_pagar")
         .update({
           fornecedor_id: fornecedorTipo === "pj" ? parseOptionalId(fornecedorId) : null,
-          fornecedor_pf_id: fornecedorTipo === "pf" ? parseOptionalId(fornecedorId) : null,
+          pessoa_fisica_id: fornecedorTipo === "pf" ? parseOptionalId(fornecedorId) : null,
           categoria_id: parseOptionalId(categoriaId),
           filial_id: parseOptionalId(filialId),
           descricao,
           valor_total_centavos: valorTotalCentavos,
           numero_nota: numeroNota || null,
-          chave_nfe: chaveNfe || null,
-          data_emissao: dataEmissao || null,
           referencia: referencia || null,
         })
         .eq("id", parcela.conta_id);
@@ -241,14 +241,13 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
       const { error: parcelaError } = await supabase
         .from("contas_pagar_parcelas")
         .update({
-          valor_parcela_centavos: valorParcelaCentavos,
+          valor_centavos: valorParcelaCentavos,
           vencimento: formatDateToISO(parseLocalDate(vencimento)),
           pago,
-          pago_em: pago && pagoEm ? formatDateToISO(parseLocalDate(pagoEm)) : null,
-          valor_pago_centavos: pago ? valorPagoCentavos : null,
+          data_pagamento: pago && pagoEm ? formatDateToISO(parseLocalDate(pagoEm)) : null,
           forma_pagamento_id: pago && formaPagamentoId ? parseInt(formaPagamentoId) : null,
           conta_bancaria_id: pago && contaBancariaId ? parseInt(contaBancariaId) : null,
-          observacao: observacao || null,
+          observacoes: observacao || null,
         })
         .eq("id", parcela.id);
 
@@ -271,7 +270,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar Conta e Parcela {parcela.numero_parcela || parcela.parcela_num}</DialogTitle>
+          <DialogTitle>Editar Conta e Parcela {parcela.numero_parcela}</DialogTitle>
           <DialogDescription>
             Edite as informações da conta a pagar e da parcela selecionada
           </DialogDescription>
@@ -334,7 +333,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
                       ))
                     : fornecedoresPF?.map((f) => (
                         <SelectItem key={f.id} value={f.id.toString()}>
-                          {f.nome_completo}
+                          {f.nome}
                         </SelectItem>
                       ))}
                 </SelectContent>
@@ -420,39 +419,16 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
                 />
               </div>
 
-              {/* Data de Emissão */}
+              {/* Referência */}
               <div className="space-y-2">
-                <Label htmlFor="dataEmissao">Data de Emissão</Label>
+                <Label htmlFor="referencia">Referência</Label>
                 <Input
-                  id="dataEmissao"
-                  type="date"
-                  value={dataEmissao}
-                  onChange={(e) => setDataEmissao(e.target.value)}
+                  id="referencia"
+                  value={referencia}
+                  onChange={(e) => setReferencia(e.target.value)}
+                  placeholder="Referência interna"
                 />
               </div>
-            </div>
-
-            {/* Chave NFe */}
-            <div className="space-y-2">
-              <Label htmlFor="chaveNfe">Chave da NFe</Label>
-              <Input
-                id="chaveNfe"
-                value={chaveNfe}
-                onChange={(e) => setChaveNfe(e.target.value)}
-                placeholder="44 dígitos da chave de acesso"
-                maxLength={44}
-              />
-            </div>
-
-            {/* Referência */}
-            <div className="space-y-2">
-              <Label htmlFor="referencia">Referência</Label>
-              <Input
-                id="referencia"
-                value={referencia}
-                onChange={(e) => setReferencia(e.target.value)}
-                placeholder="Referência interna"
-              />
             </div>
           </div>
 
@@ -560,7 +536,7 @@ export function EditarParcelaModal({ open, onOpenChange, parcela, onSuccess }: E
                         <SelectItem value="none">Nenhuma</SelectItem>
                         {contasBancarias?.map((conta) => (
                           <SelectItem key={conta.id} value={conta.id.toString()}>
-                            {conta.nome_conta} {conta.banco ? `- ${conta.banco}` : ""}
+                            {conta.nome} {conta.banco ? `- ${conta.banco}` : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
