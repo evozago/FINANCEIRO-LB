@@ -77,7 +77,7 @@ export function FechamentoCaixa() {
   const fetchFechamentos = async () => {
     try {
       let query = supabase
-        .from('fechamento_caixa')
+        .from('fechamentos_caixa')
         .select(`
           *,
           filiais(nome)
@@ -160,7 +160,7 @@ export function FechamentoCaixa() {
 
       if (editingFechamento) {
         const { error } = await supabase
-          .from('fechamento_caixa')
+          .from('fechamentos_caixa')
           .update(dataToSubmit)
           .eq('id', editingFechamento.id);
 
@@ -172,7 +172,7 @@ export function FechamentoCaixa() {
         });
       } else {
         const { error } = await supabase
-          .from('fechamento_caixa')
+          .from('fechamentos_caixa')
           .insert([dataToSubmit]);
 
         if (error) throw error;

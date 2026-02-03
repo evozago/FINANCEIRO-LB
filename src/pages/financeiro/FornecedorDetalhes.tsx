@@ -13,12 +13,12 @@ import { ptBR } from 'date-fns/locale';
 
 interface FornecedorData {
   id: number;
-  nome_fantasia: string;
+  nome_fantasia: string | null;
   razao_social: string;
-  cnpj: string;
-  email: string;
-  celular: string;
-  endereco: string;
+  cnpj: string | null;
+  email: string | null;
+  telefone: string | null;
+  endereco: string | null;
 }
 
 interface ContaFornecedor {
