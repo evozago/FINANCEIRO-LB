@@ -25,6 +25,9 @@ export interface ProdutoImportado {
   estoque?: number;
   cor?: string;
   tamanho?: string;
+  referencia?: string;
+  // Dados originais completos da planilha (todas as colunas)
+  dados_originais?: Record<string, unknown>;
   [key: string]: unknown;
 }
 

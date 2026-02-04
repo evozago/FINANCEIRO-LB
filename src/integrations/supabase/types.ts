@@ -1089,8 +1089,10 @@ export type Database = {
           arquivo_storage_path: string | null
           arquivo_tamanho_bytes: number | null
           classificados: number | null
+          colunas_originais: string[] | null
           confianca_media: number | null
           created_at: string | null
+          dados_originais: Json | null
           id: number
           mapeamento_colunas: Json | null
           nome: string
@@ -1103,8 +1105,10 @@ export type Database = {
           arquivo_storage_path?: string | null
           arquivo_tamanho_bytes?: number | null
           classificados?: number | null
+          colunas_originais?: string[] | null
           confianca_media?: number | null
           created_at?: string | null
+          dados_originais?: Json | null
           id?: number
           mapeamento_colunas?: Json | null
           nome: string
@@ -1117,8 +1121,10 @@ export type Database = {
           arquivo_storage_path?: string | null
           arquivo_tamanho_bytes?: number | null
           classificados?: number | null
+          colunas_originais?: string[] | null
           confianca_media?: number | null
           created_at?: string | null
+          dados_originais?: Json | null
           id?: number
           mapeamento_colunas?: Json | null
           nome?: string

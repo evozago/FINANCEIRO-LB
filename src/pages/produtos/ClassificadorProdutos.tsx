@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -280,8 +281,21 @@ export default function ClassificadorProdutos() {
         }
       }
 
-      // Criar sessão de importação
+      // Criar sessão de importação com dados originais completos
       const nomeArquivos = multiFileParser.arquivos.map(a => a.nome).join(', ');
+      
+      // Armazenar dados originais completos (todas as colunas)
+      const dadosOriginaisCompletos = multiFileParser.dados.map(row => {
+        // Remover apenas campos internos como __origem_arquivo
+        const rowLimpa: Record<string, unknown> = {};
+        Object.entries(row).forEach(([key, value]) => {
+          if (!key.startsWith('__')) {
+            rowLimpa[key] = value;
+          }
+        });
+        return rowLimpa;
+      });
+
       const { data: sessao, error: sessaoError } = await supabase
         .from('sessoes_importacao')
         .insert([{
@@ -292,6 +306,10 @@ export default function ClassificadorProdutos() {
           arquivo_storage_path: arquivoStoragePath,
           arquivo_mime_type: primeiroArquivo?.type || null,
           arquivo_tamanho_bytes: primeiroArquivo?.size || null,
+          // Armazenar nomes de todas as colunas originais
+          colunas_originais: multiFileParser.colunas,
+          // Armazenar todos os dados originais completos
+          dados_originais: JSON.parse(JSON.stringify(dadosOriginaisCompletos)) as Json,
         }])
         .select()
         .single();
@@ -299,8 +317,8 @@ export default function ClassificadorProdutos() {
       if (sessaoError) throw sessaoError;
       setSessaoId(sessao.id);
 
-      // Preparar produtos para classificação
-      const produtos: ProdutoImportado[] = multiFileParser.dados.map(row => ({
+      // Preparar produtos para classificação (mantendo dados originais completos)
+      const produtos: ProdutoImportado[] = multiFileParser.dados.map((row, index) => ({
         nome: String(row[mapeamento.nome] || ''),
         codigo: mapeamento.codigo ? String(row[mapeamento.codigo] || '') : undefined,
         preco: mapeamento.preco ? Number(row[mapeamento.preco]) || 0 : undefined,
@@ -308,8 +326,9 @@ export default function ClassificadorProdutos() {
         estoque: mapeamento.estoque ? Number(row[mapeamento.estoque]) || 0 : undefined,
         cor: mapeamento.cor ? String(row[mapeamento.cor] || '') : undefined,
         tamanho: mapeamento.tamanho ? String(row[mapeamento.tamanho] || '') : undefined,
-        // Campo adicional para referência (grade)
         referencia: mapeamento.referencia ? String(row[mapeamento.referencia] || '') : undefined,
+        // Preservar TODOS os dados originais da linha
+        dados_originais: dadosOriginaisCompletos[index],
       }));
 
       // Executar classificação
