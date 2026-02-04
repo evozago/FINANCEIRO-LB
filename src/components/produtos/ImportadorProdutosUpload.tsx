@@ -77,6 +77,17 @@ export function ImportadorProdutosUpload({
 
   return (
     <div className="space-y-4">
+      {/* Dica para arquivos grandes */}
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+        <p className="text-sm font-medium text-amber-800 dark:text-amber-300 flex items-center gap-2">
+          💡 Arquivos grandes (+50MB)?
+        </p>
+        <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+          Para planilhas acima de 50MB, divida o arquivo em partes menores (ex: 50.000 linhas cada) e faça upload de todos juntos.
+          O sistema unificará automaticamente os dados.
+        </p>
+      </div>
+
       {/* Dropzone */}
       <div
         {...getRootProps()}
@@ -90,7 +101,7 @@ export function ImportadorProdutosUpload({
           {isDragActive ? 'Solte os arquivos aqui' : 'Arraste planilhas ou clique para selecionar'}
         </p>
         <p className="text-sm text-muted-foreground">
-          Suporta .xlsx, .xls, .csv e .xml • Múltiplos arquivos • Até 100MB por arquivo
+          Suporta .xlsx, .xls, .csv e .xml • Múltiplos arquivos • Divida arquivos grandes em partes menores
         </p>
       </div>
 
