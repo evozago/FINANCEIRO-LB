@@ -1,20 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useDropzone } from 'react-dropzone';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -30,8 +21,6 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import {
-  Upload,
-  FileSpreadsheet,
   Play,
   Download,
   CheckCircle2,
@@ -45,39 +34,29 @@ import {
   Clock,
   Zap,
   Database,
-  AlertCircle,
+  Grid3X3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { type RegraClassificacao, type AtributoCustomizado } from '@/lib/classificador';
 import { Link } from 'react-router-dom';
-import { useLargeSpreadsheetParser } from '@/hooks/useLargeSpreadsheetParser';
 import { useClassificadorWorker, type ProdutoClassificado, type ProdutoImportado } from '@/hooks/useClassificadorWorker';
-
-interface MapeamentoColunas {
-  nome: string;
-  codigo?: string;
-  preco?: string;
-  custo?: string;
-  estoque?: string;
-  cor?: string;
-  tamanho?: string;
-}
+import { useMultiFileProdutosParser } from '@/hooks/useMultiFileProdutosParser';
+import { ImportadorProdutosUpload } from '@/components/produtos/ImportadorProdutosUpload';
+import { ImportadorProdutosMapeamento, type MapeamentoColunasProduto } from '@/components/produtos/ImportadorProdutosMapeamento';
 
 type Etapa = 'upload' | 'mapeamento' | 'classificacao' | 'resultado';
 
 // Componente de progresso detalhado
 function ProgressoDetalhado({ 
   progress, 
-  parseProgress,
   saveProgress,
   onCancel 
 }: { 
   progress: ReturnType<typeof useClassificadorWorker>['progress'];
-  parseProgress?: { percent: number; message: string };
   saveProgress?: { percent: number; saved: number; total: number };
   onCancel: () => void;
 }) {
-  const isProcessing = ['classifying', 'saving'].includes(progress.phase) || parseProgress?.percent !== 100;
+  const isProcessing = ['classifying', 'saving'].includes(progress.phase);
   
   return (
     <Card>
@@ -186,48 +165,29 @@ function ProgressoDetalhado({
 export default function ClassificadorProdutos() {
   const queryClient = useQueryClient();
   const [etapa, setEtapa] = useState<Etapa>('upload');
-  const [arquivoNome, setArquivoNome] = useState('');
-  const [arquivoOriginal, setArquivoOriginal] = useState<File | null>(null);
-  const [dadosPlanilha, setDadosPlanilha] = useState<Record<string, unknown>[]>([]);
-  const [colunas, setColunas] = useState<string[]>([]);
-  const [mapeamento, setMapeamento] = useState<MapeamentoColunas>({ nome: '', codigo: '', preco: '', custo: '', estoque: '', cor: '', tamanho: '' });
+  const [mapeamento, setMapeamento] = useState<MapeamentoColunasProduto>({ nome: '' });
   const [produtosClassificados, setProdutosClassificados] = useState<ProdutoClassificado[]>([]);
   const [sessaoId, setSessaoId] = useState<number | null>(null);
   const [saveProgress, setSaveProgress] = useState<{ percent: number; saved: number; total: number } | null>(null);
 
-  // Hooks otimizados para grandes arquivos
-  const spreadsheetParser = useLargeSpreadsheetParser({
+  // Hook para parsing de múltiplos arquivos
+  const multiFileParser = useMultiFileProdutosParser({
     onComplete: (result) => {
-      setDadosPlanilha(result.data);
-      setColunas(result.columns);
-      setArquivoNome(result.fileName);
-      setArquivoOriginal(result.file);
-      
-      // Auto-detectar mapeamento
-      const detected = spreadsheetParser.autoDetectColumns(result.columns);
-      setMapeamento({
-        nome: detected.nome,
-        codigo: detected.codigo,
-        preco: detected.preco,
-        custo: detected.custo,
-        estoque: detected.estoque,
-        cor: detected.cor,
-        tamanho: detected.tamanho,
-      });
-      
+      const detected = multiFileParser.autoDetectColumns(result.columns);
+      setMapeamento(detected);
       setEtapa('mapeamento');
-      toast.success(`${result.data.length.toLocaleString('pt-BR')} produtos encontrados`);
+      toast.success(`${result.data.length.toLocaleString('pt-BR')} produtos encontrados em ${result.arquivos.length} arquivo(s)`);
     },
     onError: (error) => {
-      toast.error(`Erro ao ler arquivo: ${error.message}`);
+      toast.error(`Erro ao ler arquivos: ${error.message}`);
     }
   });
 
+  // Hook de classificação
   const classificadorWorker = useClassificadorWorker({
-    batchSize: 500, // Processa 500 por vez
-    dbBatchSize: 100, // Salva 100 por vez no banco
+    batchSize: 500,
+    dbBatchSize: 100,
     onComplete: async (stats) => {
-      // Atualiza estatísticas da sessão
       if (sessaoId) {
         await supabase
           .from('sessoes_importacao')
@@ -276,22 +236,22 @@ export default function ClassificadorProdutos() {
     },
   });
 
-  // Processar arquivo com hook otimizado
-  const processarArquivo = useCallback((file: File) => {
-    spreadsheetParser.parseFile(file);
-  }, [spreadsheetParser]);
+  // Estatísticas de grade
+  const estatisticasGrade = useMemo(() => {
+    if (!mapeamento.referencia || multiFileParser.dados.length === 0) return undefined;
+    return multiFileParser.calcularEstatisticasGrade(multiFileParser.dados, mapeamento);
+  }, [multiFileParser.dados, mapeamento, multiFileParser.calcularEstatisticasGrade]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: (files) => files[0] && processarArquivo(files[0]),
-    accept: {
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-      'application/vnd.ms-excel': ['.xls'],
-      'text/csv': ['.csv'],
-    },
-    multiple: false,
-  });
+  // Avançar para processamento
+  const avancarParaProcessamento = async () => {
+    if (multiFileParser.arquivos.length === 0) {
+      toast.error('Adicione ao menos um arquivo');
+      return;
+    }
+    await multiFileParser.parseAllFiles();
+  };
 
-  // Executar classificação otimizada
+  // Executar classificação
   const executarClassificacao = async () => {
     if (!mapeamento.nome) {
       toast.error('Selecione a coluna de nome do produto');
@@ -302,14 +262,16 @@ export default function ClassificadorProdutos() {
     setSaveProgress(null);
 
     try {
-      // Upload do arquivo original para o storage
+      // Upload dos arquivos originais para o storage
       let arquivoStoragePath: string | null = null;
-      if (arquivoOriginal) {
+      const primeiroArquivo = multiFileParser.arquivosOriginais[0];
+      
+      if (primeiroArquivo) {
         const timestamp = Date.now();
-        const fileName = `${timestamp}_${arquivoNome}`;
+        const fileName = `${timestamp}_${primeiroArquivo.name}`;
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('planilhas-importacao')
-          .upload(fileName, arquivoOriginal);
+          .upload(fileName, primeiroArquivo);
         
         if (uploadError) {
           console.warn('Não foi possível salvar o arquivo original:', uploadError);
@@ -319,16 +281,17 @@ export default function ClassificadorProdutos() {
       }
 
       // Criar sessão de importação
+      const nomeArquivos = multiFileParser.arquivos.map(a => a.nome).join(', ');
       const { data: sessao, error: sessaoError } = await supabase
         .from('sessoes_importacao')
         .insert([{
-          nome: arquivoNome.replace(/\.[^/.]+$/, ''),
-          nome_arquivo: arquivoNome,
-          total_produtos: dadosPlanilha.length,
+          nome: nomeArquivos.length > 100 ? nomeArquivos.slice(0, 100) + '...' : nomeArquivos,
+          nome_arquivo: nomeArquivos,
+          total_produtos: multiFileParser.dados.length,
           mapeamento_colunas: JSON.parse(JSON.stringify(mapeamento)),
           arquivo_storage_path: arquivoStoragePath,
-          arquivo_mime_type: arquivoOriginal?.type || null,
-          arquivo_tamanho_bytes: arquivoOriginal?.size || null,
+          arquivo_mime_type: primeiroArquivo?.type || null,
+          arquivo_tamanho_bytes: primeiroArquivo?.size || null,
         }])
         .select()
         .single();
@@ -337,7 +300,7 @@ export default function ClassificadorProdutos() {
       setSessaoId(sessao.id);
 
       // Preparar produtos para classificação
-      const produtos: ProdutoImportado[] = dadosPlanilha.map(row => ({
+      const produtos: ProdutoImportado[] = multiFileParser.dados.map(row => ({
         nome: String(row[mapeamento.nome] || ''),
         codigo: mapeamento.codigo ? String(row[mapeamento.codigo] || '') : undefined,
         preco: mapeamento.preco ? Number(row[mapeamento.preco]) || 0 : undefined,
@@ -345,9 +308,11 @@ export default function ClassificadorProdutos() {
         estoque: mapeamento.estoque ? Number(row[mapeamento.estoque]) || 0 : undefined,
         cor: mapeamento.cor ? String(row[mapeamento.cor] || '') : undefined,
         tamanho: mapeamento.tamanho ? String(row[mapeamento.tamanho] || '') : undefined,
+        // Campo adicional para referência (grade)
+        referencia: mapeamento.referencia ? String(row[mapeamento.referencia] || '') : undefined,
       }));
 
-      // Executar classificação com worker
+      // Executar classificação
       const resultados = await classificadorWorker.classificar(produtos, regras, atributos);
       
       if (resultados.length === 0) {
@@ -358,9 +323,8 @@ export default function ClassificadorProdutos() {
 
       setProdutosClassificados(resultados);
 
-      // Salvar no banco em lotes otimizados
+      // Salvar no banco em lotes
       const DB_BATCH_SIZE = 100;
-      const totalBatches = Math.ceil(resultados.length / DB_BATCH_SIZE);
       let savedCount = 0;
 
       setSaveProgress({ percent: 0, saved: 0, total: resultados.length });
@@ -403,7 +367,6 @@ export default function ClassificadorProdutos() {
           total: resultados.length
         });
 
-        // Yield para UI
         await new Promise(r => setTimeout(r, 0));
       }
 
@@ -452,21 +415,17 @@ export default function ClassificadorProdutos() {
 
   const resetar = () => {
     setEtapa('upload');
-    setArquivoNome('');
-    setArquivoOriginal(null);
-    setDadosPlanilha([]);
-    setColunas([]);
-    setMapeamento({ nome: '', codigo: '', preco: '', custo: '', estoque: '', cor: '', tamanho: '' });
+    setMapeamento({ nome: '' });
     setProdutosClassificados([]);
     setSessaoId(null);
     setSaveProgress(null);
-    spreadsheetParser.reset();
+    multiFileParser.reset();
     classificadorWorker.reset();
   };
 
   const cancelarProcessamento = () => {
     classificadorWorker.cancelar();
-    spreadsheetParser.cancel();
+    multiFileParser.cancel();
     setEtapa('mapeamento');
   };
 
@@ -479,13 +438,17 @@ export default function ClassificadorProdutos() {
             <Tags className="h-6 w-6" />
             Classificador de Produtos
           </h1>
-          <p className="text-muted-foreground">
-            Importe planilhas e classifique produtos automaticamente
-            <Badge variant="outline" className="ml-2">
+          <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
+            <span>Importe planilhas e classifique produtos automaticamente</span>
+            <Badge variant="outline">
               <Zap className="h-3 w-3 mr-1" />
               Otimizado para 50k+ linhas
             </Badge>
-          </p>
+            <Badge variant="outline">
+              <Grid3X3 className="h-3 w-3 mr-1" />
+              Suporte a Grade
+            </Badge>
+          </div>
         </div>
 
         <div className="flex gap-2">
@@ -526,45 +489,46 @@ export default function ClassificadorProdutos() {
       {etapa === 'upload' && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Upload de Planilha
-            </CardTitle>
+            <CardTitle>Upload de Planilhas</CardTitle>
             <CardDescription>
-              Arraste um arquivo Excel (.xlsx, .xls) ou CSV com seus produtos
+              Arraste arquivos Excel, CSV ou XML com seus produtos. 
+              Você pode adicionar múltiplos arquivos que serão unificados.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div
-              {...getRootProps()}
-              className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
-                isDragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'
-              }`}
-            >
-              <input {...getInputProps()} />
-              <FileSpreadsheet className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-lg font-medium mb-1">
-                {isDragActive ? 'Solte o arquivo aqui' : 'Arraste sua planilha ou clique para selecionar'}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Suporta .xlsx, .xls e .csv • Otimizado para arquivos grandes (50k+ linhas)
-              </p>
-            </div>
+          <CardContent className="space-y-4">
+            <ImportadorProdutosUpload
+              arquivos={multiFileParser.arquivos}
+              onAddFiles={multiFileParser.addFiles}
+              onRemoveFile={multiFileParser.removeFile}
+              isParsing={multiFileParser.isParsing}
+              parseProgress={multiFileParser.isParsing ? {
+                percent: multiFileParser.progress.percent,
+                message: multiFileParser.progress.message
+              } : undefined}
+            />
 
-            {/* Progress de parsing */}
-            {spreadsheetParser.isParsing && (
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">{spreadsheetParser.progress.message}</span>
-                </div>
-                <Progress value={spreadsheetParser.progress.percent} />
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                <Badge variant="outline">{regras.length} regras ativas</Badge>
+                <Badge variant="outline">{atributos.length} atributos configurados</Badge>
               </div>
-            )}
-
-            <div className="mt-6 flex items-center gap-4">
-              <Badge variant="outline">{regras.length} regras ativas</Badge>
-              <Badge variant="outline">{atributos.length} atributos configurados</Badge>
+              
+              <Button 
+                onClick={avancarParaProcessamento}
+                disabled={multiFileParser.arquivos.length === 0 || multiFileParser.isParsing}
+              >
+                {multiFileParser.isParsing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processando...
+                  </>
+                ) : (
+                  <>
+                    Processar Arquivos
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -574,98 +538,19 @@ export default function ClassificadorProdutos() {
       {etapa === 'mapeamento' && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileSpreadsheet className="h-5 w-5" />
-              Mapeamento de Colunas
-            </CardTitle>
+            <CardTitle>Mapeamento de Colunas</CardTitle>
             <CardDescription>
-              {arquivoNome} • {dadosPlanilha.length.toLocaleString('pt-BR')} produtos encontrados
-              {dadosPlanilha.length > 10000 && (
-                <Badge variant="secondary" className="ml-2">
-                  <AlertCircle className="h-3 w-3 mr-1" />
-                  Arquivo grande - processamento otimizado
-                </Badge>
-              )}
+              {multiFileParser.arquivos.length} arquivo(s) • {multiFileParser.dados.length.toLocaleString('pt-BR')} produtos encontrados
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <Label>Nome do Produto *</Label>
-                <Select
-                  value={mapeamento.nome}
-                  onValueChange={(v) => setMapeamento({ ...mapeamento, nome: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {colunas.map(col => (
-                      <SelectItem key={col} value={col}>{col}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Código (opcional)</Label>
-                <Select
-                  value={mapeamento.codigo || 'none'}
-                  onValueChange={(v) => setMapeamento({ ...mapeamento, codigo: v === 'none' ? undefined : v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {colunas.map(col => (
-                      <SelectItem key={col} value={col}>{col}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Preço (opcional)</Label>
-                <Select
-                  value={mapeamento.preco || 'none'}
-                  onValueChange={(v) => setMapeamento({ ...mapeamento, preco: v === 'none' ? undefined : v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {colunas.map(col => (
-                      <SelectItem key={col} value={col}>{col}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Preview */}
-            <div>
-              <h4 className="font-medium mb-2">Prévia (5 primeiros)</h4>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {mapeamento.codigo && <TableHead>Código</TableHead>}
-                      <TableHead>Nome</TableHead>
-                      {mapeamento.preco && <TableHead>Preço</TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dadosPlanilha.slice(0, 5).map((row, idx) => (
-                      <TableRow key={idx}>
-                        {mapeamento.codigo && <TableCell>{String(row[mapeamento.codigo] || '')}</TableCell>}
-                        <TableCell className="font-medium">{String(row[mapeamento.nome] || '')}</TableCell>
-                        {mapeamento.preco && <TableCell>{String(row[mapeamento.preco] || '')}</TableCell>}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+            <ImportadorProdutosMapeamento
+              colunas={multiFileParser.colunas}
+              mapeamento={mapeamento}
+              onMapeamentoChange={setMapeamento}
+              dadosPrevia={multiFileParser.dados}
+              estatisticasGrade={estatisticasGrade || undefined}
+            />
 
             <div className="flex gap-2 justify-between">
               <Button variant="outline" onClick={() => setEtapa('upload')}>
@@ -674,9 +559,9 @@ export default function ClassificadorProdutos() {
               </Button>
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={resetar}>Cancelar</Button>
-                <Button onClick={executarClassificacao}>
+                <Button onClick={executarClassificacao} disabled={!mapeamento.nome}>
                   <Play className="h-4 w-4 mr-2" />
-                  Classificar {dadosPlanilha.length.toLocaleString('pt-BR')} Produtos
+                  Classificar {multiFileParser.dados.length.toLocaleString('pt-BR')} Produtos
                 </Button>
               </div>
             </div>
@@ -684,11 +569,10 @@ export default function ClassificadorProdutos() {
         </Card>
       )}
 
-      {/* Etapa 3: Classificando (UI otimizada) */}
+      {/* Etapa 3: Classificando */}
       {etapa === 'classificacao' && classificadorWorker.isProcessing && (
         <ProgressoDetalhado 
           progress={classificadorWorker.progress}
-          parseProgress={spreadsheetParser.progress.phase !== 'idle' ? spreadsheetParser.progress : undefined}
           saveProgress={saveProgress || undefined}
           onCancel={cancelarProcessamento}
         />
@@ -774,7 +658,7 @@ export default function ClassificadorProdutos() {
   );
 }
 
-// Componente de tabela reutilizável com virtualização implícita (mostra apenas 100)
+// Componente de tabela com paginação
 function TabelaProdutos({ produtos }: { produtos: ProdutoClassificado[] }) {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 100;
