@@ -96,9 +96,20 @@ export function useMultiFileProdutosParser(options: UseMultiFileProdutosParserOp
     throw new Error('Formato XML não reconhecido');
   };
 
-  // Parse de arquivo Excel/CSV
-  const parseSpreadsheet = async (file: File): Promise<Record<string, unknown>[]> => {
+  // Parse de arquivo Excel/CSV com processamento assíncrono para arquivos grandes
+  const parseSpreadsheet = async (
+    file: File,
+    onProgress?: (percent: number) => void
+  ): Promise<Record<string, unknown>[]> => {
+    // Yield antes de começar operação pesada
+    await new Promise((r) => setTimeout(r, 0));
+    
     const arrayBuffer = await file.arrayBuffer();
+    
+    // Yield após leitura do arquivo
+    await new Promise((r) => setTimeout(r, 0));
+    onProgress?.(20);
+    
     const workbook = XLSX.read(arrayBuffer, {
       type: 'array',
       cellDates: true,
@@ -106,14 +117,45 @@ export function useMultiFileProdutosParser(options: UseMultiFileProdutosParserOp
       cellText: false,
       dense: true,
     });
+    
+    // Yield após parsing do workbook
+    await new Promise((r) => setTimeout(r, 0));
+    onProgress?.(50);
 
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     
-    return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+    // Yield antes de conversão para JSON
+    await new Promise((r) => setTimeout(r, 0));
+    onProgress?.(70);
+    
+    const allData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
       defval: '',
       raw: true,
     });
+    
+    // Para arquivos grandes, processar em chunks para dar yield à UI
+    const CHUNK_SIZE = 5000;
+    if (allData.length > CHUNK_SIZE) {
+      const results: Record<string, unknown>[] = [];
+      for (let i = 0; i < allData.length; i += CHUNK_SIZE) {
+        if (abortRef.current) break;
+        
+        const chunk = allData.slice(i, i + CHUNK_SIZE);
+        results.push(...chunk);
+        
+        const chunkProgress = 70 + Math.round((i / allData.length) * 30);
+        onProgress?.(chunkProgress);
+        
+        // Yield à UI thread a cada chunk
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      onProgress?.(100);
+      return results;
+    }
+    
+    onProgress?.(100);
+    return allData;
   };
 
   // Adiciona arquivos
@@ -170,7 +212,17 @@ export function useMultiFileProdutosParser(options: UseMultiFileProdutosParserOp
           if (arquivo.tipo === 'xml') {
             dados = await parseXML(arquivo.file);
           } else {
-            dados = await parseSpreadsheet(arquivo.file);
+            dados = await parseSpreadsheet(arquivo.file, (filePercent) => {
+              const overallPercent = Math.round(
+                ((i + filePercent / 100) / arquivos.length) * 80
+              );
+              setProgress({
+                phase: 'parsing',
+                percent: overallPercent,
+                message: `Processando ${arquivo.nome}... ${filePercent}%`,
+                currentFile: arquivo.nome,
+              });
+            });
           }
           
           // Primeira planilha define as colunas base
@@ -204,17 +256,37 @@ export function useMultiFileProdutosParser(options: UseMultiFileProdutosParserOp
       
       setProgress({ phase: 'merging', percent: 90, message: 'Mesclando dados...' });
       
-      // Mescla colunas de todos os arquivos
+      // Mescla colunas de todos os arquivos (processamento em chunks para arquivos grandes)
       if (todosOsDados.length > 0) {
         const todasColunas = new Set<string>();
-        todosOsDados.forEach((row) => {
-          Object.keys(row).forEach((col) => {
-            if (!col.startsWith('__')) todasColunas.add(col);
+        const MERGE_CHUNK = 5000;
+        
+        for (let i = 0; i < todosOsDados.length; i += MERGE_CHUNK) {
+          if (abortRef.current) return;
+          
+          const chunk = todosOsDados.slice(i, i + MERGE_CHUNK);
+          chunk.forEach((row) => {
+            Object.keys(row).forEach((col) => {
+              if (!col.startsWith('__')) todasColunas.add(col);
+            });
           });
-        });
+          
+          const mergePercent = 90 + Math.round((i / todosOsDados.length) * 8);
+          setProgress({ 
+            phase: 'merging', 
+            percent: mergePercent, 
+            message: `Mesclando dados... ${Math.round((i / todosOsDados.length) * 100)}%`
+          });
+          
+          // Yield à UI
+          await new Promise((r) => setTimeout(r, 0));
+        }
+        
         colunasBase = Array.from(todasColunas);
       }
       
+      // Yield antes de setar dados grandes
+      await new Promise((r) => setTimeout(r, 0));
       setDados(todosOsDados);
       setColunas(colunasBase);
       
