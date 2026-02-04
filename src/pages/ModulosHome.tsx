@@ -10,7 +10,8 @@ import {
   FileText,
   Brain,
   ArrowRight,
-  Tags
+  Tags,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -119,6 +120,13 @@ const modules: ModuleCardProps[] = [
     icon: FileText,
     href: '/relatorios',
     color: 'bg-gradient-to-br from-cyan-500 to-cyan-600'
+  },
+  {
+    title: 'Unificador de Planilhas',
+    description: 'Una múltiplas planilhas XLSX/CSV em um único arquivo',
+    icon: FileSpreadsheet,
+    href: '/ferramentas/unificador-planilhas',
+    color: 'bg-gradient-to-br from-teal-500 to-teal-600'
   },
   {
     title: 'Cérebro IA',
