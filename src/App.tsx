@@ -34,6 +34,7 @@ import ClassificadorProdutos from "./pages/produtos/ClassificadorProdutos";
 import RegrasClassificacao from "./pages/produtos/RegrasClassificacao";
 import DashboardProdutos from "./pages/produtos/DashboardProdutos";
 import ListaProdutos from "./pages/produtos/ListaProdutos";
+import ShopifyIntegration from "./pages/ecommerce/ShopifyIntegration";
 
 const queryClient = new QueryClient();
 
@@ -98,6 +99,9 @@ const App = () => (
             {/* Módulos futuros - placeholders */}
             <Route path="estoque" element={<PlaceholderModule title="Estoque" />} />
             <Route path="crm" element={<PlaceholderModule title="CRM / Clientes" />} />
+            
+            {/* E-commerce / Shopify */}
+            <Route path="ecommerce/shopify" element={<ShopifyIntegration />} />
             <Route path="ecommerce" element={<PlaceholderModule title="E-commerce" />} />
 
             {/* Relatórios */}
