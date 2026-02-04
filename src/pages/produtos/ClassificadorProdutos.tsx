@@ -47,6 +47,55 @@ import { ImportadorProdutosMapeamento, type MapeamentoColunasProduto } from '@/c
 
 type Etapa = 'upload' | 'mapeamento' | 'classificacao' | 'resultado';
 
+// Estado de preparação
+interface PreparacaoProgress {
+  phase: 'uploading' | 'creating_session' | 'preparing_data' | 'ready';
+  message: string;
+  percent: number;
+}
+
+// Componente de progresso de preparação
+function ProgressoPreparacao({ progress }: { progress: PreparacaoProgress }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Preparando Processamento
+        </CardTitle>
+        <CardDescription>
+          Aguarde enquanto preparamos os dados para classificação
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="text-center text-lg font-medium text-primary">
+          {progress.message}
+        </div>
+        
+        <Progress value={progress.percent} className="h-3" />
+        
+        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Badge variant={progress.phase === 'uploading' ? 'default' : 'outline'}>
+            Upload
+          </Badge>
+          <ArrowRight className="h-4 w-4" />
+          <Badge variant={progress.phase === 'creating_session' ? 'default' : 'outline'}>
+            Sessão
+          </Badge>
+          <ArrowRight className="h-4 w-4" />
+          <Badge variant={progress.phase === 'preparing_data' ? 'default' : 'outline'}>
+            Preparar
+          </Badge>
+          <ArrowRight className="h-4 w-4" />
+          <Badge variant={progress.phase === 'ready' ? 'default' : 'outline'}>
+            Classificar
+          </Badge>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Componente de progresso detalhado
 function ProgressoDetalhado({ 
   progress, 
@@ -170,6 +219,7 @@ export default function ClassificadorProdutos() {
   const [produtosClassificados, setProdutosClassificados] = useState<ProdutoClassificado[]>([]);
   const [sessaoId, setSessaoId] = useState<number | null>(null);
   const [saveProgress, setSaveProgress] = useState<{ percent: number; saved: number; total: number } | null>(null);
+  const [preparacaoProgress, setPreparacaoProgress] = useState<PreparacaoProgress | null>(null);
 
   // Hook para parsing de múltiplos arquivos
   const multiFileParser = useMultiFileProdutosParser({
@@ -261,9 +311,10 @@ export default function ClassificadorProdutos() {
 
     setEtapa('classificacao');
     setSaveProgress(null);
+    setPreparacaoProgress({ phase: 'uploading', message: 'Enviando arquivo...', percent: 10 });
 
     try {
-      // Upload dos arquivos originais para o storage
+      // Upload dos arquivos originais para o storage (opcional, não bloqueia)
       let arquivoStoragePath: string | null = null;
       const primeiroArquivo = multiFileParser.arquivosOriginais[0];
       
@@ -280,21 +331,13 @@ export default function ClassificadorProdutos() {
           arquivoStoragePath = uploadData.path;
         }
       }
-
-      // Criar sessão de importação com dados originais completos
-      const nomeArquivos = multiFileParser.arquivos.map(a => a.nome).join(', ');
       
-      // Armazenar dados originais completos (todas as colunas)
-      const dadosOriginaisCompletos = multiFileParser.dados.map(row => {
-        // Remover apenas campos internos como __origem_arquivo
-        const rowLimpa: Record<string, unknown> = {};
-        Object.entries(row).forEach(([key, value]) => {
-          if (!key.startsWith('__')) {
-            rowLimpa[key] = value;
-          }
-        });
-        return rowLimpa;
-      });
+      // Yield para atualizar UI
+      await new Promise(r => setTimeout(r, 0));
+      setPreparacaoProgress({ phase: 'creating_session', message: 'Criando sessão de importação...', percent: 30 });
+
+      // Criar sessão de importação (SEM dados_originais para não travar com 110k linhas)
+      const nomeArquivos = multiFileParser.arquivos.map(a => a.nome).join(', ');
 
       const { data: sessao, error: sessaoError } = await supabase
         .from('sessoes_importacao')
@@ -306,30 +349,65 @@ export default function ClassificadorProdutos() {
           arquivo_storage_path: arquivoStoragePath,
           arquivo_mime_type: primeiroArquivo?.type || null,
           arquivo_tamanho_bytes: primeiroArquivo?.size || null,
-          // Armazenar nomes de todas as colunas originais
           colunas_originais: multiFileParser.colunas,
-          // Armazenar todos os dados originais completos
-          dados_originais: JSON.parse(JSON.stringify(dadosOriginaisCompletos)) as Json,
+          // NÃO salvar dados_originais aqui para evitar travar com 110k+ linhas
+          // Os dados originais são preservados nos produtos individuais
+          dados_originais: null,
         }])
         .select()
         .single();
 
       if (sessaoError) throw sessaoError;
       setSessaoId(sessao.id);
+      
+      // Yield para atualizar UI
+      await new Promise(r => setTimeout(r, 0));
+      setPreparacaoProgress({ phase: 'preparing_data', message: 'Preparando dados para classificação...', percent: 50 });
 
-      // Preparar produtos para classificação (mantendo dados originais completos)
-      const produtos: ProdutoImportado[] = multiFileParser.dados.map((row, index) => ({
-        nome: String(row[mapeamento.nome] || ''),
-        codigo: mapeamento.codigo ? String(row[mapeamento.codigo] || '') : undefined,
-        preco: mapeamento.preco ? Number(row[mapeamento.preco]) || 0 : undefined,
-        custo: mapeamento.custo ? Number(row[mapeamento.custo]) || 0 : undefined,
-        estoque: mapeamento.estoque ? Number(row[mapeamento.estoque]) || 0 : undefined,
-        cor: mapeamento.cor ? String(row[mapeamento.cor] || '') : undefined,
-        tamanho: mapeamento.tamanho ? String(row[mapeamento.tamanho] || '') : undefined,
-        referencia: mapeamento.referencia ? String(row[mapeamento.referencia] || '') : undefined,
-        // Preservar TODOS os dados originais da linha
-        dados_originais: dadosOriginaisCompletos[index],
-      }));
+      // Preparar produtos para classificação em chunks para não travar UI
+      const PREP_CHUNK_SIZE = 5000;
+      const produtos: ProdutoImportado[] = [];
+      
+      for (let i = 0; i < multiFileParser.dados.length; i += PREP_CHUNK_SIZE) {
+        const chunk = multiFileParser.dados.slice(i, i + PREP_CHUNK_SIZE);
+        
+        for (const row of chunk) {
+          // Limpar campos internos
+          const dadosOriginais: Record<string, unknown> = {};
+          Object.entries(row).forEach(([key, value]) => {
+            if (!key.startsWith('__')) {
+              dadosOriginais[key] = value;
+            }
+          });
+          
+          produtos.push({
+            nome: String(row[mapeamento.nome] || ''),
+            codigo: mapeamento.codigo ? String(row[mapeamento.codigo] || '') : undefined,
+            preco: mapeamento.preco ? Number(row[mapeamento.preco]) || 0 : undefined,
+            custo: mapeamento.custo ? Number(row[mapeamento.custo]) || 0 : undefined,
+            estoque: mapeamento.estoque ? Number(row[mapeamento.estoque]) || 0 : undefined,
+            cor: mapeamento.cor ? String(row[mapeamento.cor] || '') : undefined,
+            tamanho: mapeamento.tamanho ? String(row[mapeamento.tamanho] || '') : undefined,
+            referencia: mapeamento.referencia ? String(row[mapeamento.referencia] || '') : undefined,
+            dados_originais: dadosOriginais,
+          });
+        }
+        
+        // Yield para atualizar UI
+        const prepPercent = 50 + Math.round((i / multiFileParser.dados.length) * 30);
+        setPreparacaoProgress({ 
+          phase: 'preparing_data', 
+          message: `Preparando ${produtos.length.toLocaleString('pt-BR')} de ${multiFileParser.dados.length.toLocaleString('pt-BR')}...`, 
+          percent: prepPercent 
+        });
+        await new Promise(r => setTimeout(r, 0));
+      }
+      
+      setPreparacaoProgress({ phase: 'ready', message: 'Iniciando classificação...', percent: 90 });
+      await new Promise(r => setTimeout(r, 0));
+
+      // Limpar progresso de preparação - agora a classificação vai mostrar seu próprio progresso
+      setPreparacaoProgress(null);
 
       // Executar classificação
       const resultados = await classificadorWorker.classificar(produtos, regras, atributos);
@@ -438,6 +516,7 @@ export default function ClassificadorProdutos() {
     setProdutosClassificados([]);
     setSessaoId(null);
     setSaveProgress(null);
+    setPreparacaoProgress(null);
     multiFileParser.reset();
     classificadorWorker.reset();
   };
@@ -445,6 +524,7 @@ export default function ClassificadorProdutos() {
   const cancelarProcessamento = () => {
     classificadorWorker.cancelar();
     multiFileParser.cancel();
+    setPreparacaoProgress(null);
     setEtapa('mapeamento');
   };
 
@@ -589,12 +669,26 @@ export default function ClassificadorProdutos() {
       )}
 
       {/* Etapa 3: Classificando */}
-      {etapa === 'classificacao' && classificadorWorker.isProcessing && (
+      {etapa === 'classificacao' && preparacaoProgress && (
+        <ProgressoPreparacao progress={preparacaoProgress} />
+      )}
+      
+      {etapa === 'classificacao' && !preparacaoProgress && classificadorWorker.isProcessing && (
         <ProgressoDetalhado 
           progress={classificadorWorker.progress}
           saveProgress={saveProgress || undefined}
           onCancel={cancelarProcessamento}
         />
+      )}
+      
+      {/* Tela de loading caso esteja classificando mas sem progresso ativo */}
+      {etapa === 'classificacao' && !preparacaoProgress && !classificadorWorker.isProcessing && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+            <p className="text-muted-foreground">Iniciando processamento...</p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Etapa 4: Resultado */}
