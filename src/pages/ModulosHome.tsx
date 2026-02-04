@@ -100,12 +100,11 @@ const modules: ModuleCardProps[] = [
     badge: 'Em breve'
   },
   {
-    title: 'E-commerce',
-    description: 'Loja online integrada com estoque e vendas',
+    title: 'E-commerce / Shopify',
+    description: 'Produtos e estoque sincronizados com sua loja Shopify',
     icon: ShoppingBag,
-    href: '/ecommerce',
-    color: 'bg-gradient-to-br from-indigo-500 to-indigo-600',
-    badge: 'Em breve'
+    href: '/ecommerce/shopify',
+    color: 'bg-gradient-to-br from-indigo-500 to-indigo-600'
   },
   {
     title: 'Cadastros',
