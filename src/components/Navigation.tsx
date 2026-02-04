@@ -65,8 +65,14 @@ const navigationItems = [
   },
   {
     title: 'Produtos',
-    href: '/produtos',
     icon: Package,
+    submenu: [
+      { title: 'Lista de Produtos', href: '/produtos/lista' },
+      { title: 'Classificador', href: '/produtos/classificador' },
+      { title: 'Categorias', href: '/produtos/categorias' },
+      { title: 'Regras', href: '/produtos/regras' },
+      { title: 'Dashboard', href: '/produtos/dashboard' },
+    ],
   },
   {
     title: 'Relatórios',
