@@ -36,6 +36,7 @@ import {
   Zap,
   Database,
   Grid3X3,
+  Package,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { type RegraClassificacao, type AtributoCustomizado } from '@/lib/classificador';
@@ -551,6 +552,12 @@ export default function ClassificadorProdutos() {
         </div>
 
         <div className="flex gap-2">
+          <Button variant="default" asChild>
+            <Link to="/produtos/lista">
+              <Package className="h-4 w-4 mr-2" />
+              Ver Produtos Cadastrados
+            </Link>
+          </Button>
           <Button variant="outline" asChild>
             <Link to="/produtos/regras">
               <Settings2 className="h-4 w-4 mr-2" />
