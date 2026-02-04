@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,17 +14,14 @@ import {
   RefreshCw, 
   Package, 
   Store, 
-  TrendingUp, 
   Search, 
-  Edit2, 
+  Eye,
   AlertCircle,
-  CheckCircle,
-  ExternalLink,
   ImageOff
 } from 'lucide-react';
 
 export default function ShopifyIntegration() {
-  const { loading, error, getProducts, getLocations, updateInventory, getProductsCount } = useShopify();
+  const { loading, error, getProducts, getLocations, getProductsCount } = useShopify();
   
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [locations, setLocations] = useState<ShopifyLocation[]>([]);
@@ -32,17 +29,6 @@ export default function ShopifyIntegration() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // Estado para edição de estoque
-  const [editingVariant, setEditingVariant] = useState<{
-    productTitle: string;
-    variantId: number;
-    variantTitle: string;
-    inventoryItemId: number;
-    currentQty: number;
-  } | null>(null);
-  const [newQty, setNewQty] = useState('');
-  const [updatingInventory, setUpdatingInventory] = useState(false);
 
   // Carrega dados iniciais
   useEffect(() => {
@@ -82,32 +68,6 @@ export default function ShopifyIntegration() {
     toast.info('Sincronizando produtos...');
     await loadInitialData();
     toast.success('Produtos sincronizados!');
-  };
-
-  const handleUpdateInventory = async () => {
-    if (!editingVariant || !selectedLocation || newQty === '') return;
-
-    setUpdatingInventory(true);
-    try {
-      const result = await updateInventory(
-        editingVariant.inventoryItemId,
-        selectedLocation,
-        parseInt(newQty, 10)
-      );
-
-      if (result) {
-        toast.success('Estoque atualizado com sucesso!');
-        setEditingVariant(null);
-        setNewQty('');
-        await loadInitialData();
-      } else {
-        toast.error('Erro ao atualizar estoque');
-      }
-    } catch (err) {
-      toast.error('Erro ao atualizar estoque');
-    } finally {
-      setUpdatingInventory(false);
-    }
   };
 
   const filteredProducts = products.filter(product =>
@@ -156,7 +116,7 @@ export default function ShopifyIntegration() {
             Integração Shopify
           </h1>
           <p className="text-muted-foreground mt-1">
-            Gerencie produtos e estoque da sua loja
+            Visualize produtos e estoque da sua loja (somente leitura)
           </p>
         </div>
         <div className="flex gap-2">
@@ -289,7 +249,7 @@ export default function ShopifyIntegration() {
                     <TableHead className="text-center">Variantes</TableHead>
                     <TableHead className="text-right">Estoque Total</TableHead>
                     <TableHead className="text-right">Preço</TableHead>
-                    <TableHead className="w-[100px]">Ações</TableHead>
+                    <TableHead className="w-[80px]">Detalhes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -332,11 +292,11 @@ export default function ShopifyIntegration() {
                             <Badge variant="secondary">{product.variants.length}</Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                                      <div className="flex items-center justify-end gap-2">
-                                              {hasLowStock && (
-                                                <AlertCircle className="h-4 w-4 text-destructive" />
-                                              )}
-                                              <span className={hasLowStock ? 'text-destructive font-medium' : ''}>
+                            <div className="flex items-center justify-end gap-2">
+                              {hasLowStock && (
+                                <AlertCircle className="h-4 w-4 text-destructive" />
+                              )}
+                              <span className={hasLowStock ? 'text-destructive font-medium' : ''}>
                                 {totalStock}
                               </span>
                             </div>
@@ -348,13 +308,13 @@ export default function ShopifyIntegration() {
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button variant="ghost" size="sm">
-                                  <Edit2 className="h-4 w-4" />
+                                  <Eye className="h-4 w-4" />
                                 </Button>
                               </DialogTrigger>
                               <DialogContent className="max-w-2xl">
                                 <DialogHeader>
                                   <DialogTitle>{product.title}</DialogTitle>
-                                  <DialogDescription>Gerencie o estoque das variantes</DialogDescription>
+                                  <DialogDescription>Detalhes das variantes (somente visualização)</DialogDescription>
                                 </DialogHeader>
                                 <div className="space-y-4 max-h-[400px] overflow-y-auto">
                                   {product.variants.map((variant) => (
@@ -368,30 +328,11 @@ export default function ShopifyIntegration() {
                                           SKU: {variant.sku || 'N/A'} • Preço: R$ {parseFloat(variant.price).toFixed(2)}
                                         </div>
                                       </div>
-                                      <div className="flex items-center gap-3">
-                                        <Badge
-                                          variant={variant.inventory_quantity <= 5 ? 'destructive' : 'secondary'}
-                                        >
-                                          {variant.inventory_quantity} em estoque
-                                        </Badge>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            setEditingVariant({
-                                              productTitle: product.title,
-                                              variantId: variant.id,
-                                              variantTitle: variant.title,
-                                              inventoryItemId: variant.inventory_item_id,
-                                              currentQty: variant.inventory_quantity,
-                                            });
-                                            setNewQty(variant.inventory_quantity.toString());
-                                          }}
-                                        >
-                                          <Edit2 className="h-3 w-3 mr-1" />
-                                          Editar
-                                        </Button>
-                                      </div>
+                                      <Badge
+                                        variant={variant.inventory_quantity <= 5 ? 'destructive' : 'secondary'}
+                                      >
+                                        {variant.inventory_quantity} em estoque
+                                      </Badge>
                                     </div>
                                   ))}
                                 </div>
@@ -408,53 +349,6 @@ export default function ShopifyIntegration() {
           )}
         </CardContent>
       </Card>
-
-      {/* Modal de edição de estoque */}
-      <Dialog open={!!editingVariant} onOpenChange={(open) => !open && setEditingVariant(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Atualizar Estoque</DialogTitle>
-            <DialogDescription>
-              {editingVariant?.productTitle} - {editingVariant?.variantTitle}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Quantidade atual</Label>
-              <div className="text-2xl font-bold">{editingVariant?.currentQty}</div>
-            </div>
-            <div>
-              <Label htmlFor="newQty">Nova quantidade</Label>
-              <Input
-                id="newQty"
-                type="number"
-                min="0"
-                value={newQty}
-                onChange={(e) => setNewQty(e.target.value)}
-                placeholder="Digite a nova quantidade"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingVariant(null)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleUpdateInventory} disabled={updatingInventory || !newQty}>
-              {updatingInventory ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Atualizando...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Salvar
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
