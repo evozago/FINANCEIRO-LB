@@ -1,11 +1,11 @@
 /**
  * Hook para parsing de múltiplos arquivos de produtos (XLSX, XLS, CSV, XML)
- * Unifica todos os dados em uma única lista com detecção de grade por referência
+ * Usa Web Worker para evitar travamento da UI em arquivos grandes
  */
-import { useState, useCallback, useRef } from 'react';
-import * as XLSX from 'xlsx';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ArquivoImportacao } from '@/components/produtos/ImportadorProdutosUpload';
 import type { MapeamentoColunasProduto } from '@/components/produtos/ImportadorProdutosMapeamento';
+import type { SpreadsheetWorkerMessage, SpreadsheetWorkerResponse } from '@/workers/spreadsheet.worker';
 
 export interface MultiFileParseProgress {
   phase: 'idle' | 'parsing' | 'merging' | 'complete' | 'error';
@@ -41,6 +41,20 @@ export function useMultiFileProdutosParser(options: UseMultiFileProdutosParserOp
   const [arquivosOriginais, setArquivosOriginais] = useState<File[]>([]);
   
   const abortRef = useRef(false);
+  const workerRef = useRef<Worker | null>(null);
+
+  // Cria o worker uma vez
+  useEffect(() => {
+    workerRef.current = new Worker(
+      new URL('@/workers/spreadsheet.worker.ts', import.meta.url),
+      { type: 'module' }
+    );
+
+    return () => {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+    };
+  }, []);
 
   // Detecta tipo do arquivo
   const detectFileType = (file: File): ArquivoImportacao['tipo'] => {
@@ -52,110 +66,56 @@ export function useMultiFileProdutosParser(options: UseMultiFileProdutosParserOp
     return 'xlsx';
   };
 
-  // Parse de arquivo XML (NFe ou lista de produtos)
-  const parseXML = async (file: File): Promise<Record<string, unknown>[]> => {
-    const text = await file.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, 'text/xml');
-    
-    // Detecta se é NFe ou lista genérica
-    const nfeNodes = doc.querySelectorAll('det');
-    if (nfeNodes.length > 0) {
-      // É uma NFe - extrai os produtos
-      const produtos: Record<string, unknown>[] = [];
-      nfeNodes.forEach((det) => {
-        const prod = det.querySelector('prod');
-        if (prod) {
-          produtos.push({
-            codigo: prod.querySelector('cProd')?.textContent || '',
-            nome: prod.querySelector('xProd')?.textContent || '',
-            ncm: prod.querySelector('NCM')?.textContent || '',
-            cfop: prod.querySelector('CFOP')?.textContent || '',
-            unidade: prod.querySelector('uCom')?.textContent || '',
-            quantidade: parseFloat(prod.querySelector('qCom')?.textContent || '0'),
-            preco: parseFloat(prod.querySelector('vUnCom')?.textContent || '0'),
-            total: parseFloat(prod.querySelector('vProd')?.textContent || '0'),
-          });
-        }
-      });
-      return produtos;
-    }
-
-    // Tenta parse genérico de lista de produtos
-    const productNodes = doc.querySelectorAll('produto, item, product');
-    if (productNodes.length > 0) {
-      return Array.from(productNodes).map((node) => {
-        const obj: Record<string, unknown> = {};
-        Array.from(node.children).forEach((child) => {
-          obj[child.tagName] = child.textContent;
-        });
-        return obj;
-      });
-    }
-
-    throw new Error('Formato XML não reconhecido');
-  };
-
-  // Parse de arquivo Excel/CSV com processamento assíncrono para arquivos grandes
-  const parseSpreadsheet = async (
-    file: File,
-    onProgress?: (percent: number) => void
-  ): Promise<Record<string, unknown>[]> => {
-    // Yield antes de começar operação pesada
-    await new Promise((r) => setTimeout(r, 0));
-    
-    const arrayBuffer = await file.arrayBuffer();
-    
-    // Yield após leitura do arquivo
-    await new Promise((r) => setTimeout(r, 0));
-    onProgress?.(20);
-    
-    const workbook = XLSX.read(arrayBuffer, {
-      type: 'array',
-      cellDates: true,
-      cellNF: false,
-      cellText: false,
-      dense: true,
-    });
-    
-    // Yield após parsing do workbook
-    await new Promise((r) => setTimeout(r, 0));
-    onProgress?.(50);
-
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    
-    // Yield antes de conversão para JSON
-    await new Promise((r) => setTimeout(r, 0));
-    onProgress?.(70);
-    
-    const allData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
-      defval: '',
-      raw: true,
-    });
-    
-    // Para arquivos grandes, processar em chunks para dar yield à UI
-    const CHUNK_SIZE = 5000;
-    if (allData.length > CHUNK_SIZE) {
-      const results: Record<string, unknown>[] = [];
-      for (let i = 0; i < allData.length; i += CHUNK_SIZE) {
-        if (abortRef.current) break;
-        
-        const chunk = allData.slice(i, i + CHUNK_SIZE);
-        results.push(...chunk);
-        
-        const chunkProgress = 70 + Math.round((i / allData.length) * 30);
-        onProgress?.(chunkProgress);
-        
-        // Yield à UI thread a cada chunk
-        await new Promise((r) => setTimeout(r, 0));
+  // Parseia um arquivo usando o Web Worker
+  const parseFileWithWorker = (file: File, fileType: ArquivoImportacao['tipo']): Promise<{ data: Record<string, unknown>[]; columns: string[] }> => {
+    return new Promise((resolve, reject) => {
+      if (!workerRef.current) {
+        reject(new Error('Worker não disponível'));
+        return;
       }
-      onProgress?.(100);
-      return results;
-    }
-    
-    onProgress?.(100);
-    return allData;
+
+      const handleMessage = (event: MessageEvent<SpreadsheetWorkerResponse>) => {
+        if (abortRef.current) {
+          workerRef.current?.removeEventListener('message', handleMessage);
+          reject(new Error('Cancelado'));
+          return;
+        }
+
+        const { type, payload } = event.data;
+
+        if (type === 'PROGRESS') {
+          // Atualiza progresso parcial do arquivo
+          setProgress((prev) => ({
+            ...prev,
+            message: payload.message || prev.message,
+          }));
+        } else if (type === 'COMPLETE') {
+          workerRef.current?.removeEventListener('message', handleMessage);
+          resolve({
+            data: payload.data || [],
+            columns: payload.columns || [],
+          });
+        } else if (type === 'ERROR') {
+          workerRef.current?.removeEventListener('message', handleMessage);
+          reject(new Error(payload.error || 'Erro ao processar'));
+        }
+      };
+
+      workerRef.current.addEventListener('message', handleMessage);
+
+      // Lê o arquivo e envia para o worker
+      file.arrayBuffer().then((arrayBuffer) => {
+        const message: SpreadsheetWorkerMessage = {
+          type: 'PARSE_FILE',
+          payload: {
+            arrayBuffer,
+            fileName: file.name,
+            fileType,
+          },
+        };
+        workerRef.current!.postMessage(message, [arrayBuffer]);
+      }).catch(reject);
+    });
   };
 
   // Adiciona arquivos
@@ -178,7 +138,7 @@ export function useMultiFileProdutosParser(options: UseMultiFileProdutosParserOp
     setArquivosOriginais((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  // Processa todos os arquivos
+  // Processa todos os arquivos usando Web Worker
   const parseAllFiles = useCallback(async () => {
     if (arquivos.length === 0) return;
     
@@ -199,47 +159,36 @@ export function useMultiFileProdutosParser(options: UseMultiFileProdutosParserOp
         arquivosAtualizados[i] = { ...arquivo, status: 'parsing' };
         setArquivos([...arquivosAtualizados]);
         
+        const percentBase = Math.round((i / arquivos.length) * 80);
         setProgress({
           phase: 'parsing',
-          percent: Math.round((i / arquivos.length) * 80),
+          percent: percentBase,
           message: `Processando ${arquivo.nome}...`,
           currentFile: arquivo.nome,
         });
         
         try {
-          let dados: Record<string, unknown>[];
-          
-          if (arquivo.tipo === 'xml') {
-            dados = await parseXML(arquivo.file);
-          } else {
-            dados = await parseSpreadsheet(arquivo.file, (filePercent) => {
-              const overallPercent = Math.round(
-                ((i + filePercent / 100) / arquivos.length) * 80
-              );
-              setProgress({
-                phase: 'parsing',
-                percent: overallPercent,
-                message: `Processando ${arquivo.nome}... ${filePercent}%`,
-                currentFile: arquivo.nome,
-              });
-            });
-          }
+          // Usa o Web Worker para parsing
+          const result = await parseFileWithWorker(arquivo.file, arquivo.tipo);
           
           // Primeira planilha define as colunas base
-          if (colunasBase.length === 0 && dados.length > 0) {
-            colunasBase = Object.keys(dados[0]);
+          if (colunasBase.length === 0 && result.columns.length > 0) {
+            colunasBase = result.columns;
           }
           
           // Adiciona marcador de origem
-          dados.forEach((row) => {
+          result.data.forEach((row) => {
             row.__origem_arquivo = arquivo.nome;
           });
           
-          todosOsDados.push(...dados);
+          todosOsDados.push(...result.data);
           
-          arquivosAtualizados[i] = { ...arquivo, status: 'done', linhas: dados.length };
+          arquivosAtualizados[i] = { ...arquivo, status: 'done', linhas: result.data.length };
           setArquivos([...arquivosAtualizados]);
+          
         } catch (err) {
+          if (abortRef.current) return;
+          
           arquivosAtualizados[i] = { 
             ...arquivo, 
             status: 'error', 
@@ -247,35 +196,25 @@ export function useMultiFileProdutosParser(options: UseMultiFileProdutosParserOp
           };
           setArquivos([...arquivosAtualizados]);
         }
-        
-        // Yield para UI
-        await new Promise((r) => setTimeout(r, 0));
       }
       
       if (abortRef.current) return;
       
       setProgress({ phase: 'merging', percent: 90, message: 'Mesclando dados...' });
       
-      // Mescla colunas de todos os arquivos (processamento em chunks para arquivos grandes)
+      // Mescla colunas de todos os arquivos (em chunks para não travar)
       if (todosOsDados.length > 0) {
         const todasColunas = new Set<string>();
-        const MERGE_CHUNK = 5000;
+        const CHUNK = 5000;
         
-        for (let i = 0; i < todosOsDados.length; i += MERGE_CHUNK) {
+        for (let i = 0; i < todosOsDados.length; i += CHUNK) {
           if (abortRef.current) return;
           
-          const chunk = todosOsDados.slice(i, i + MERGE_CHUNK);
+          const chunk = todosOsDados.slice(i, i + CHUNK);
           chunk.forEach((row) => {
             Object.keys(row).forEach((col) => {
               if (!col.startsWith('__')) todasColunas.add(col);
             });
-          });
-          
-          const mergePercent = 90 + Math.round((i / todosOsDados.length) * 8);
-          setProgress({ 
-            phase: 'merging', 
-            percent: mergePercent, 
-            message: `Mesclando dados... ${Math.round((i / todosOsDados.length) * 100)}%`
           });
           
           // Yield à UI
@@ -371,6 +310,10 @@ export function useMultiFileProdutosParser(options: UseMultiFileProdutosParserOp
   // Cancel
   const cancel = useCallback(() => {
     abortRef.current = true;
+    if (workerRef.current) {
+      const message: SpreadsheetWorkerMessage = { type: 'CANCEL' };
+      workerRef.current.postMessage(message);
+    }
     setProgress({ phase: 'idle', percent: 0, message: 'Cancelado' });
   }, []);
 
