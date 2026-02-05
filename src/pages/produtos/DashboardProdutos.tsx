@@ -259,7 +259,7 @@ export default function DashboardProdutos() {
         const batch = produtos.slice(i, i + batchSize);
         
         for (const produto of batch) {
-          const resultado = classificarProduto(produto.nome, regras, atributos);
+          const resultado = classificarProduto(produto, regras, atributos);
           
           await supabase
             .from('produtos')
