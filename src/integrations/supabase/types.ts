@@ -1033,6 +1033,7 @@ export type Database = {
           campo_destino: string
           campos_pesquisa: string[] | null
           categoria_id: number | null
+          condicoes: Json | null
           created_at: string | null
           genero_automatico: string | null
           id: number
@@ -1049,6 +1050,7 @@ export type Database = {
           campo_destino: string
           campos_pesquisa?: string[] | null
           categoria_id?: number | null
+          condicoes?: Json | null
           created_at?: string | null
           genero_automatico?: string | null
           id?: number
@@ -1065,6 +1067,7 @@ export type Database = {
           campo_destino?: string
           campos_pesquisa?: string[] | null
           categoria_id?: number | null
+          condicoes?: Json | null
           created_at?: string | null
           genero_automatico?: string | null
           id?: number

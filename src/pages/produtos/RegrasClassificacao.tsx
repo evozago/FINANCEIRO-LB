@@ -61,6 +61,14 @@ import { normalizarTexto } from '@/lib/classificador';
 type SortKey = 'nome' | 'tipo' | 'termos' | 'valor_destino' | 'pontuacao' | 'ativo';
 type SortDirection = 'asc' | 'desc' | null;
 
+interface Condicao {
+  id: string;
+  tipo: 'contains' | 'exact' | 'startsWith' | 'notContains';
+  termos: string[];
+  operador: 'AND' | 'OR';
+  obrigatorio: boolean;
+}
+
 interface RegraForm {
   nome: string;
   tipo: 'contains' | 'exact' | 'startsWith' | 'containsAll' | 'notContains';
@@ -71,7 +79,9 @@ interface RegraForm {
   pontuacao: number;
   genero_automatico: string;
   ativo: boolean;
-  campos_pesquisa: string[]; // Campos onde pesquisar
+  campos_pesquisa: string[];
+  modoAvancado: boolean; // Alternar entre simples e condições compostas
+  condicoes: Condicao[]; // Condições compostas
 }
 
 const tiposRegra = [
@@ -80,6 +90,13 @@ const tiposRegra = [
   { value: 'startsWith', label: 'Começa com', desc: 'Nome inicia com o termo' },
   { value: 'containsAll', label: 'Contém todos', desc: 'Deve ter TODOS os termos (ideal para conjuntos!)' },
   { value: 'notContains', label: 'Não contém', desc: 'Exclui se tiver o termo' },
+];
+
+const tiposCondicao = [
+  { value: 'contains', label: 'Contém', desc: 'Qualquer um dos termos' },
+  { value: 'exact', label: 'Exato', desc: 'Texto exatamente igual' },
+  { value: 'startsWith', label: 'Começa com', desc: 'Inicia com o termo' },
+  { value: 'notContains', label: 'NÃO contém', desc: 'Exclui se tiver' },
 ];
 
 const camposDestino = [
@@ -98,6 +115,8 @@ const camposPesquisaDisponiveis = [
   { value: 'codigo', label: 'Código/Referência' },
 ];
 
+const gerarId = () => Math.random().toString(36).substring(2, 9);
+
 const initialForm: RegraForm = {
   nome: '',
   tipo: 'contains',
@@ -108,7 +127,9 @@ const initialForm: RegraForm = {
   pontuacao: 100,
   genero_automatico: '',
   ativo: true,
-  campos_pesquisa: ['nome'], // Default: só nome
+  campos_pesquisa: ['nome'],
+  modoAvancado: false,
+  condicoes: [],
 };
 
 export default function RegrasClassificacao() {
@@ -174,6 +195,7 @@ export default function RegrasClassificacao() {
         .map(t => t.trim())
         .filter(Boolean);
 
+      // Base do payload
       const payload = {
         nome: dados.nome,
         tipo: dados.tipo,
@@ -184,8 +206,11 @@ export default function RegrasClassificacao() {
         pontuacao: dados.pontuacao,
         genero_automatico: dados.genero_automatico || null,
         ativo: dados.ativo,
-        ordem: dados.id ? undefined : regras.length,
         campos_pesquisa: dados.campos_pesquisa.length > 0 ? dados.campos_pesquisa : ['nome'],
+        // Condições compostas (modo avançado)
+        condicoes: dados.modoAvancado && dados.condicoes.length > 0 
+          ? JSON.parse(JSON.stringify(dados.condicoes)) 
+          : null,
       };
 
       if (dados.id) {
@@ -197,7 +222,7 @@ export default function RegrasClassificacao() {
       } else {
         const { error } = await supabase
           .from('regras_classificacao')
-          .insert(payload);
+          .insert({ ...payload, ordem: regras.length });
         if (error) throw error;
       }
     },
@@ -229,6 +254,12 @@ export default function RegrasClassificacao() {
 
   const abrirEdicao = (regra: typeof regras[0]) => {
     setEditandoId(regra.id);
+    
+    // Verifica se a regra usa condições compostas
+    const condicoesRaw = (regra as unknown as { condicoes?: unknown }).condicoes;
+    const condicoesDB = Array.isArray(condicoesRaw) ? condicoesRaw as Condicao[] : [];
+    const temCondicoes = condicoesDB.length > 0;
+    
     setForm({
       nome: regra.nome,
       tipo: regra.tipo as RegraForm['tipo'],
@@ -240,20 +271,40 @@ export default function RegrasClassificacao() {
       genero_automatico: regra.genero_automatico || '',
       ativo: regra.ativo ?? true,
       campos_pesquisa: (regra as { campos_pesquisa?: string[] }).campos_pesquisa || ['nome'],
+      modoAvancado: temCondicoes,
+      condicoes: condicoesDB,
     });
     setDialogOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nome || !form.termos || !form.valor_destino) {
-      toast.error('Preencha todos os campos obrigatórios');
-      return;
+    
+    // Validação diferente para modo avançado
+    if (form.modoAvancado) {
+      if (!form.nome || !form.valor_destino) {
+        toast.error('Preencha nome e valor destino');
+        return;
+      }
+      if (form.condicoes.length === 0) {
+        toast.error('Adicione pelo menos uma condição');
+        return;
+      }
+      // Verifica se todas as condições têm termos
+      const condicaoSemTermos = form.condicoes.find(c => c.termos.length === 0);
+      if (condicaoSemTermos) {
+        toast.error('Todas as condições devem ter ao menos um termo');
+        return;
+      }
+    } else {
+      if (!form.nome || !form.termos || !form.valor_destino) {
+        toast.error('Preencha todos os campos obrigatórios');
+        return;
+      }
     }
+    
     salvarMutation.mutate({ ...form, id: editandoId || undefined });
   };
-
-  // Testar regra - agora considera termos de exclusão
   const testarRegra = () => {
     if (!testInput.trim()) return;
     
@@ -686,12 +737,52 @@ export default function RegrasClassificacao() {
                 Nova Regra
               </Button>
             </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className={form.modoAvancado ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg"}>
             <DialogHeader>
               <DialogTitle>{editandoId ? 'Editar Regra' : 'Nova Regra'}</DialogTitle>
             </DialogHeader>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Toggle Modo Avançado */}
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <span className="font-medium text-sm">Modo Avançado</span>
+                  <p className="text-xs text-muted-foreground">
+                    Crie regras com múltiplas condições E/OU/NÃO
+                  </p>
+                </div>
+                <Switch
+                  checked={form.modoAvancado}
+                  onCheckedChange={(checked) => {
+                    if (checked && form.condicoes.length === 0) {
+                      // Converte regra simples para condições
+                      const condicoesIniciais: Condicao[] = [];
+                      if (form.termos.trim()) {
+                        condicoesIniciais.push({
+                          id: gerarId(),
+                          tipo: form.tipo === 'containsAll' ? 'contains' : form.tipo as Condicao['tipo'],
+                          termos: form.termos.split(',').map(t => t.trim()).filter(Boolean),
+                          operador: 'AND',
+                          obrigatorio: true,
+                        });
+                      }
+                      if (form.termos_exclusao.trim()) {
+                        condicoesIniciais.push({
+                          id: gerarId(),
+                          tipo: 'notContains',
+                          termos: form.termos_exclusao.split(',').map(t => t.trim()).filter(Boolean),
+                          operador: 'AND',
+                          obrigatorio: true,
+                        });
+                      }
+                      setForm({ ...form, modoAvancado: true, condicoes: condicoesIniciais });
+                    } else {
+                      setForm({ ...form, modoAvancado: checked });
+                    }
+                  }}
+                />
+              </div>
+
               <div>
                 <Label>Nome da Regra *</Label>
                 <Input
@@ -702,25 +793,6 @@ export default function RegrasClassificacao() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Tipo *</Label>
-                  <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v as RegraForm['tipo'] })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tiposRegra.map(t => (
-                        <SelectItem key={t.value} value={t.value}>
-                          {t.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {tiposRegra.find(t => t.value === form.tipo)?.desc}
-                  </p>
-                </div>
-
                 <div>
                   <Label>Campo Destino *</Label>
                   <Select value={form.campo_destino} onValueChange={(v) => setForm({ ...form, campo_destino: v })}>
@@ -734,41 +806,214 @@ export default function RegrasClassificacao() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label>Valor a Aplicar *</Label>
+                  <Input
+                    value={form.valor_destino}
+                    onChange={e => setForm({ ...form, valor_destino: e.target.value })}
+                    placeholder="Ex: Conjunto Camiseta Bermuda"
+                  />
+                </div>
               </div>
 
-              <div>
-                <Label>Termos de Busca * (separados por vírgula)</Label>
-                <Input
-                  value={form.termos}
-                  onChange={e => setForm({ ...form, termos: e.target.value })}
-                  placeholder="Ex: CONJUNTO, BERMUDA, CAMISETA"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Para "Contém todos": produto deve ter TODOS os termos
-                </p>
-              </div>
+              {/* Modo Simples */}
+              {!form.modoAvancado && (
+                <>
+                  <div>
+                    <Label>Tipo de Busca *</Label>
+                    <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v as RegraForm['tipo'] })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tiposRegra.map(t => (
+                          <SelectItem key={t.value} value={t.value}>
+                            {t.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {tiposRegra.find(t => t.value === form.tipo)?.desc}
+                    </p>
+                  </div>
 
-              <div>
-                <Label>Termos de Exclusão (opcional, separados por vírgula)</Label>
-                <Input
-                  value={form.termos_exclusao}
-                  onChange={e => setForm({ ...form, termos_exclusao: e.target.value })}
-                  placeholder="Ex: PRAIA, PISCINA"
-                  className="border-warning focus:border-warning"
-                />
-                <p className="text-xs text-warning mt-1">
-                  Se o produto contiver algum desses termos, a regra NÃO será aplicada
-                </p>
-              </div>
+                  <div>
+                    <Label>Termos de Busca * (separados por vírgula)</Label>
+                    <Input
+                      value={form.termos}
+                      onChange={e => setForm({ ...form, termos: e.target.value })}
+                      placeholder="Ex: CONJUNTO, BERMUDA, CAMISETA"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Para "Contém todos": produto deve ter TODOS os termos
+                    </p>
+                  </div>
 
-              <div>
-                <Label>Valor a Aplicar *</Label>
-                <Input
-                  value={form.valor_destino}
-                  onChange={e => setForm({ ...form, valor_destino: e.target.value })}
-                  placeholder="Ex: Conjunto Camiseta Bermuda"
-                />
-              </div>
+                  <div>
+                    <Label>Termos de Exclusão (opcional, separados por vírgula)</Label>
+                    <Input
+                      value={form.termos_exclusao}
+                      onChange={e => setForm({ ...form, termos_exclusao: e.target.value })}
+                      placeholder="Ex: PRAIA, PISCINA"
+                      className="border-warning focus:border-warning"
+                    />
+                    <p className="text-xs text-warning mt-1">
+                      Se o produto contiver algum desses termos, a regra NÃO será aplicada
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {/* Modo Avançado - Condições Compostas */}
+              {form.modoAvancado && (
+                <div className="space-y-3 border rounded-lg p-4 bg-background">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-medium">Condições (avaliadas na ordem)</Label>
+                    <Button 
+                      type="button" 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => {
+                        const novaCondicao: Condicao = {
+                          id: gerarId(),
+                          tipo: 'contains',
+                          termos: [],
+                          operador: 'AND',
+                          obrigatorio: true,
+                        };
+                        setForm({ ...form, condicoes: [...form.condicoes, novaCondicao] });
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Adicionar
+                    </Button>
+                  </div>
+
+                  {form.condicoes.length === 0 ? (
+                    <div className="text-center py-6 border-2 border-dashed rounded-lg text-muted-foreground">
+                      <p className="text-sm">Nenhuma condição</p>
+                      <p className="text-xs mt-1">Clique em "Adicionar" para criar condições flexíveis</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {form.condicoes.map((condicao, index) => (
+                        <div key={condicao.id}>
+                          <div className={`border rounded-lg p-3 space-y-2 ${
+                            condicao.tipo === 'notContains' 
+                              ? 'border-destructive/50 bg-destructive/5' 
+                              : condicao.obrigatorio 
+                                ? 'border-primary/50' 
+                                : 'border-muted'
+                          }`}>
+                            {/* Header */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="secondary" className="text-xs">{index + 1}º</Badge>
+                              <Badge variant={condicao.tipo === 'notContains' ? 'destructive' : 'outline'} className="text-xs">
+                                {tiposCondicao.find(t => t.value === condicao.tipo)?.label}
+                              </Badge>
+                              <div className="flex-1" />
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground">Obrigatória</span>
+                                <Switch
+                                  checked={condicao.obrigatorio}
+                                  onCheckedChange={(checked) => {
+                                    const novas = form.condicoes.map(c => 
+                                      c.id === condicao.id ? { ...c, obrigatorio: checked } : c
+                                    );
+                                    setForm({ ...form, condicoes: novas });
+                                  }}
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() => {
+                                  setForm({ ...form, condicoes: form.condicoes.filter(c => c.id !== condicao.id) });
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                              </Button>
+                            </div>
+
+                            {/* Tipo e Termos */}
+                            <div className="grid grid-cols-[130px_1fr] gap-2">
+                              <Select
+                                value={condicao.tipo}
+                                onValueChange={(v) => {
+                                  const novas = form.condicoes.map(c => 
+                                    c.id === condicao.id ? { ...c, tipo: v as Condicao['tipo'] } : c
+                                  );
+                                  setForm({ ...form, condicoes: novas });
+                                }}
+                              >
+                                <SelectTrigger className="h-9">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {tiposCondicao.map(t => (
+                                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              <Input
+                                placeholder="Termos separados por vírgula"
+                                value={condicao.termos.join(', ')}
+                                onChange={(e) => {
+                                  const termos = e.target.value.split(',').map(t => t.trim()).filter(Boolean);
+                                  const novas = form.condicoes.map(c => 
+                                    c.id === condicao.id ? { ...c, termos } : c
+                                  );
+                                  setForm({ ...form, condicoes: novas });
+                                }}
+                                className="h-9"
+                              />
+                            </div>
+
+                            <p className="text-xs text-muted-foreground">
+                              {condicao.obrigatorio 
+                                ? '⚠️ Se esta condição falhar, a regra toda é descartada' 
+                                : '✓ Condição opcional (bônus de pontuação se atendida)'
+                              }
+                            </p>
+                          </div>
+
+                          {/* Conector */}
+                          {index < form.condicoes.length - 1 && (
+                            <div className="flex items-center justify-center py-1">
+                              <Select
+                                value={condicao.operador}
+                                onValueChange={(v) => {
+                                  const novas = form.condicoes.map(c => 
+                                    c.id === condicao.id ? { ...c, operador: v as 'AND' | 'OR' } : c
+                                  );
+                                  setForm({ ...form, condicoes: novas });
+                                }}
+                              >
+                                <SelectTrigger className="w-20 h-7 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="AND">E (AND)</SelectItem>
+                                  <SelectItem value="OR">OU (OR)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="text-xs text-muted-foreground space-y-0.5 pt-2 border-t">
+                    <p><strong>E:</strong> Ambas condições devem ser verdadeiras</p>
+                    <p><strong>OU:</strong> Basta uma condição ser verdadeira</p>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1007,7 +1252,23 @@ export default function RegrasClassificacao() {
                                 aria-label={`Selecionar ${regra.nome}`}
                               />
                             </TableCell>
-                            <TableCell className="font-medium">{regra.nome}</TableCell>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                {regra.nome}
+                                {(() => {
+                                  const condicoesRaw = (regra as unknown as { condicoes?: unknown }).condicoes;
+                                  const temCondicoes = Array.isArray(condicoesRaw) && condicoesRaw.length > 0;
+                                  if (temCondicoes) {
+                                    return (
+                                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                        {condicoesRaw.length} cond.
+                                      </Badge>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
+                            </TableCell>
                             <TableCell>
                               <Badge variant="outline">
                                 {tiposRegra.find(t => t.value === regra.tipo)?.label}
