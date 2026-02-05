@@ -419,7 +419,17 @@ export default function GeradorReferencias() {
     const genero = generos.find(g => g.id === parseInt(formData.generoId));
     const faixa = faixasEtarias.find(f => f.id === parseInt(formData.faixaEtariaId));
 
-    return `${ano}${mes}${tipo?.codigo || 'X'}${genero?.codigo || 'X'}${faixa?.codigo || 'X'}-XXXXX`;
+    // Exibe com traço para visualização, mas gera sem traço
+    return `${ano}${mes}-${tipo?.codigo || 'T'}${genero?.codigo || 'G'}${faixa?.codigo || 'F'}-XXXXX`;
+  };
+
+  // Formata código para exibição (adiciona traços)
+  const formatarCodigoExibicao = (codigo: string): string => {
+    if (codigo.length >= 10) {
+      // AAMMTGFXXXXX -> AAMM-TGF-XXXXX
+      return `${codigo.slice(0, 4)}-${codigo.slice(4, 7)}-${codigo.slice(7)}`;
+    }
+    return codigo;
   };
 
   const getCategoriaColor = (categoria: string) => {
@@ -500,13 +510,32 @@ export default function GeradorReferencias() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
+                    <Label>Marca *</Label>
+                    <Select
+                      value={formData.marcaId}
+                      onValueChange={(v) => setFormData(prev => ({ ...prev, marcaId: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione marca..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {marcas.map(marca => (
+                          <SelectItem key={marca.id} value={marca.id.toString()}>
+                            {marca.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label>Tipo de Produto *</Label>
                     <Select
                       value={formData.tipoId}
                       onValueChange={(v) => setFormData(prev => ({ ...prev, tipoId: v }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione..." />
+                        <SelectValue placeholder="Selecione tipo..." />
                       </SelectTrigger>
                       <SelectContent>
                         {tipos.map(tipo => (
@@ -520,7 +549,9 @@ export default function GeradorReferencias() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
 
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Gênero *</Label>
                     <Select
@@ -528,7 +559,7 @@ export default function GeradorReferencias() {
                       onValueChange={(v) => setFormData(prev => ({ ...prev, generoId: v }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione..." />
+                        <SelectValue placeholder="Selecione gênero..." />
                       </SelectTrigger>
                       <SelectContent>
                         {generos.map(genero => (
@@ -542,9 +573,7 @@ export default function GeradorReferencias() {
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Faixa Etária *</Label>
                     <Select
@@ -552,7 +581,7 @@ export default function GeradorReferencias() {
                       onValueChange={(v) => setFormData(prev => ({ ...prev, faixaEtariaId: v }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione..." />
+                        <SelectValue placeholder="Selecione faixa..." />
                       </SelectTrigger>
                       <SelectContent>
                         {faixasEtarias.map(faixa => (
@@ -561,25 +590,6 @@ export default function GeradorReferencias() {
                               <Badge variant="outline" className="font-mono">{faixa.codigo}</Badge>
                               {faixa.nome}
                             </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Marca (opcional)</Label>
-                    <Select
-                      value={formData.marcaId}
-                      onValueChange={(v) => setFormData(prev => ({ ...prev, marcaId: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {marcas.map(marca => (
-                          <SelectItem key={marca.id} value={marca.id.toString()}>
-                            {marca.nome}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -810,8 +820,8 @@ export default function GeradorReferencias() {
                     <TableRow key={ref.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <code className="font-mono font-semibold text-primary">
-                            {ref.codigo_completo}
+                        <code className="font-mono font-semibold text-primary">
+                            {formatarCodigoExibicao(ref.codigo_completo)}
                           </code>
                           <Button
                             variant="ghost"
@@ -863,7 +873,7 @@ export default function GeradorReferencias() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Barcode className="h-5 w-5" />
-              Variações de {selectedReferencia?.codigo_completo}
+              Variações de {selectedReferencia ? formatarCodigoExibicao(selectedReferencia.codigo_completo) : ''}
             </DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh]">
@@ -885,7 +895,7 @@ export default function GeradorReferencias() {
                   {variacoes.map(v => (
                     <TableRow key={v.id}>
                       <TableCell>
-                        <code className="font-mono font-semibold">{v.codigo_variacao}</code>
+                        <code className="font-mono font-semibold">{formatarCodigoExibicao(v.codigo_variacao)}</code>
                       </TableCell>
                       <TableCell>{v.cor || '-'}</TableCell>
                       <TableCell>{v.tamanho || '-'}</TableCell>
