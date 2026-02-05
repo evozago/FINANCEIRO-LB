@@ -198,6 +198,14 @@ export default function GeradorReferencias() {
     enabled: !!selectedReferencia
   });
 
+  // Função para gerar código único de 4 caracteres (base 36: 0-9, A-Z)
+  const gerarCodigoUnico = (num: number): string => {
+    // Usa base 36 para ter mais combinações (0-9 + A-Z = 36 caracteres)
+    // 4 caracteres = 36^4 = 1.679.616 combinações possíveis
+    const base36 = num.toString(36).toUpperCase();
+    return base36.padStart(4, '0');
+  };
+
   // Mutation para gerar referência
   const gerarReferencia = useMutation({
     mutationFn: async () => {
@@ -210,42 +218,17 @@ export default function GeradorReferencias() {
       const faixaEtariaId = parseInt(formData.faixaEtariaId);
       const marcaId = formData.marcaId ? parseInt(formData.marcaId) : null;
 
-      // Buscar próximo sequencial
-      const { data: seqData, error: seqError } = await supabase
-        .from('sequencial_referencias')
-        .select('ultimo_sequencial')
-        .eq('ano', ano)
-        .eq('mes', mes)
-        .eq('tipo_id', tipoId)
-        .eq('genero_id', generoId)
-        .eq('faixa_etaria_id', faixaEtariaId)
+      // Buscar o maior sequencial GLOBAL (não por tipo/gênero)
+      const { data: maxRef, error: maxError } = await supabase
+        .from('referencias_produto')
+        .select('sequencial')
+        .order('sequencial', { ascending: false })
+        .limit(1)
         .single();
 
       let proximoSequencial = 1;
-      
-      if (!seqError && seqData) {
-        proximoSequencial = seqData.ultimo_sequencial + 1;
-        // Atualizar sequencial
-        await supabase
-          .from('sequencial_referencias')
-          .update({ ultimo_sequencial: proximoSequencial })
-          .eq('ano', ano)
-          .eq('mes', mes)
-          .eq('tipo_id', tipoId)
-          .eq('genero_id', generoId)
-          .eq('faixa_etaria_id', faixaEtariaId);
-      } else {
-        // Criar novo registro de sequencial
-        await supabase
-          .from('sequencial_referencias')
-          .insert({
-            ano,
-            mes,
-            tipo_id: tipoId,
-            genero_id: generoId,
-            faixa_etaria_id: faixaEtariaId,
-            ultimo_sequencial: 1
-          });
+      if (!maxError && maxRef) {
+        proximoSequencial = maxRef.sequencial + 1;
       }
 
       // Buscar códigos
@@ -257,9 +240,12 @@ export default function GeradorReferencias() {
         throw new Error('Tipo, gênero ou faixa etária não encontrado');
       }
 
-      // Gerar código: AAMM + Tipo + Gênero + FaixaEtária + Sequencial
-      // Exemplo: 2602BFA001
-      const codigoCompleto = `${ano.toString().padStart(2, '0')}${mes.toString().padStart(2, '0')}${tipo.codigo}${genero.codigo}${faixa.codigo}${proximoSequencial.toString().padStart(3, '0')}`;
+      // Gerar código único de 4 caracteres (identifica o produto sozinho)
+      const codigoUnico = gerarCodigoUnico(proximoSequencial);
+      
+      // Código completo: AAMM + Tipo + Gênero + FaixaEtária + CódigoÚnico
+      // Exemplo: 2602BFA-G31F (os 4 últimos identificam o produto)
+      const codigoCompleto = `${ano.toString().padStart(2, '0')}${mes.toString().padStart(2, '0')}${tipo.codigo}${genero.codigo}${faixa.codigo}${codigoUnico}`;
 
       // Criar referência
       const { data: refData, error: refError } = await supabase
@@ -406,7 +392,7 @@ export default function GeradorReferencias() {
 
   const previewCodigo = () => {
     if (!formData.tipoId || !formData.generoId || !formData.faixaEtariaId) {
-      return 'XXXX-XXX-XXX';
+      return 'AAMM-TGF-XXXX';
     }
 
     const now = new Date();
@@ -417,7 +403,7 @@ export default function GeradorReferencias() {
     const genero = generos.find(g => g.id === parseInt(formData.generoId));
     const faixa = faixasEtarias.find(f => f.id === parseInt(formData.faixaEtariaId));
 
-    return `${ano}${mes}${tipo?.codigo || 'X'}${genero?.codigo || 'X'}${faixa?.codigo || 'X'}###`;
+    return `${ano}${mes}${tipo?.codigo || 'X'}${genero?.codigo || 'X'}${faixa?.codigo || 'X'}-XXXX`;
   };
 
   const getCategoriaColor = (categoria: string) => {
@@ -743,7 +729,7 @@ export default function GeradorReferencias() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    ### = sequencial automático
+                    XXXX = código único do produto (buscável individualmente)
                   </p>
                 </div>
 
