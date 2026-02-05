@@ -51,6 +51,7 @@ import {
   CheckSquare,
   Power,
   Edit3,
+  Merge,
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
@@ -122,6 +123,19 @@ export default function RegrasClassificacao() {
     campo_destino: '' as string,
     valor_destino: '' as string,
   });
+  
+  // Modal de mesclagem
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergePreview, setMergePreview] = useState<{
+    nome: string;
+    termos: string[];
+    termos_exclusao: string[];
+    tipo: string;
+    campo_destino: string;
+    valor_destino: string;
+    pontuacao: number;
+    genero_automatico: string | null;
+  } | null>(null);
   
   // Ordenação
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -502,6 +516,99 @@ export default function RegrasClassificacao() {
     setBatchEditOpen(true);
   };
 
+  // Mesclar regras selecionadas
+  const abrirMesclagem = () => {
+    if (selectedIds.size < 2) {
+      toast.error('Selecione pelo menos 2 regras para mesclar');
+      return;
+    }
+
+    const regrasSelecionadas = regras.filter(r => selectedIds.has(r.id));
+    
+    // Verificar se todas têm o mesmo campo_destino e valor_destino
+    const camposDestino = new Set(regrasSelecionadas.map(r => r.campo_destino));
+    const valoresDestino = new Set(regrasSelecionadas.map(r => r.valor_destino));
+    
+    if (camposDestino.size > 1) {
+      toast.error('As regras devem ter o mesmo Campo Destino para serem mescladas');
+      return;
+    }
+    
+    if (valoresDestino.size > 1) {
+      toast.error('As regras devem ter o mesmo Valor Destino para serem mescladas');
+      return;
+    }
+
+    // Combinar todos os termos
+    const todosTermos = new Set<string>();
+    const todosTermosExclusao = new Set<string>();
+    
+    regrasSelecionadas.forEach(r => {
+      r.termos.forEach(t => todosTermos.add(t));
+      (r.termos_exclusao || []).forEach(t => todosTermosExclusao.add(t));
+    });
+
+    // Usar o maior pontuação e o tipo mais restritivo
+    const maiorPontuacao = Math.max(...regrasSelecionadas.map(r => r.pontuacao ?? 100));
+    const primeiraRegra = regrasSelecionadas[0];
+    
+    // Determinar gênero automático (usar o primeiro não-nulo)
+    const generoAuto = regrasSelecionadas.find(r => r.genero_automatico)?.genero_automatico || null;
+
+    setMergePreview({
+      nome: `${primeiraRegra.valor_destino} (Mesclado)`,
+      termos: Array.from(todosTermos),
+      termos_exclusao: Array.from(todosTermosExclusao),
+      tipo: 'contains', // Default para contains quando mescla
+      campo_destino: primeiraRegra.campo_destino,
+      valor_destino: primeiraRegra.valor_destino,
+      pontuacao: maiorPontuacao,
+      genero_automatico: generoAuto,
+    });
+    
+    setMergeOpen(true);
+  };
+
+  const mesclarRegrasMutation = useMutation({
+    mutationFn: async () => {
+      if (!mergePreview) return;
+
+      // 1. Criar nova regra mesclada
+      const { error: insertError } = await supabase
+        .from('regras_classificacao')
+        .insert({
+          nome: mergePreview.nome,
+          tipo: mergePreview.tipo,
+          termos: mergePreview.termos,
+          termos_exclusao: mergePreview.termos_exclusao,
+          campo_destino: mergePreview.campo_destino,
+          valor_destino: mergePreview.valor_destino,
+          pontuacao: mergePreview.pontuacao,
+          genero_automatico: mergePreview.genero_automatico,
+          ativo: true,
+          ordem: regras.length,
+        });
+      
+      if (insertError) throw insertError;
+
+      // 2. Excluir regras antigas
+      const { error: deleteError } = await supabase
+        .from('regras_classificacao')
+        .delete()
+        .in('id', Array.from(selectedIds));
+      
+      if (deleteError) throw deleteError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['regras-classificacao'] });
+      toast.success(`${selectedIds.size} regras mescladas em uma!`);
+      setSelectedIds(new Set());
+      setMergeOpen(false);
+      setMergePreview(null);
+    },
+    onError: () => toast.error('Erro ao mesclar regras'),
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -752,6 +859,16 @@ export default function RegrasClassificacao() {
                         <Edit3 className="h-3.5 w-3.5 mr-1" />
                         Editar
                       </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={abrirMesclagem}
+                        disabled={selectedCount < 2}
+                        title={selectedCount < 2 ? 'Selecione pelo menos 2 regras' : 'Mesclar regras selecionadas'}
+                      >
+                        <Merge className="h-3.5 w-3.5 mr-1" />
+                        Mesclar
+                      </Button>
                       <Button size="sm" variant="outline" onClick={handleAtivarSelecionadas}>
                         <Power className="h-3.5 w-3.5 mr-1" />
                         Ativar
@@ -962,6 +1079,134 @@ export default function RegrasClassificacao() {
               disabled={editarLoteMutation.isPending}
             >
               {editarLoteMutation.isPending ? 'Salvando...' : 'Aplicar Alterações'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de mesclagem */}
+      <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Merge className="h-5 w-5" />
+              Mesclar {selectedIds.size} regras
+            </DialogTitle>
+          </DialogHeader>
+          
+          {mergePreview && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Campo Destino</Label>
+                  <p className="font-medium">{camposDestino.find(c => c.value === mergePreview.campo_destino)?.label}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Valor a Aplicar</Label>
+                  <p className="font-medium">{mergePreview.valor_destino}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label>Nome da Regra Mesclada</Label>
+                <Input
+                  value={mergePreview.nome}
+                  onChange={e => setMergePreview({ ...mergePreview, nome: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label>Tipo de Regra</Label>
+                <Select 
+                  value={mergePreview.tipo} 
+                  onValueChange={(v) => setMergePreview({ ...mergePreview, tipo: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tiposRegra.map(t => (
+                      <SelectItem key={t.value} value={t.value}>
+                        {t.label} - {t.desc}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Termos Combinados ({mergePreview.termos.length})</Label>
+                <div className="flex flex-wrap gap-1 mt-1 p-2 bg-muted rounded border max-h-32 overflow-auto">
+                  {mergePreview.termos.map((termo, i) => (
+                    <Badge key={i} variant="secondary" className="text-xs">
+                      {termo}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Todos os termos das regras selecionadas serão combinados
+                </p>
+              </div>
+
+              {mergePreview.termos_exclusao.length > 0 && (
+                <div>
+                  <Label>Termos de Exclusão ({mergePreview.termos_exclusao.length})</Label>
+                  <div className="flex flex-wrap gap-1 mt-1 p-2 bg-destructive/10 rounded border border-destructive/20 max-h-24 overflow-auto">
+                    {mergePreview.termos_exclusao.map((termo, i) => (
+                      <Badge key={i} variant="outline" className="text-xs border-destructive/50">
+                        {termo}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Pontuação</Label>
+                  <Input
+                    type="number"
+                    value={mergePreview.pontuacao}
+                    onChange={e => setMergePreview({ ...mergePreview, pontuacao: parseInt(e.target.value) || 100 })}
+                  />
+                </div>
+                <div>
+                  <Label>Gênero Automático</Label>
+                  <Select
+                    value={mergePreview.genero_automatico || 'none'}
+                    onValueChange={(v) => setMergePreview({ ...mergePreview, genero_automatico: v === 'none' ? null : v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      <SelectItem value="FEMININO">Feminino</SelectItem>
+                      <SelectItem value="MASCULINO">Masculino</SelectItem>
+                      <SelectItem value="UNISSEX">Unissex</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
+                <p className="text-sm text-warning-foreground">
+                  <strong>Atenção:</strong> As {selectedIds.size} regras originais serão excluídas e substituídas por uma única regra mesclada.
+                </p>
+              </div>
+            </div>
+          )}
+          
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setMergeOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={() => mesclarRegrasMutation.mutate()} 
+              disabled={mesclarRegrasMutation.isPending}
+            >
+              <Merge className="h-4 w-4 mr-2" />
+              {mesclarRegrasMutation.isPending ? 'Mesclando...' : 'Mesclar Regras'}
             </Button>
           </div>
         </DialogContent>
