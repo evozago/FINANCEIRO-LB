@@ -198,12 +198,25 @@ export default function GeradorReferencias() {
     enabled: !!selectedReferencia
   });
 
-  // Função para gerar código único de 4 caracteres (base 36: 0-9, A-Z)
+  // Alfabeto fonético personalizado (fácil de comunicar por telefone/rádio)
+  // 9 letras + 9 números = 18 caracteres
+  // 5 posições = 18^5 = 1.889.568 combinações possíveis
+  const ALFABETO_FONETICO = 'ACEHKQUXY123456789';
+  
   const gerarCodigoUnico = (num: number): string => {
-    // Usa base 36 para ter mais combinações (0-9 + A-Z = 36 caracteres)
-    // 4 caracteres = 36^4 = 1.679.616 combinações possíveis
-    const base36 = num.toString(36).toUpperCase();
-    return base36.padStart(4, '0');
+    const base = ALFABETO_FONETICO.length; // 18
+    let resultado = '';
+    let n = num;
+    
+    // Converter para base 18 usando alfabeto fonético
+    while (n > 0 || resultado.length < 5) {
+      resultado = ALFABETO_FONETICO[n % base] + resultado;
+      n = Math.floor(n / base);
+      if (resultado.length >= 5) break;
+    }
+    
+    // Garantir 5 caracteres, preenchendo com o primeiro caractere
+    return resultado.padStart(5, ALFABETO_FONETICO[0]);
   };
 
   // Mutation para gerar referência
@@ -392,7 +405,7 @@ export default function GeradorReferencias() {
 
   const previewCodigo = () => {
     if (!formData.tipoId || !formData.generoId || !formData.faixaEtariaId) {
-      return 'AAMM-TGF-XXXX';
+      return 'AAMM-TGF-XXXXX';
     }
 
     const now = new Date();
@@ -403,7 +416,7 @@ export default function GeradorReferencias() {
     const genero = generos.find(g => g.id === parseInt(formData.generoId));
     const faixa = faixasEtarias.find(f => f.id === parseInt(formData.faixaEtariaId));
 
-    return `${ano}${mes}${tipo?.codigo || 'X'}${genero?.codigo || 'X'}${faixa?.codigo || 'X'}-XXXX`;
+    return `${ano}${mes}${tipo?.codigo || 'X'}${genero?.codigo || 'X'}${faixa?.codigo || 'X'}-XXXXX`;
   };
 
   const getCategoriaColor = (categoria: string) => {
@@ -729,7 +742,7 @@ export default function GeradorReferencias() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    XXXX = código único do produto (buscável individualmente)
+                    XXXXX = código único fonético (A,C,E,H,K,Q,U,X,Y + 1-9)
                   </p>
                 </div>
 
