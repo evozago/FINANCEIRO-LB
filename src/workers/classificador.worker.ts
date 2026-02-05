@@ -15,6 +15,15 @@ export interface WorkerResponse {
   payload?: unknown;
 }
 
+// Interface para condições compostas
+interface CondicaoComposta {
+  id: string;
+  tipo: 'contains' | 'exact' | 'startsWith' | 'notContains';
+  termos: string[];
+  operador: 'AND' | 'OR';
+  obrigatorio: boolean;
+}
+
 interface RegraClassificacao {
   id: number;
   nome: string;
@@ -29,6 +38,7 @@ interface RegraClassificacao {
   ativo: boolean;
   ordem: number;
   campos_pesquisa?: string[]; // Campos onde pesquisar
+  condicoes?: CondicaoComposta[] | null; // Condições compostas
 }
 
 interface AtributoCustomizado {
@@ -96,30 +106,109 @@ function obterTextoPesquisa(
   return textos.join(' ');
 }
 
+// Verifica se as condições compostas são válidas
+function isCondicoesValidas(condicoes: unknown): condicoes is CondicaoComposta[] {
+  return Array.isArray(condicoes) && condicoes.length > 0 && 
+    condicoes.every(c => c && typeof c === 'object' && 'tipo' in c && 'termos' in c);
+}
+
+// Valida condições compostas
+function validarCondicoesCompostas(
+  textoNormalizado: string,
+  condicoes: CondicaoComposta[]
+): { valido: boolean; pontuacaoBonus: number } {
+  if (condicoes.length === 0) {
+    return { valido: false, pontuacaoBonus: 0 };
+  }
+
+  let resultadoAtual = true;
+  let pontuacaoBonus = 0;
+  let operadorPendente: 'AND' | 'OR' = 'AND';
+
+  for (let i = 0; i < condicoes.length; i++) {
+    const condicao = condicoes[i];
+    const termosNorm = condicao.termos.map(t => normalizarTexto(t));
+    
+    let match = false;
+
+    switch (condicao.tipo) {
+      case 'exact':
+        match = termosNorm.some(t => textoNormalizado === t);
+        break;
+      case 'startsWith':
+        match = termosNorm.some(t => textoNormalizado.startsWith(t));
+        break;
+      case 'contains':
+        match = termosNorm.some(t => textoNormalizado.includes(t));
+        break;
+      case 'notContains':
+        match = !termosNorm.some(t => textoNormalizado.includes(t));
+        break;
+    }
+
+    if (condicao.obrigatorio && !match) {
+      return { valido: false, pontuacaoBonus: 0 };
+    }
+
+    if (i === 0) {
+      resultadoAtual = match;
+    } else {
+      if (operadorPendente === 'AND') {
+        resultadoAtual = resultadoAtual && match;
+      } else {
+        resultadoAtual = resultadoAtual || match;
+      }
+    }
+
+    if (!condicao.obrigatorio && match) {
+      pontuacaoBonus += 25;
+    }
+
+    operadorPendente = condicao.operador;
+  }
+
+  return { valido: resultadoAtual, pontuacaoBonus };
+}
+
 // Funções de classificação inline no worker (para evitar problemas de import)
-function verificarRegra(textoNormalizado: string, regra: RegraClassificacao): boolean {
+function verificarRegra(textoNormalizado: string, regra: RegraClassificacao): { match: boolean; bonusCondicoes: number } {
+  // Se tem condições compostas, usa o novo sistema
+  if (regra.condicoes && isCondicoesValidas(regra.condicoes)) {
+    const resultado = validarCondicoesCompostas(textoNormalizado, regra.condicoes);
+    return { match: resultado.valido, bonusCondicoes: resultado.pontuacaoBonus };
+  }
+
+  // Caso contrário, usa a lógica legada
   const termosNormalizados = regra.termos.map(t => normalizarTexto(t));
   
   const termosExclusaoNorm = (regra.termos_exclusao || []).map(t => normalizarTexto(t));
   if (termosExclusaoNorm.length > 0) {
     const temExclusao = termosExclusaoNorm.some(termo => textoNormalizado.includes(termo));
-    if (temExclusao) return false;
+    if (temExclusao) return { match: false, bonusCondicoes: 0 };
   }
 
+  let match = false;
   switch (regra.tipo) {
     case 'exact':
-      return termosNormalizados.some(termo => textoNormalizado === termo);
+      match = termosNormalizados.some(termo => textoNormalizado === termo);
+      break;
     case 'startsWith':
-      return termosNormalizados.some(termo => textoNormalizado.startsWith(termo));
+      match = termosNormalizados.some(termo => textoNormalizado.startsWith(termo));
+      break;
     case 'contains':
-      return termosNormalizados.some(termo => textoNormalizado.includes(termo));
+      match = termosNormalizados.some(termo => textoNormalizado.includes(termo));
+      break;
     case 'containsAll':
-      return termosNormalizados.every(termo => textoNormalizado.includes(termo));
+      match = termosNormalizados.every(termo => textoNormalizado.includes(termo));
+      break;
     case 'notContains':
-      return !termosNormalizados.some(termo => textoNormalizado.includes(termo));
+      match = !termosNormalizados.some(termo => textoNormalizado.includes(termo));
+      break;
     default:
-      return false;
+      match = false;
   }
+
+  return { match, bonusCondicoes: 0 };
 }
 
 function calcularPontuacao(regra: RegraClassificacao): number {
@@ -173,9 +262,11 @@ function classificarProduto(
     const textoPesquisa = obterTextoPesquisa(produto, regra.campos_pesquisa || ['nome']);
     const textoNormalizado = normalizarTexto(textoPesquisa);
     
-    if (verificarRegra(textoNormalizado, regra)) {
+    const { match, bonusCondicoes } = verificarRegra(textoNormalizado, regra);
+    
+    if (match) {
       const campo = regra.campo_destino;
-      const pontos = calcularPontuacao(regra);
+      const pontos = calcularPontuacao(regra) + bonusCondicoes;
 
       if (!pontuacoes[campo]) pontuacoes[campo] = [];
       pontuacoes[campo].push({
