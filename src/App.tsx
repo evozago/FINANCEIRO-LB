@@ -34,6 +34,7 @@ import ClassificadorProdutos from "./pages/produtos/ClassificadorProdutos";
 import RegrasClassificacao from "./pages/produtos/RegrasClassificacao";
 import DashboardProdutos from "./pages/produtos/DashboardProdutos";
 import ListaProdutos from "./pages/produtos/ListaProdutos";
+import GeradorReferencias from "./pages/produtos/GeradorReferencias";
 import ShopifyIntegration from "./pages/ecommerce/ShopifyIntegration";
 import UnificadorPlanilhas from "./pages/ferramentas/UnificadorPlanilhas";
 
@@ -95,6 +96,7 @@ const App = () => (
             <Route path="produtos/classificador" element={<ClassificadorProdutos />} />
             <Route path="produtos/regras" element={<RegrasClassificacao />} />
             <Route path="produtos/dashboard" element={<DashboardProdutos />} />
+            <Route path="produtos/referencias" element={<GeradorReferencias />} />
             <Route path="produtos/lista" element={<ListaProdutos />} />
 
             {/* Módulos futuros - placeholders */}

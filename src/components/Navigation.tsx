@@ -9,7 +9,8 @@ import {
   FileText,
   Package,
   Menu,
-  Brain
+  Brain,
+  Barcode
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -68,6 +69,7 @@ const navigationItems = [
     icon: Package,
     submenu: [
       { title: 'Lista de Produtos', href: '/produtos/lista' },
+      { title: 'Gerador de Referências', href: '/produtos/referencias', icon: Barcode },
       { title: 'Classificador', href: '/produtos/classificador' },
       { title: 'Categorias', href: '/produtos/categorias' },
       { title: 'Regras', href: '/produtos/regras' },
