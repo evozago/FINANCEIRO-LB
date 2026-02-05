@@ -578,6 +578,30 @@ export type Database = {
           },
         ]
       }
+      faixas_etarias_produto: {
+        Row: {
+          ativo: boolean | null
+          codigo: string
+          created_at: string | null
+          id: number
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          codigo: string
+          created_at?: string | null
+          id?: number
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          codigo?: string
+          created_at?: string | null
+          id?: number
+          nome?: string
+        }
+        Relationships: []
+      }
       fechamentos_caixa: {
         Row: {
           created_at: string | null
@@ -727,6 +751,30 @@ export type Database = {
         }
         Update: {
           ativo?: boolean | null
+          created_at?: string | null
+          id?: number
+          nome?: string
+        }
+        Relationships: []
+      }
+      generos_produto: {
+        Row: {
+          ativo: boolean | null
+          codigo: string
+          created_at: string | null
+          id: number
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          codigo: string
+          created_at?: string | null
+          id?: number
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          codigo?: string
           created_at?: string | null
           id?: number
           nome?: string
@@ -1027,6 +1075,86 @@ export type Database = {
           },
         ]
       }
+      referencias_produto: {
+        Row: {
+          ano: number
+          ativo: boolean | null
+          codigo_completo: string
+          colecao: string | null
+          created_at: string | null
+          descricao: string | null
+          faixa_etaria_id: number | null
+          genero_id: number | null
+          id: number
+          marca_id: number | null
+          mes: number
+          sequencial: number
+          tipo_id: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          ano: number
+          ativo?: boolean | null
+          codigo_completo: string
+          colecao?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          faixa_etaria_id?: number | null
+          genero_id?: number | null
+          id?: number
+          marca_id?: number | null
+          mes: number
+          sequencial: number
+          tipo_id?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          ano?: number
+          ativo?: boolean | null
+          codigo_completo?: string
+          colecao?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          faixa_etaria_id?: number | null
+          genero_id?: number | null
+          id?: number
+          marca_id?: number | null
+          mes?: number
+          sequencial?: number
+          tipo_id?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referencias_produto_faixa_etaria_id_fkey"
+            columns: ["faixa_etaria_id"]
+            isOneToOne: false
+            referencedRelation: "faixas_etarias_produto"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referencias_produto_genero_id_fkey"
+            columns: ["genero_id"]
+            isOneToOne: false
+            referencedRelation: "generos_produto"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referencias_produto_marca_id_fkey"
+            columns: ["marca_id"]
+            isOneToOne: false
+            referencedRelation: "marcas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referencias_produto_tipo_id_fkey"
+            columns: ["tipo_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_produto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       regras_classificacao: {
         Row: {
           ativo: boolean | null
@@ -1089,6 +1217,64 @@ export type Database = {
           },
         ]
       }
+      sequencial_referencias: {
+        Row: {
+          ano: number
+          created_at: string | null
+          faixa_etaria_id: number | null
+          genero_id: number | null
+          id: number
+          mes: number
+          tipo_id: number | null
+          ultimo_sequencial: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          ano: number
+          created_at?: string | null
+          faixa_etaria_id?: number | null
+          genero_id?: number | null
+          id?: number
+          mes: number
+          tipo_id?: number | null
+          ultimo_sequencial?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          ano?: number
+          created_at?: string | null
+          faixa_etaria_id?: number | null
+          genero_id?: number | null
+          id?: number
+          mes?: number
+          tipo_id?: number | null
+          ultimo_sequencial?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sequencial_referencias_faixa_etaria_id_fkey"
+            columns: ["faixa_etaria_id"]
+            isOneToOne: false
+            referencedRelation: "faixas_etarias_produto"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sequencial_referencias_genero_id_fkey"
+            columns: ["genero_id"]
+            isOneToOne: false
+            referencedRelation: "generos_produto"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sequencial_referencias_tipo_id_fkey"
+            columns: ["tipo_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_produto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sessoes_importacao: {
         Row: {
           arquivo_mime_type: string | null
@@ -1139,6 +1325,77 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      tipos_produto: {
+        Row: {
+          ativo: boolean | null
+          categoria: string | null
+          codigo: string
+          created_at: string | null
+          id: number
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          categoria?: string | null
+          codigo: string
+          created_at?: string | null
+          id?: number
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          categoria?: string | null
+          codigo?: string
+          created_at?: string | null
+          id?: number
+          nome?: string
+        }
+        Relationships: []
+      }
+      variacoes_referencia: {
+        Row: {
+          ativo: boolean | null
+          codigo_barras: string | null
+          codigo_variacao: string
+          cor: string | null
+          created_at: string | null
+          id: number
+          referencia_id: number | null
+          sufixo_sequencial: number
+          tamanho: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          codigo_barras?: string | null
+          codigo_variacao: string
+          cor?: string | null
+          created_at?: string | null
+          id?: number
+          referencia_id?: number | null
+          sufixo_sequencial: number
+          tamanho?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          codigo_barras?: string | null
+          codigo_variacao?: string
+          cor?: string | null
+          created_at?: string | null
+          id?: number
+          referencia_id?: number | null
+          sufixo_sequencial?: number
+          tamanho?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "variacoes_referencia_referencia_id_fkey"
+            columns: ["referencia_id"]
+            isOneToOne: false
+            referencedRelation: "referencias_produto"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendas: {
         Row: {
