@@ -25,7 +25,10 @@ import {
   ChevronRight,
   Package,
   Search,
-  Trash2
+  Trash2,
+  Pencil,
+  X,
+  Check
 } from 'lucide-react';
 
 interface TipoProduto {
@@ -907,7 +910,7 @@ export default function GeradorReferencias() {
   );
 }
 
-// Componente de Configuração
+// Componente de Configuração com CRUD
 function ConfiguracaoCodigos({ 
   tipos, 
   generos, 
@@ -920,6 +923,65 @@ function ConfiguracaoCodigos({
   onUpdate: () => void;
 }) {
   const [activeTab, setActiveTab] = useState('tipos');
+  const [editingItem, setEditingItem] = useState<{ type: string; id: number | null; data: any } | null>(null);
+  const [newItem, setNewItem] = useState<{ type: string; data: any } | null>(null);
+
+  // Salvar Tipo
+  const saveTipo = async (id: number | null, data: { nome: string; codigo: string; categoria: string }) => {
+    if (id) {
+      const { error } = await supabase.from('tipos_produto').update(data).eq('id', id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('tipos_produto').insert(data);
+      if (error) throw error;
+    }
+    onUpdate();
+    setEditingItem(null);
+    setNewItem(null);
+    toast.success(id ? 'Tipo atualizado!' : 'Tipo criado!');
+  };
+
+  // Salvar Gênero
+  const saveGenero = async (id: number | null, data: { nome: string; codigo: string }) => {
+    if (id) {
+      const { error } = await supabase.from('generos_produto').update(data).eq('id', id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('generos_produto').insert(data);
+      if (error) throw error;
+    }
+    onUpdate();
+    setEditingItem(null);
+    setNewItem(null);
+    toast.success(id ? 'Gênero atualizado!' : 'Gênero criado!');
+  };
+
+  // Salvar Faixa Etária
+  const saveFaixa = async (id: number | null, data: { nome: string; codigo: string }) => {
+    if (id) {
+      const { error } = await supabase.from('faixas_etarias_produto').update(data).eq('id', id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('faixas_etarias_produto').insert(data);
+      if (error) throw error;
+    }
+    onUpdate();
+    setEditingItem(null);
+    setNewItem(null);
+    toast.success(id ? 'Faixa etária atualizada!' : 'Faixa etária criada!');
+  };
+
+  // Excluir item (desativar)
+  const deleteItem = async (type: string, id: number) => {
+    const table = type === 'tipos' ? 'tipos_produto' : type === 'generos' ? 'generos_produto' : 'faixas_etarias_produto';
+    const { error } = await supabase.from(table).update({ ativo: false }).eq('id', id);
+    if (error) {
+      toast.error('Erro ao excluir: ' + error.message);
+      return;
+    }
+    onUpdate();
+    toast.success('Item desativado com sucesso!');
+  };
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -929,32 +991,145 @@ function ConfiguracaoCodigos({
         <TabsTrigger value="faixas">Faixas Etárias</TabsTrigger>
       </TabsList>
 
+      {/* TIPOS */}
       <TabsContent value="tipos">
-        <ScrollArea className="h-[400px]">
+        <div className="flex justify-end mb-2">
+          <Button 
+            size="sm" 
+            onClick={() => setNewItem({ type: 'tipos', data: { nome: '', codigo: '', categoria: 'vestuario' } })}
+          >
+            <Plus className="h-4 w-4 mr-1" /> Novo Tipo
+          </Button>
+        </div>
+        <ScrollArea className="h-[350px]">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Código</TableHead>
+                <TableHead className="w-20">Código</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Categoria</TableHead>
-                <TableHead>Ativo</TableHead>
+                <TableHead className="text-right w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
+              {newItem?.type === 'tipos' && (
+                <TableRow>
+                  <TableCell>
+                    <Input 
+                      value={newItem.data.codigo} 
+                      onChange={e => setNewItem({ ...newItem, data: { ...newItem.data, codigo: e.target.value.toUpperCase() } })}
+                      className="h-8 w-16 font-mono"
+                      maxLength={2}
+                      placeholder="XX"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input 
+                      value={newItem.data.nome} 
+                      onChange={e => setNewItem({ ...newItem, data: { ...newItem.data, nome: e.target.value } })}
+                      className="h-8"
+                      placeholder="Nome do tipo"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Select 
+                      value={newItem.data.categoria} 
+                      onValueChange={v => setNewItem({ ...newItem, data: { ...newItem.data, categoria: v } })}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vestuario">Vestuário</SelectItem>
+                        <SelectItem value="calcados">Calçados</SelectItem>
+                        <SelectItem value="acessorios">Acessórios</SelectItem>
+                        <SelectItem value="outros">Outros</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveTipo(null, newItem.data)}>
+                      <Check className="h-4 w-4 text-green-500" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setNewItem(null)}>
+                      <X className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )}
               {tipos.map(t => (
                 <TableRow key={t.id}>
-                  <TableCell>
-                    <Badge variant="outline" className="font-mono">{t.codigo}</Badge>
-                  </TableCell>
-                  <TableCell>{t.nome}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{t.categoria}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={t.ativo ? 'default' : 'outline'}>
-                      {t.ativo ? 'Sim' : 'Não'}
-                    </Badge>
-                  </TableCell>
+                  {editingItem?.type === 'tipos' && editingItem.id === t.id ? (
+                    <>
+                      <TableCell>
+                        <Input 
+                          value={editingItem.data.codigo} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, codigo: e.target.value.toUpperCase() } })}
+                          className="h-8 w-16 font-mono"
+                          maxLength={2}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input 
+                          value={editingItem.data.nome} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, nome: e.target.value } })}
+                          className="h-8"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Select 
+                          value={editingItem.data.categoria} 
+                          onValueChange={v => setEditingItem({ ...editingItem, data: { ...editingItem.data, categoria: v } })}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="vestuario">Vestuário</SelectItem>
+                            <SelectItem value="calcados">Calçados</SelectItem>
+                            <SelectItem value="acessorios">Acessórios</SelectItem>
+                            <SelectItem value="outros">Outros</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveTipo(t.id, editingItem.data)}>
+                          <Check className="h-4 w-4 text-green-500" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingItem(null)}>
+                          <X className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell>
+                        <Badge variant="outline" className="font-mono">{t.codigo}</Badge>
+                      </TableCell>
+                      <TableCell>{t.nome}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{t.categoria}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-7 w-7"
+                          onClick={() => setEditingItem({ type: 'tipos', id: t.id, data: { nome: t.nome, codigo: t.codigo, categoria: t.categoria } })}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-7 w-7"
+                          onClick={() => deleteItem('tipos', t.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -962,28 +1137,109 @@ function ConfiguracaoCodigos({
         </ScrollArea>
       </TabsContent>
 
+      {/* GÊNEROS */}
       <TabsContent value="generos">
-        <ScrollArea className="h-[400px]">
+        <div className="flex justify-end mb-2">
+          <Button 
+            size="sm" 
+            onClick={() => setNewItem({ type: 'generos', data: { nome: '', codigo: '' } })}
+          >
+            <Plus className="h-4 w-4 mr-1" /> Novo Gênero
+          </Button>
+        </div>
+        <ScrollArea className="h-[350px]">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Código</TableHead>
+                <TableHead className="w-20">Código</TableHead>
                 <TableHead>Nome</TableHead>
-                <TableHead>Ativo</TableHead>
+                <TableHead className="text-right w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
+              {newItem?.type === 'generos' && (
+                <TableRow>
+                  <TableCell>
+                    <Input 
+                      value={newItem.data.codigo} 
+                      onChange={e => setNewItem({ ...newItem, data: { ...newItem.data, codigo: e.target.value.toUpperCase() } })}
+                      className="h-8 w-16 font-mono"
+                      maxLength={1}
+                      placeholder="X"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input 
+                      value={newItem.data.nome} 
+                      onChange={e => setNewItem({ ...newItem, data: { ...newItem.data, nome: e.target.value } })}
+                      className="h-8"
+                      placeholder="Nome do gênero"
+                    />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveGenero(null, newItem.data)}>
+                      <Check className="h-4 w-4 text-green-500" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setNewItem(null)}>
+                      <X className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )}
               {generos.map(g => (
                 <TableRow key={g.id}>
-                  <TableCell>
-                    <Badge variant="outline" className="font-mono">{g.codigo}</Badge>
-                  </TableCell>
-                  <TableCell>{g.nome}</TableCell>
-                  <TableCell>
-                    <Badge variant={g.ativo ? 'default' : 'outline'}>
-                      {g.ativo ? 'Sim' : 'Não'}
-                    </Badge>
-                  </TableCell>
+                  {editingItem?.type === 'generos' && editingItem.id === g.id ? (
+                    <>
+                      <TableCell>
+                        <Input 
+                          value={editingItem.data.codigo} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, codigo: e.target.value.toUpperCase() } })}
+                          className="h-8 w-16 font-mono"
+                          maxLength={1}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input 
+                          value={editingItem.data.nome} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, nome: e.target.value } })}
+                          className="h-8"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveGenero(g.id, editingItem.data)}>
+                          <Check className="h-4 w-4 text-green-500" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingItem(null)}>
+                          <X className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell>
+                        <Badge variant="outline" className="font-mono">{g.codigo}</Badge>
+                      </TableCell>
+                      <TableCell>{g.nome}</TableCell>
+                      <TableCell className="text-right">
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-7 w-7"
+                          onClick={() => setEditingItem({ type: 'generos', id: g.id, data: { nome: g.nome, codigo: g.codigo } })}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-7 w-7"
+                          onClick={() => deleteItem('generos', g.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -991,28 +1247,109 @@ function ConfiguracaoCodigos({
         </ScrollArea>
       </TabsContent>
 
+      {/* FAIXAS ETÁRIAS */}
       <TabsContent value="faixas">
-        <ScrollArea className="h-[400px]">
+        <div className="flex justify-end mb-2">
+          <Button 
+            size="sm" 
+            onClick={() => setNewItem({ type: 'faixas', data: { nome: '', codigo: '' } })}
+          >
+            <Plus className="h-4 w-4 mr-1" /> Nova Faixa
+          </Button>
+        </div>
+        <ScrollArea className="h-[350px]">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Código</TableHead>
+                <TableHead className="w-20">Código</TableHead>
                 <TableHead>Nome</TableHead>
-                <TableHead>Ativo</TableHead>
+                <TableHead className="text-right w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
+              {newItem?.type === 'faixas' && (
+                <TableRow>
+                  <TableCell>
+                    <Input 
+                      value={newItem.data.codigo} 
+                      onChange={e => setNewItem({ ...newItem, data: { ...newItem.data, codigo: e.target.value.toUpperCase() } })}
+                      className="h-8 w-16 font-mono"
+                      maxLength={1}
+                      placeholder="X"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input 
+                      value={newItem.data.nome} 
+                      onChange={e => setNewItem({ ...newItem, data: { ...newItem.data, nome: e.target.value } })}
+                      className="h-8"
+                      placeholder="Nome da faixa etária"
+                    />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveFaixa(null, newItem.data)}>
+                      <Check className="h-4 w-4 text-green-500" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setNewItem(null)}>
+                      <X className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )}
               {faixasEtarias.map(f => (
                 <TableRow key={f.id}>
-                  <TableCell>
-                    <Badge variant="outline" className="font-mono">{f.codigo}</Badge>
-                  </TableCell>
-                  <TableCell>{f.nome}</TableCell>
-                  <TableCell>
-                    <Badge variant={f.ativo ? 'default' : 'outline'}>
-                      {f.ativo ? 'Sim' : 'Não'}
-                    </Badge>
-                  </TableCell>
+                  {editingItem?.type === 'faixas' && editingItem.id === f.id ? (
+                    <>
+                      <TableCell>
+                        <Input 
+                          value={editingItem.data.codigo} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, codigo: e.target.value.toUpperCase() } })}
+                          className="h-8 w-16 font-mono"
+                          maxLength={1}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input 
+                          value={editingItem.data.nome} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, nome: e.target.value } })}
+                          className="h-8"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveFaixa(f.id, editingItem.data)}>
+                          <Check className="h-4 w-4 text-green-500" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingItem(null)}>
+                          <X className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell>
+                        <Badge variant="outline" className="font-mono">{f.codigo}</Badge>
+                      </TableCell>
+                      <TableCell>{f.nome}</TableCell>
+                      <TableCell className="text-right">
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-7 w-7"
+                          onClick={() => setEditingItem({ type: 'faixas', id: f.id, data: { nome: f.nome, codigo: f.codigo } })}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-7 w-7"
+                          onClick={() => deleteItem('faixas', f.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
