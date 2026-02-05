@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { listarMarcasUnificadas } from '@/lib/marcas-unificadas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -151,12 +152,7 @@ export default function GeradorReferencias() {
   const { data: marcas = [] } = useQuery({
     queryKey: ['marcas-ref'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('marcas')
-        .select('id, nome')
-        .eq('ativo', true)
-        .order('nome');
-      if (error) throw error;
+      const data = await listarMarcasUnificadas();
       return data as Marca[];
     }
   });
