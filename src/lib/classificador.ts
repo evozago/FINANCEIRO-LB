@@ -13,6 +13,7 @@ export interface RegraClassificacao {
   genero_automatico: string | null;
   ativo: boolean;
   ordem: number;
+  campos_pesquisa?: string[]; // Campos onde pesquisar: nome, variacao_1, variacao_2, codigo
 }
 
 export interface AtributoCustomizado {
@@ -40,6 +41,14 @@ export interface ResultadoClassificacao {
   regras_aplicadas: string[];
 }
 
+// Campos disponíveis para pesquisa
+export const CAMPOS_PESQUISA_DISPONIVEIS = [
+  { value: 'nome', label: 'Nome do Produto' },
+  { value: 'variacao_1', label: 'Variação 1 (Cor)' },
+  { value: 'variacao_2', label: 'Variação 2 (Tamanho)' },
+  { value: 'codigo', label: 'Código/Referência' },
+];
+
 // Normaliza texto para comparação (remove acentos, uppercase)
 export function normalizarTexto(texto: string): string {
   return texto
@@ -51,15 +60,47 @@ export function normalizarTexto(texto: string): string {
     .trim();
 }
 
-// Verifica se uma regra aplica ao nome do produto
-function verificarRegra(nomeNormalizado: string, regra: RegraClassificacao): boolean {
+// Obtém o texto combinado dos campos selecionados para pesquisa
+export function obterTextoPesquisa(
+  produto: { nome: string; variacao_1?: string | null; variacao_2?: string | null; codigo?: string | null },
+  camposPesquisa: string[]
+): string {
+  const campos = camposPesquisa.length > 0 ? camposPesquisa : ['nome'];
+  
+  const textos: string[] = [];
+  
+  for (const campo of campos) {
+    switch (campo) {
+      case 'nome':
+        if (produto.nome) textos.push(produto.nome);
+        break;
+      case 'variacao_1':
+        if (produto.variacao_1) textos.push(produto.variacao_1);
+        break;
+      case 'variacao_2':
+        if (produto.variacao_2) textos.push(produto.variacao_2);
+        break;
+      case 'codigo':
+        if (produto.codigo) textos.push(produto.codigo);
+        break;
+    }
+  }
+  
+  return textos.join(' ');
+}
+
+// Verifica se uma regra aplica ao produto
+function verificarRegra(
+  textoNormalizado: string, 
+  regra: RegraClassificacao
+): boolean {
   const termosNormalizados = regra.termos.map(t => normalizarTexto(t));
   
   // Primeiro verifica os termos de exclusão (se existirem)
   const termosExclusaoNorm = (regra.termos_exclusao || []).map(t => normalizarTexto(t));
   if (termosExclusaoNorm.length > 0) {
     // Se qualquer termo de exclusão estiver presente, a regra NÃO aplica
-    const temExclusao = termosExclusaoNorm.some(termo => nomeNormalizado.includes(termo));
+    const temExclusao = termosExclusaoNorm.some(termo => textoNormalizado.includes(termo));
     if (temExclusao) {
       return false;
     }
@@ -68,19 +109,19 @@ function verificarRegra(nomeNormalizado: string, regra: RegraClassificacao): boo
   // Depois verifica os termos de inclusão
   switch (regra.tipo) {
     case 'exact':
-      return termosNormalizados.some(termo => nomeNormalizado === termo);
+      return termosNormalizados.some(termo => textoNormalizado === termo);
 
     case 'startsWith':
-      return termosNormalizados.some(termo => nomeNormalizado.startsWith(termo));
+      return termosNormalizados.some(termo => textoNormalizado.startsWith(termo));
 
     case 'contains':
-      return termosNormalizados.some(termo => nomeNormalizado.includes(termo));
+      return termosNormalizados.some(termo => textoNormalizado.includes(termo));
 
     case 'containsAll':
-      return termosNormalizados.every(termo => nomeNormalizado.includes(termo));
+      return termosNormalizados.every(termo => textoNormalizado.includes(termo));
 
     case 'notContains':
-      return !termosNormalizados.some(termo => nomeNormalizado.includes(termo));
+      return !termosNormalizados.some(termo => textoNormalizado.includes(termo));
 
     default:
       return false;
@@ -121,14 +162,22 @@ function extrairDeLista(nomeNormalizado: string, valores: string[]): string | nu
   return null;
 }
 
+// Interface do produto com campos opcionais para classificação
+export interface ProdutoParaClassificar {
+  id?: number;
+  nome: string;
+  variacao_1?: string | null;
+  variacao_2?: string | null;
+  codigo?: string | null;
+  [key: string]: unknown;
+}
+
 // Classifica um produto baseado nas regras
 export function classificarProduto(
-  nome: string,
+  produto: ProdutoParaClassificar,
   regras: RegraClassificacao[],
   atributos: AtributoCustomizado[]
 ): ResultadoClassificacao {
-  const nomeNormalizado = normalizarTexto(nome);
-  
   const resultado: ResultadoClassificacao = {
     categoria: null,
     categoria_id: null,
@@ -154,7 +203,11 @@ export function classificarProduto(
     .sort((a, b) => a.ordem - b.ordem);
 
   for (const regra of regrasAtivas) {
-    if (verificarRegra(nomeNormalizado, regra)) {
+    // Obtém o texto de pesquisa baseado nos campos configurados na regra
+    const textoPesquisa = obterTextoPesquisa(produto, regra.campos_pesquisa || ['nome']);
+    const textoNormalizado = normalizarTexto(textoPesquisa);
+    
+    if (verificarRegra(textoNormalizado, regra)) {
       const campo = regra.campo_destino;
       const pontos = calcularPontuacao(regra);
 
@@ -214,10 +267,15 @@ export function classificarProduto(
     }
   }
 
+  // Texto normalizado para extração de atributos (usando nome + variações)
+  const textoCompleto = normalizarTexto(
+    [produto.nome, produto.variacao_1, produto.variacao_2].filter(Boolean).join(' ')
+  );
+
   // Extrai atributos customizados do tipo lista
   for (const atributo of atributos.filter(a => a.ativo && a.tipo === 'lista')) {
     const valores = atributo.valores || [];
-    const encontrado = extrairDeLista(nomeNormalizado, valores);
+    const encontrado = extrairDeLista(textoCompleto, valores);
     
     if (encontrado) {
       const nomeAtrib = atributo.nome.toLowerCase();
@@ -252,14 +310,14 @@ export function classificarProduto(
   return resultado;
 }
 
-// Classifica múltiplos produtos
+// Classifica múltiplos produtos (backwards compatible)
 export function classificarLote(
-  produtos: { id?: number; nome: string }[],
+  produtos: ProdutoParaClassificar[],
   regras: RegraClassificacao[],
   atributos: AtributoCustomizado[]
-): { produto: { id?: number; nome: string }; resultado: ResultadoClassificacao }[] {
+): { produto: ProdutoParaClassificar; resultado: ResultadoClassificacao }[] {
   return produtos.map(produto => ({
     produto,
-    resultado: classificarProduto(produto.nome, regras, atributos)
+    resultado: classificarProduto(produto, regras, atributos)
   }));
 }

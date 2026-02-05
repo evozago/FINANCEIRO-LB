@@ -28,6 +28,7 @@ interface RegraClassificacao {
   genero_automatico: string | null;
   ativo: boolean;
   ordem: number;
+  campos_pesquisa?: string[]; // Campos onde pesquisar
 }
 
 interface AtributoCustomizado {
@@ -55,29 +56,67 @@ interface ResultadoClassificacao {
   regras_aplicadas: string[];
 }
 
+interface ProdutoParaClassificar {
+  id?: number;
+  nome: string;
+  variacao_1?: string | null;
+  variacao_2?: string | null;
+  codigo?: string | null;
+  [key: string]: unknown;
+}
+
 let cancelRequested = false;
 
+// Obtém o texto combinado dos campos selecionados para pesquisa
+function obterTextoPesquisa(
+  produto: ProdutoParaClassificar,
+  camposPesquisa: string[]
+): string {
+  const campos = camposPesquisa.length > 0 ? camposPesquisa : ['nome'];
+  
+  const textos: string[] = [];
+  
+  for (const campo of campos) {
+    switch (campo) {
+      case 'nome':
+        if (produto.nome) textos.push(produto.nome);
+        break;
+      case 'variacao_1':
+        if (produto.variacao_1) textos.push(produto.variacao_1);
+        break;
+      case 'variacao_2':
+        if (produto.variacao_2) textos.push(produto.variacao_2);
+        break;
+      case 'codigo':
+        if (produto.codigo) textos.push(produto.codigo);
+        break;
+    }
+  }
+  
+  return textos.join(' ');
+}
+
 // Funções de classificação inline no worker (para evitar problemas de import)
-function verificarRegra(nomeNormalizado: string, regra: RegraClassificacao): boolean {
+function verificarRegra(textoNormalizado: string, regra: RegraClassificacao): boolean {
   const termosNormalizados = regra.termos.map(t => normalizarTexto(t));
   
   const termosExclusaoNorm = (regra.termos_exclusao || []).map(t => normalizarTexto(t));
   if (termosExclusaoNorm.length > 0) {
-    const temExclusao = termosExclusaoNorm.some(termo => nomeNormalizado.includes(termo));
+    const temExclusao = termosExclusaoNorm.some(termo => textoNormalizado.includes(termo));
     if (temExclusao) return false;
   }
 
   switch (regra.tipo) {
     case 'exact':
-      return termosNormalizados.some(termo => nomeNormalizado === termo);
+      return termosNormalizados.some(termo => textoNormalizado === termo);
     case 'startsWith':
-      return termosNormalizados.some(termo => nomeNormalizado.startsWith(termo));
+      return termosNormalizados.some(termo => textoNormalizado.startsWith(termo));
     case 'contains':
-      return termosNormalizados.some(termo => nomeNormalizado.includes(termo));
+      return termosNormalizados.some(termo => textoNormalizado.includes(termo));
     case 'containsAll':
-      return termosNormalizados.every(termo => nomeNormalizado.includes(termo));
+      return termosNormalizados.every(termo => textoNormalizado.includes(termo));
     case 'notContains':
-      return !termosNormalizados.some(termo => nomeNormalizado.includes(termo));
+      return !termosNormalizados.some(termo => textoNormalizado.includes(termo));
     default:
       return false;
   }
@@ -105,12 +144,10 @@ function extrairDeLista(nomeNormalizado: string, valores: string[]): string | nu
 }
 
 function classificarProduto(
-  nome: string,
+  produto: ProdutoParaClassificar,
   regras: RegraClassificacao[],
   atributos: AtributoCustomizado[]
 ): ResultadoClassificacao {
-  const nomeNormalizado = normalizarTexto(nome);
-  
   const resultado: ResultadoClassificacao = {
     categoria: null,
     categoria_id: null,
@@ -132,7 +169,11 @@ function classificarProduto(
   const regrasAtivas = regras.filter(r => r.ativo).sort((a, b) => a.ordem - b.ordem);
 
   for (const regra of regrasAtivas) {
-    if (verificarRegra(nomeNormalizado, regra)) {
+    // Obtém o texto de pesquisa baseado nos campos configurados na regra
+    const textoPesquisa = obterTextoPesquisa(produto, regra.campos_pesquisa || ['nome']);
+    const textoNormalizado = normalizarTexto(textoPesquisa);
+    
+    if (verificarRegra(textoNormalizado, regra)) {
       const campo = regra.campo_destino;
       const pontos = calcularPontuacao(regra);
 
@@ -173,9 +214,14 @@ function classificarProduto(
     }
   }
 
+  // Texto normalizado para extração de atributos (usando nome + variações)
+  const textoCompleto = normalizarTexto(
+    [produto.nome, produto.variacao_1, produto.variacao_2].filter(Boolean).join(' ')
+  );
+
   for (const atributo of atributos.filter(a => a.ativo && a.tipo === 'lista')) {
     const valores = atributo.valores || [];
-    const encontrado = extrairDeLista(nomeNormalizado, valores);
+    const encontrado = extrairDeLista(textoCompleto, valores);
     
     if (encontrado) {
       const nomeAtrib = atributo.nome.toLowerCase();
@@ -199,7 +245,7 @@ function classificarProduto(
 
 // Handler para classificação em lote com streaming de progresso
 async function handleClassifyBatch(payload: {
-  produtos: { id?: number; nome: string; [key: string]: unknown }[];
+  produtos: ProdutoParaClassificar[];
   regras: RegraClassificacao[];
   atributos: AtributoCustomizado[];
   batchSize: number;
@@ -207,7 +253,7 @@ async function handleClassifyBatch(payload: {
   totalCount: number;
 }) {
   const { produtos, regras, atributos, batchSize, startIndex, totalCount } = payload;
-  const resultados: { produto: typeof produtos[0]; resultado: ResultadoClassificacao }[] = [];
+  const resultados: { produto: ProdutoParaClassificar; resultado: ResultadoClassificacao }[] = [];
   
   const MICRO_BATCH = 50; // Processa 50 por vez para dar feedback mais granular
   
@@ -220,7 +266,7 @@ async function handleClassifyBatch(payload: {
     const microBatch = produtos.slice(i, i + MICRO_BATCH);
     
     for (const produto of microBatch) {
-      const resultado = classificarProduto(produto.nome, regras, atributos);
+      const resultado = classificarProduto(produto, regras, atributos);
       resultados.push({ produto, resultado });
     }
     

@@ -65,12 +65,13 @@ interface RegraForm {
   nome: string;
   tipo: 'contains' | 'exact' | 'startsWith' | 'containsAll' | 'notContains';
   termos: string;
-  termos_exclusao: string; // Novo campo para termos de exclusão
+  termos_exclusao: string;
   campo_destino: string;
   valor_destino: string;
   pontuacao: number;
   genero_automatico: string;
   ativo: boolean;
+  campos_pesquisa: string[]; // Campos onde pesquisar
 }
 
 const tiposRegra = [
@@ -90,16 +91,24 @@ const camposDestino = [
   { value: 'estilo', label: 'Estilo' },
 ];
 
+const camposPesquisaDisponiveis = [
+  { value: 'nome', label: 'Nome do Produto' },
+  { value: 'variacao_1', label: 'Variação 1 (Cor)' },
+  { value: 'variacao_2', label: 'Variação 2 (Tamanho/Numeração)' },
+  { value: 'codigo', label: 'Código/Referência' },
+];
+
 const initialForm: RegraForm = {
   nome: '',
   tipo: 'contains',
   termos: '',
-  termos_exclusao: '', // Inicializa vazio
+  termos_exclusao: '',
   campo_destino: 'categoria',
   valor_destino: '',
   pontuacao: 100,
   genero_automatico: '',
   ativo: true,
+  campos_pesquisa: ['nome'], // Default: só nome
 };
 
 export default function RegrasClassificacao() {
@@ -169,13 +178,14 @@ export default function RegrasClassificacao() {
         nome: dados.nome,
         tipo: dados.tipo,
         termos: termosArray,
-        termos_exclusao: termosExclusaoArray, // Novo campo
+        termos_exclusao: termosExclusaoArray,
         campo_destino: dados.campo_destino,
         valor_destino: dados.valor_destino,
         pontuacao: dados.pontuacao,
         genero_automatico: dados.genero_automatico || null,
         ativo: dados.ativo,
         ordem: dados.id ? undefined : regras.length,
+        campos_pesquisa: dados.campos_pesquisa.length > 0 ? dados.campos_pesquisa : ['nome'],
       };
 
       if (dados.id) {
@@ -223,12 +233,13 @@ export default function RegrasClassificacao() {
       nome: regra.nome,
       tipo: regra.tipo as RegraForm['tipo'],
       termos: regra.termos.join(', '),
-      termos_exclusao: (regra.termos_exclusao || []).join(', '), // Carregar termos de exclusão
+      termos_exclusao: (regra.termos_exclusao || []).join(', '),
       campo_destino: regra.campo_destino,
       valor_destino: regra.valor_destino,
       pontuacao: regra.pontuacao ?? 100,
       genero_automatico: regra.genero_automatico || '',
       ativo: regra.ativo ?? true,
+      campos_pesquisa: (regra as { campos_pesquisa?: string[] }).campos_pesquisa || ['nome'],
     });
     setDialogOpen(true);
   };
@@ -323,6 +334,7 @@ export default function RegrasClassificacao() {
         genero_automatico: null,
         ativo: true,
         ordem: regras.length + idx,
+        campos_pesquisa: ['nome'],
       }));
 
       const { error } = await supabase
@@ -587,6 +599,7 @@ export default function RegrasClassificacao() {
           genero_automatico: mergePreview.genero_automatico,
           ativo: true,
           ordem: regras.length,
+          campos_pesquisa: ['nome'], // Default para mesclagem
         });
       
       if (insertError) throw insertError;
@@ -785,6 +798,36 @@ export default function RegrasClassificacao() {
                 </div>
               </div>
 
+              {/* Campos de Pesquisa */}
+              <div className="border rounded-lg p-3 bg-muted/30">
+                <Label className="mb-2 block">Pesquisar em quais campos?</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {camposPesquisaDisponiveis.map(campo => (
+                    <div key={campo.value} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`campo-${campo.value}`}
+                        checked={form.campos_pesquisa.includes(campo.value)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setForm({ ...form, campos_pesquisa: [...form.campos_pesquisa, campo.value] });
+                          } else {
+                            // Garantir que pelo menos "nome" fique selecionado
+                            const novosCampos = form.campos_pesquisa.filter(c => c !== campo.value);
+                            setForm({ ...form, campos_pesquisa: novosCampos.length > 0 ? novosCampos : ['nome'] });
+                          }
+                        }}
+                      />
+                      <label htmlFor={`campo-${campo.value}`} className="text-sm cursor-pointer">
+                        {campo.label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Útil para Faixa Etária: pesquise na Variação 2 (Tamanho) para identificar numerações infantis
+                </p>
+              </div>
+
               <div className="flex items-center gap-2">
                 <Switch
                   checked={form.ativo}
@@ -970,8 +1013,24 @@ export default function RegrasClassificacao() {
                                 {tiposRegra.find(t => t.value === regra.tipo)?.label}
                               </Badge>
                             </TableCell>
-                            <TableCell className="max-w-[200px] truncate">
-                              {regra.termos.join(', ')}
+                            <TableCell className="max-w-[200px]">
+                              <div className="truncate">{regra.termos.join(', ')}</div>
+                              {(() => {
+                                const campos = (regra as { campos_pesquisa?: string[] }).campos_pesquisa || ['nome'];
+                                const naoNome = campos.filter(c => c !== 'nome');
+                                if (naoNome.length > 0 || !campos.includes('nome')) {
+                                  return (
+                                    <div className="flex gap-1 mt-1">
+                                      {campos.map(c => (
+                                        <Badge key={c} variant="outline" className="text-[10px] px-1 py-0">
+                                          {camposPesquisaDisponiveis.find(cp => cp.value === c)?.label?.split(' ')[0] || c}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </TableCell>
                             <TableCell>{regra.valor_destino}</TableCell>
                             <TableCell>{regra.pontuacao}</TableCell>

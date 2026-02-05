@@ -1031,6 +1031,7 @@ export type Database = {
         Row: {
           ativo: boolean | null
           campo_destino: string
+          campos_pesquisa: string[] | null
           categoria_id: number | null
           created_at: string | null
           genero_automatico: string | null
@@ -1046,6 +1047,7 @@ export type Database = {
         Insert: {
           ativo?: boolean | null
           campo_destino: string
+          campos_pesquisa?: string[] | null
           categoria_id?: number | null
           created_at?: string | null
           genero_automatico?: string | null
@@ -1061,6 +1063,7 @@ export type Database = {
         Update: {
           ativo?: boolean | null
           campo_destino?: string
+          campos_pesquisa?: string[] | null
           categoria_id?: number | null
           created_at?: string | null
           genero_automatico?: string | null
