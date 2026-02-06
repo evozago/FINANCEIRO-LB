@@ -427,14 +427,13 @@ export default function RegrasClassificacao() {
     return <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
-  // Verifica se o termo de busca corresponde a uma palavra completa (não substring)
+  // Verifica se o termo de busca corresponde (case-insensitive, sem acentos)
   const matchPalavraCompleta = (texto: string, termo: string): boolean => {
     if (!termo) return true;
     const textoNorm = normalizarTexto(texto);
     const termoNorm = normalizarTexto(termo);
-    // Cria regex para palavra completa (word boundary)
-    const regex = new RegExp(`\\b${termoNorm}\\b`, 'i');
-    return regex.test(textoNorm);
+    // Busca simples: contém o termo (já normalizado = case-insensitive)
+    return textoNorm.includes(termoNorm);
   };
 
   // Ordena e agrupa regras por campo (com filtro por busca normalizada - palavra completa)
