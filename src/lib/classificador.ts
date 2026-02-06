@@ -109,6 +109,10 @@ function isCondicoesValidas(condicoes: unknown): condicoes is CondicaoComposta[]
 }
 
 // Valida condições compostas
+// Lógica correta: 
+// - Condições conectadas por OU formam um "grupo" onde pelo menos UMA deve ser verdadeira
+// - Condições conectadas por AND exigem que AMBAS sejam verdadeiras
+// - "Obrigatória" só aplica para condições AND (não faz sentido para OR pois basta uma)
 function validarCondicoesCompostas(
   textoNormalizado: string,
   condicoes: CondicaoComposta[]
@@ -117,12 +121,12 @@ function validarCondicoesCompostas(
     return { valido: false, pontuacaoBonus: 0 };
   }
 
-  let resultadoAtual = true;
   let pontuacaoBonus = 0;
-  let operadorPendente: 'AND' | 'OR' = 'AND';
-
-  for (let i = 0; i < condicoes.length; i++) {
-    const condicao = condicoes[i];
+  
+  // Primeiro, avalia cada condição individualmente
+  const resultados: { match: boolean; obrigatorio: boolean; operador: 'AND' | 'OR' }[] = [];
+  
+  for (const condicao of condicoes) {
     const termosNorm = condicao.termos.map(t => normalizarTexto(t));
     
     let match = false;
@@ -141,33 +145,57 @@ function validarCondicoesCompostas(
         match = !termosNorm.some(t => textoNormalizado.includes(t));
         break;
     }
-
-    // Se é obrigatória e falhou, regra inteira falha
-    if (condicao.obrigatorio && !match) {
-      return { valido: false, pontuacaoBonus: 0 };
-    }
-
-    // Calcula resultado com operador
-    if (i === 0) {
-      resultadoAtual = match;
-    } else {
-      if (operadorPendente === 'AND') {
-        resultadoAtual = resultadoAtual && match;
-      } else {
-        resultadoAtual = resultadoAtual || match;
-      }
-    }
-
+    
+    resultados.push({ 
+      match, 
+      obrigatorio: condicao.obrigatorio, 
+      operador: condicao.operador 
+    });
+    
     // Bônus por condição opcional atendida
     if (!condicao.obrigatorio && match) {
       pontuacaoBonus += 25;
     }
-
-    // Atualiza operador para próxima iteração
-    operadorPendente = condicao.operador;
+  }
+  
+  // Agora aplica a lógica de operadores
+  // Agrupa condições conectadas por OU e avalia cada grupo
+  let resultadoFinal = resultados[0].match;
+  let grupoAtualTemMatch = resultados[0].match;
+  let grupoAtualTemObrigatoriaFalhando = resultados[0].obrigatorio && !resultados[0].match;
+  
+  for (let i = 0; i < resultados.length - 1; i++) {
+    const atual = resultados[i];
+    const proximo = resultados[i + 1];
+    
+    if (atual.operador === 'OR') {
+      // Continua acumulando no grupo OU
+      grupoAtualTemMatch = grupoAtualTemMatch || proximo.match;
+      // Em grupo OU, não faz sentido "obrigatória" pois basta uma dar match
+    } else {
+      // AND: finaliza grupo anterior e começa novo
+      // Se o grupo OU atual não teve nenhum match, falha
+      if (!grupoAtualTemMatch) {
+        return { valido: false, pontuacaoBonus: 0 };
+      }
+      
+      // Para AND, verifica se a próxima condição obrigatória falha
+      if (proximo.obrigatorio && !proximo.match) {
+        return { valido: false, pontuacaoBonus: 0 };
+      }
+      
+      // Reinicia para próximo grupo
+      grupoAtualTemMatch = proximo.match;
+      resultadoFinal = resultadoFinal && proximo.match;
+    }
+  }
+  
+  // Avalia o último grupo
+  if (!grupoAtualTemMatch) {
+    return { valido: false, pontuacaoBonus: 0 };
   }
 
-  return { valido: resultadoAtual, pontuacaoBonus };
+  return { valido: true, pontuacaoBonus };
 }
 
 // Verifica se uma regra aplica ao produto (suporta condições compostas)
