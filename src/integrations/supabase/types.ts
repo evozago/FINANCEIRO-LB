@@ -578,6 +578,27 @@ export type Database = {
           },
         ]
       }
+      entradas_nfe: {
+        Row: {
+          chave_nfe: string
+          created_at: string
+          data_entrada: string
+          id: number
+        }
+        Insert: {
+          chave_nfe: string
+          created_at?: string
+          data_entrada?: string
+          id?: number
+        }
+        Update: {
+          chave_nfe?: string
+          created_at?: string
+          data_entrada?: string
+          id?: number
+        }
+        Relationships: []
+      }
       faixas_etarias_produto: {
         Row: {
           ativo: boolean | null

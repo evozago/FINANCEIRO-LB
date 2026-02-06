@@ -50,6 +50,7 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { EntradaNfeCard } from "@/components/dashboard/EntradaNfeCard";
 
 interface SalesMetrics {
   vencendo_hoje_valor: number;
@@ -904,21 +905,28 @@ export function Dashboard() {
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatsCard
-          title="Vendas do Mês"
-          value={salesMetrics.total_vendas_mes.toString()}
-          description={`${formatCurrency(salesMetrics.valor_vendas_mes)} faturado`}
-          icon={ShoppingCart}
-          variant="success"
-        />
-        <StatsCard
-          title="Ticket Médio de Vendas"
-          value={formatCurrency(salesMetrics.ticket_medio_mes)}
-          description="Média por venda no mês atual"
-          icon={BadgeDollarSign}
-          variant="info"
-        />
+      {/* Card de Entrada de NFe */}
+      <div className="grid gap-6 xl:grid-cols-3">
+        <EntradaNfeCard />
+        <div className="xl:col-span-2 grid gap-4 sm:grid-cols-2">
+          <StatsCard
+            title="Vendas do Mês"
+            value={salesMetrics.total_vendas_mes.toString()}
+            description={`${formatCurrency(salesMetrics.valor_vendas_mes)} faturado`}
+            icon={ShoppingCart}
+            variant="success"
+          />
+          <StatsCard
+            title="Ticket Médio de Vendas"
+            value={formatCurrency(salesMetrics.ticket_medio_mes)}
+            description="Média por venda no mês atual"
+            icon={BadgeDollarSign}
+            variant="info"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-1">
         <StatsCard
           title="Percentual de Pagamentos"
           value={`${percentualPagoDisplay.toFixed(1)}%`}
