@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Tag } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Tag, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,20 +8,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { listarMarcasUnificadas } from '@/lib/marcas-unificadas';
 
 interface Marca {
   id: number;
   nome: string;
-  descricao?: string;
-  pj_vinculada_id?: number;
+  descricao?: string | null;
+  pj_vinculada_id?: number | null;
+  ativo?: boolean | null;
   created_at: string;
   pessoas_juridicas?: {
     nome_fantasia?: string;
     razao_social: string;
     cnpj?: string;
-  };
+  } | null;
 }
 
 interface PessoaJuridica {
@@ -39,6 +42,7 @@ export function Marcas() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingMarca, setEditingMarca] = useState<Marca | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -48,30 +52,55 @@ export function Marcas() {
   });
 
   useEffect(() => {
-    fetchMarcas();
+    syncAndFetchMarcas();
     fetchPessoasJuridicas();
   }, []);
+
+  // Sincroniza marcas do classificador e busca todas as marcas
+  const syncAndFetchMarcas = async () => {
+    try {
+      setSyncing(true);
+      // Primeiro sincroniza com as marcas do classificador
+      await listarMarcasUnificadas();
+      // Depois busca todas as marcas com seus relacionamentos
+      await fetchMarcas();
+    } catch (error) {
+      console.error('Erro ao sincronizar marcas:', error);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const fetchMarcas = async () => {
     try {
       const { data, error } = await supabase
         .from('marcas')
         .select(`
-          *,
-          pessoas_juridicas!pj_vinculada_id(nome_fantasia, razao_social, cnpj)
+          id,
+          nome,
+          descricao,
+          ativo,
+          created_at,
+          pj_vinculada_id,
+          pessoas_juridicas:pj_vinculada_id(nome_fantasia, razao_social, cnpj)
         `)
         .order('nome');
 
       if (error) throw error;
 
       // Transformar os dados para o formato esperado
-      const marcasFormatadas = (data || []).map(marca => {
+      const marcasFormatadas: Marca[] = (data || []).map(marca => {
         const pjData = Array.isArray(marca.pessoas_juridicas) 
           ? marca.pessoas_juridicas[0] 
           : marca.pessoas_juridicas;
         
         return {
-          ...marca,
+          id: marca.id,
+          nome: marca.nome,
+          descricao: marca.descricao,
+          ativo: marca.ativo,
+          created_at: marca.created_at,
+          pj_vinculada_id: marca.pj_vinculada_id,
           pessoas_juridicas: pjData ? {
             nome_fantasia: (pjData as any).nome_fantasia || '',
             razao_social: (pjData as any).razao_social || '',
@@ -80,7 +109,7 @@ export function Marcas() {
         };
       });
 
-      setMarcas(marcasFormatadas as any);
+      setMarcas(marcasFormatadas);
     } catch (error) {
       console.error('Erro ao buscar marcas:', error);
       toast({
@@ -220,17 +249,30 @@ export function Marcas() {
             Gerencie as marcas de produtos e suas vinculações
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { 
-              resetForm(); 
-              setEditingMarca(null); 
-              setIsDialogOpen(true);
-            }}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nova Marca
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={syncAndFetchMarcas}
+            disabled={syncing}
+          >
+            {syncing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Sincronizar
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { 
+                resetForm(); 
+                setEditingMarca(null); 
+                setIsDialogOpen(true);
+              }}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nova Marca
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
@@ -289,7 +331,8 @@ export function Marcas() {
               </div>
             </form>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       <Card>
