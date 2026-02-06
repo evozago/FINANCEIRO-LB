@@ -13,6 +13,7 @@ import {
   Tags,
   FileSpreadsheet
 } from 'lucide-react';
+import { EntradaNfeCard } from '@/components/dashboard/EntradaNfeCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface ModuleCardProps {
@@ -152,6 +153,11 @@ export default function ModulosHome() {
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Gerencie todos os aspectos do seu negócio em um só lugar
           </p>
+        </div>
+
+        {/* Entrada de Notas - Destaque */}
+        <div className="max-w-md mx-auto mb-10">
+          <EntradaNfeCard />
         </div>
 
         {/* Modules Grid */}
