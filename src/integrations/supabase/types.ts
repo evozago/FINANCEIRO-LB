@@ -809,6 +809,7 @@ export type Database = {
           descricao: string | null
           id: number
           nome: string
+          pj_vinculada_id: number | null
         }
         Insert: {
           ativo?: boolean | null
@@ -816,6 +817,7 @@ export type Database = {
           descricao?: string | null
           id?: number
           nome: string
+          pj_vinculada_id?: number | null
         }
         Update: {
           ativo?: boolean | null
@@ -823,8 +825,17 @@ export type Database = {
           descricao?: string | null
           id?: number
           nome?: string
+          pj_vinculada_id?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "marcas_pj_vinculada_id_fkey"
+            columns: ["pj_vinculada_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas_juridicas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       metas_vendas: {
         Row: {
