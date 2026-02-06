@@ -308,6 +308,57 @@ export default function RegrasClassificacao() {
     
     salvarMutation.mutate({ ...form, id: editandoId || undefined });
   };
+  // Função auxiliar para validar condições compostas (mesma lógica do classificador.ts)
+  const validarCondicoesCompostas = (
+    textoNormalizado: string,
+    condicoes: Condicao[]
+  ): boolean => {
+    if (condicoes.length === 0) return false;
+    
+    // Avalia cada condição individualmente
+    const resultados: { match: boolean; operador: 'AND' | 'OR' }[] = [];
+    
+    for (const condicao of condicoes) {
+      const termosNorm = condicao.termos.map(t => normalizarTexto(t));
+      
+      let match = false;
+      switch (condicao.tipo) {
+        case 'exact':
+          match = termosNorm.some(t => textoNormalizado === t);
+          break;
+        case 'startsWith':
+          match = termosNorm.some(t => textoNormalizado.startsWith(t));
+          break;
+        case 'contains':
+          match = termosNorm.some(t => textoNormalizado.includes(t));
+          break;
+        case 'notContains':
+          match = !termosNorm.some(t => textoNormalizado.includes(t));
+          break;
+      }
+      
+      resultados.push({ match, operador: condicao.operador });
+    }
+    
+    // Aplica lógica de operadores
+    let grupoAtualTemMatch = resultados[0].match;
+    
+    for (let i = 0; i < resultados.length - 1; i++) {
+      const atual = resultados[i];
+      const proximo = resultados[i + 1];
+      
+      if (atual.operador === 'OR') {
+        grupoAtualTemMatch = grupoAtualTemMatch || proximo.match;
+      } else {
+        // AND: se grupo atual falhou, toda a regra falha
+        if (!grupoAtualTemMatch) return false;
+        grupoAtualTemMatch = proximo.match;
+      }
+    }
+    
+    return grupoAtualTemMatch;
+  };
+
   const testarRegra = () => {
     if (!testInput.trim()) return;
     
@@ -315,42 +366,49 @@ export default function RegrasClassificacao() {
     const matches: string[] = [];
 
     for (const regra of regras.filter(r => r.ativo)) {
-      const termosNorm = regra.termos.map(t => normalizarTexto(t));
-      const termosExclusaoNorm = (regra.termos_exclusao || []).map(t => normalizarTexto(t));
-      
-      // Primeiro verifica exclusões
-      if (termosExclusaoNorm.length > 0) {
-        const temExclusao = termosExclusaoNorm.some(t => nomeNorm.includes(t));
-        if (temExclusao) {
-          continue; // Pula esta regra se tem termo de exclusão
-        }
-      }
+      // Verifica se a regra usa condições compostas
+      const condicoesRaw = (regra as unknown as { condicoes?: unknown }).condicoes;
+      const condicoesDB = Array.isArray(condicoesRaw) ? condicoesRaw as Condicao[] : [];
+      const usaCondicoesCompostas = condicoesDB.length > 0;
       
       let match = false;
-
-      switch (regra.tipo) {
-        case 'exact':
-          match = termosNorm.some(t => nomeNorm === t);
-          break;
-        case 'startsWith':
-          match = termosNorm.some(t => nomeNorm.startsWith(t));
-          break;
-        case 'contains':
-          match = termosNorm.some(t => nomeNorm.includes(t));
-          break;
-        case 'containsAll':
-          match = termosNorm.every(t => nomeNorm.includes(t));
-          break;
-        case 'notContains':
-          match = !termosNorm.some(t => nomeNorm.includes(t));
-          break;
+      
+      if (usaCondicoesCompostas) {
+        // Usa lógica de condições compostas
+        match = validarCondicoesCompostas(nomeNorm, condicoesDB);
+      } else {
+        // Lógica legada (termos simples)
+        const termosNorm = regra.termos.map(t => normalizarTexto(t));
+        const termosExclusaoNorm = (regra.termos_exclusao || []).map(t => normalizarTexto(t));
+        
+        // Primeiro verifica exclusões
+        if (termosExclusaoNorm.length > 0) {
+          const temExclusao = termosExclusaoNorm.some(t => nomeNorm.includes(t));
+          if (temExclusao) continue;
+        }
+        
+        switch (regra.tipo) {
+          case 'exact':
+            match = termosNorm.some(t => nomeNorm === t);
+            break;
+          case 'startsWith':
+            match = termosNorm.some(t => nomeNorm.startsWith(t));
+            break;
+          case 'contains':
+            match = termosNorm.some(t => nomeNorm.includes(t));
+            break;
+          case 'containsAll':
+            match = termosNorm.every(t => nomeNorm.includes(t));
+            break;
+          case 'notContains':
+            match = !termosNorm.some(t => nomeNorm.includes(t));
+            break;
+        }
       }
 
       if (match) {
-        const exclusaoInfo = termosExclusaoNorm.length > 0 
-          ? ` (exceto: ${regra.termos_exclusao?.join(', ')})` 
-          : '';
-        matches.push(`✓ ${regra.nome} → ${regra.campo_destino}: ${regra.valor_destino}${exclusaoInfo}`);
+        const info = usaCondicoesCompostas ? ' (condições compostas)' : '';
+        matches.push(`✓ ${regra.nome} → ${regra.campo_destino}: ${regra.valor_destino}${info}`);
       }
     }
 
