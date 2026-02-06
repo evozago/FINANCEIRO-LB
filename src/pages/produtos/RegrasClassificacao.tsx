@@ -170,6 +170,9 @@ export default function RegrasClassificacao() {
   // Ordenação
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  
+  // Busca/Filtro
+  const [searchTerm, setSearchTerm] = useState('');
   const { data: regras = [], isLoading } = useQuery({
     queryKey: ['regras-classificacao'],
     queryFn: async () => {
@@ -424,10 +427,27 @@ export default function RegrasClassificacao() {
     return <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
-  // Ordena e agrupa regras por campo
+  // Ordena e agrupa regras por campo (com filtro por busca normalizada)
   const regrasPorCampo = useMemo(() => {
+    const termoBuscaNorm = searchTerm.trim() ? normalizarTexto(searchTerm) : '';
+    
     return camposDestino.map(campo => {
       let regrasFiltered = regras.filter(r => r.campo_destino === campo.value);
+      
+      // Aplica filtro de busca (ignora acentos)
+      if (termoBuscaNorm) {
+        regrasFiltered = regrasFiltered.filter(r => {
+          const nomeNorm = normalizarTexto(r.nome);
+          const termosNorm = r.termos.map(t => normalizarTexto(t)).join(' ');
+          const valorDestinoNorm = normalizarTexto(r.valor_destino);
+          const termosExclusaoNorm = (r.termos_exclusao || []).map(t => normalizarTexto(t)).join(' ');
+          
+          return nomeNorm.includes(termoBuscaNorm) || 
+                 termosNorm.includes(termoBuscaNorm) || 
+                 valorDestinoNorm.includes(termoBuscaNorm) ||
+                 termosExclusaoNorm.includes(termoBuscaNorm);
+        });
+      }
       
       if (sortKey && sortDirection) {
         regrasFiltered = [...regrasFiltered].sort((a, b) => {
@@ -471,7 +491,7 @@ export default function RegrasClassificacao() {
       
       return { ...campo, regras: regrasFiltered };
     });
-  }, [regras, sortKey, sortDirection]);
+  }, [regras, sortKey, sortDirection, searchTerm]);
 
   // Funções de seleção
   const toggleSelection = (id: number) => {
@@ -1118,14 +1138,31 @@ export default function RegrasClassificacao() {
       </Card>
 
       {/* Regras por categoria */}
-      <Tabs defaultValue="categoria">
-        <TabsList>
-          {regrasPorCampo.map(campo => (
-            <TabsTrigger key={campo.value} value={campo.value}>
-              {campo.label} ({campo.regras.length})
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-4">
+            <Input
+              placeholder="Buscar regras (nome, termos, valor)..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="max-w-sm"
+            />
+            {searchTerm && (
+              <span className="text-sm text-muted-foreground">
+                {regrasPorCampo.reduce((acc, c) => acc + c.regras.length, 0)} regras encontradas
+              </span>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <Tabs defaultValue="categoria">
+            <TabsList>
+              {regrasPorCampo.map(campo => (
+                <TabsTrigger key={campo.value} value={campo.value}>
+                  {campo.label} ({campo.regras.length})
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
         {regrasPorCampo.map(campo => {
           const idsTab = campo.regras.map(r => r.id);
@@ -1329,7 +1366,9 @@ export default function RegrasClassificacao() {
             </TabsContent>
           );
         })}
-      </Tabs>
+          </Tabs>
+        </CardContent>
+      </Card>
 
       {/* Modal de edição em lote */}
       <Dialog open={batchEditOpen} onOpenChange={setBatchEditOpen}>
