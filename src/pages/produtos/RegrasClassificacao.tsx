@@ -427,25 +427,36 @@ export default function RegrasClassificacao() {
     return <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
-  // Ordena e agrupa regras por campo (com filtro por busca normalizada)
+  // Verifica se o termo de busca corresponde a uma palavra completa (não substring)
+  const matchPalavraCompleta = (texto: string, termo: string): boolean => {
+    if (!termo) return true;
+    const textoNorm = normalizarTexto(texto);
+    const termoNorm = normalizarTexto(termo);
+    // Cria regex para palavra completa (word boundary)
+    const regex = new RegExp(`\\b${termoNorm}\\b`, 'i');
+    return regex.test(textoNorm);
+  };
+
+  // Ordena e agrupa regras por campo (com filtro por busca normalizada - palavra completa)
   const regrasPorCampo = useMemo(() => {
-    const termoBuscaNorm = searchTerm.trim() ? normalizarTexto(searchTerm) : '';
+    const termoBusca = searchTerm.trim();
     
     return camposDestino.map(campo => {
       let regrasFiltered = regras.filter(r => r.campo_destino === campo.value);
       
-      // Aplica filtro de busca (ignora acentos)
-      if (termoBuscaNorm) {
+      // Aplica filtro de busca (ignora acentos, mas busca palavra completa)
+      if (termoBusca) {
         regrasFiltered = regrasFiltered.filter(r => {
-          const nomeNorm = normalizarTexto(r.nome);
-          const termosNorm = r.termos.map(t => normalizarTexto(t)).join(' ');
-          const valorDestinoNorm = normalizarTexto(r.valor_destino);
-          const termosExclusaoNorm = (r.termos_exclusao || []).map(t => normalizarTexto(t)).join(' ');
+          // Verifica nome da regra
+          if (matchPalavraCompleta(r.nome, termoBusca)) return true;
+          // Verifica cada termo individualmente
+          if (r.termos.some(t => matchPalavraCompleta(t, termoBusca))) return true;
+          // Verifica valor destino
+          if (matchPalavraCompleta(r.valor_destino, termoBusca)) return true;
+          // Verifica termos de exclusão
+          if ((r.termos_exclusao || []).some(t => matchPalavraCompleta(t, termoBusca))) return true;
           
-          return nomeNorm.includes(termoBuscaNorm) || 
-                 termosNorm.includes(termoBuscaNorm) || 
-                 valorDestinoNorm.includes(termoBuscaNorm) ||
-                 termosExclusaoNorm.includes(termoBuscaNorm);
+          return false;
         });
       }
       
