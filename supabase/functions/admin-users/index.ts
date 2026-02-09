@@ -17,8 +17,42 @@ serve(async (req: Request) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    // Verify caller is admin
-    const authHeader = req.headers.get("Authorization")!;
+    const { action, ...params } = await req.json();
+
+    // Bootstrap: create first admin (no auth required, only works if no admin exists)
+    if (action === "create-first-admin") {
+      const { email, password } = params;
+      const { data: existingRoles } = await supabaseAdmin
+        .from("user_roles")
+        .select("id")
+        .eq("role", "admin")
+        .limit(1);
+
+      if (existingRoles && existingRoles.length > 0) {
+        throw new Error("Já existe um administrador cadastrado");
+      }
+
+      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { nome: "Administrador" },
+      });
+      if (createError) throw createError;
+
+      await supabaseAdmin.from("user_roles").insert({
+        user_id: newUser.user!.id,
+        role: "admin",
+      });
+
+      return new Response(JSON.stringify({ user: newUser.user }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // All other actions require admin auth
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("Não autenticado");
     const token = authHeader.replace("Bearer ", "");
     const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
     if (!caller) throw new Error("Não autenticado");
@@ -33,8 +67,6 @@ serve(async (req: Request) => {
       throw new Error("Acesso negado: apenas administradores");
     }
 
-    const { action, ...params } = await req.json();
-
     if (action === "create-user") {
       const { email, password, nome, role } = params;
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -45,7 +77,6 @@ serve(async (req: Request) => {
       });
       if (createError) throw createError;
 
-      // Assign role
       await supabaseAdmin.from("user_roles").insert({
         user_id: newUser.user!.id,
         role: role || "operador",
@@ -78,11 +109,6 @@ serve(async (req: Request) => {
 
     if (action === "update-role") {
       const { user_id, role } = params;
-      await supabaseAdmin
-        .from("user_roles")
-        .upsert({ user_id, role }, { onConflict: "user_id,role" });
-
-      // Delete old roles and insert new one
       await supabaseAdmin.from("user_roles").delete().eq("user_id", user_id);
       await supabaseAdmin.from("user_roles").insert({ user_id, role });
 
@@ -93,9 +119,7 @@ serve(async (req: Request) => {
 
     if (action === "update-modulos") {
       const { role, modulos } = params;
-      // Delete existing
       await supabaseAdmin.from("role_modulos").delete().eq("role", role);
-      // Insert new
       const rows = modulos.map((m: string) => ({ role, modulo: m }));
       if (rows.length > 0) {
         await supabaseAdmin.from("role_modulos").insert(rows);
