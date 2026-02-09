@@ -10,11 +10,14 @@ import {
   Package,
   Menu,
   Brain,
-  Barcode
+  Barcode,
+  LogOut,
+  Shield
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navigationItems = [
   {
@@ -90,6 +93,7 @@ const navigationItems = [
 
 export function Navigation() {
   const location = useLocation();
+  const { profile, role, signOut } = useAuth();
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [metrics, setMetrics] = useState({ vencidas_qtd: 0 });
 
@@ -187,15 +191,25 @@ export function Navigation() {
       </div>
 
       {/* Footer */}
-      <div className="border-t p-4">
+      <div className="border-t p-4 space-y-2">
+        {role === 'admin' && (
+          <Link to="/admin/usuarios">
+            <Button variant="ghost" size="sm" className="w-full justify-start">
+              <Shield className="mr-2 h-4 w-4" /> Gerenciar Usuários
+            </Button>
+          </Link>
+        )}
         <div className="flex items-center space-x-3 px-2">
-          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-purple flex items-center justify-center text-white font-semibold text-sm">
-            U
+          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center text-primary-foreground font-semibold text-sm">
+            {profile?.nome?.[0]?.toUpperCase() || 'U'}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">Usuário</p>
-            <p className="text-xs text-muted-foreground">Administrador</p>
+            <p className="text-sm font-medium truncate">{profile?.nome || 'Usuário'}</p>
+            <p className="text-xs text-muted-foreground">{role === 'admin' ? 'Administrador' : 'Operador'}</p>
           </div>
+          <Button variant="ghost" size="icon" onClick={signOut} title="Sair">
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </div>
