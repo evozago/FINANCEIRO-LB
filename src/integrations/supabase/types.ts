@@ -1005,6 +1005,325 @@ export type Database = {
         }
         Relationships: []
       }
+      print3d_estoque: {
+        Row: {
+          id: number
+          ponto_reposicao: number
+          produto_id: number
+          qtd_em_producao: number
+          qtd_pronta: number
+          tempo_reposicao_dias: number | null
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          ponto_reposicao?: number
+          produto_id: number
+          qtd_em_producao?: number
+          qtd_pronta?: number
+          tempo_reposicao_dias?: number | null
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          ponto_reposicao?: number
+          produto_id?: number
+          qtd_em_producao?: number
+          qtd_pronta?: number
+          tempo_reposicao_dias?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "print3d_estoque_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "print3d_produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      print3d_impressoras: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          custo_aquisicao_centavos: number
+          id: number
+          modelo: string | null
+          nome: string
+          potencia_watts: number
+          vida_util_horas: number
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          custo_aquisicao_centavos?: number
+          id?: number
+          modelo?: string | null
+          nome: string
+          potencia_watts?: number
+          vida_util_horas?: number
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          custo_aquisicao_centavos?: number
+          id?: number
+          modelo?: string | null
+          nome?: string
+          potencia_watts?: number
+          vida_util_horas?: number
+        }
+        Relationships: []
+      }
+      print3d_marketplaces: {
+        Row: {
+          ativo: boolean
+          comissao_fixa_centavos: number
+          created_at: string
+          frete_subsidiado: boolean
+          id: number
+          margem_desejada_percentual: number
+          nome: string
+          taxa_percentual: number
+        }
+        Insert: {
+          ativo?: boolean
+          comissao_fixa_centavos?: number
+          created_at?: string
+          frete_subsidiado?: boolean
+          id?: number
+          margem_desejada_percentual?: number
+          nome: string
+          taxa_percentual?: number
+        }
+        Update: {
+          ativo?: boolean
+          comissao_fixa_centavos?: number
+          created_at?: string
+          frete_subsidiado?: boolean
+          id?: number
+          margem_desejada_percentual?: number
+          nome?: string
+          taxa_percentual?: number
+        }
+        Relationships: []
+      }
+      print3d_materiais: {
+        Row: {
+          ativo: boolean
+          cor: string | null
+          created_at: string
+          id: number
+          marca: string | null
+          nome: string
+          peso_kg: number
+          preco_kg_centavos: number
+          tipo: string
+        }
+        Insert: {
+          ativo?: boolean
+          cor?: string | null
+          created_at?: string
+          id?: number
+          marca?: string | null
+          nome: string
+          peso_kg?: number
+          preco_kg_centavos?: number
+          tipo?: string
+        }
+        Update: {
+          ativo?: boolean
+          cor?: string | null
+          created_at?: string
+          id?: number
+          marca?: string | null
+          nome?: string
+          peso_kg?: number
+          preco_kg_centavos?: number
+          tipo?: string
+        }
+        Relationships: []
+      }
+      print3d_parametros: {
+        Row: {
+          chave: string
+          descricao: string | null
+          id: number
+          unidade: string | null
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          chave: string
+          descricao?: string | null
+          id?: number
+          unidade?: string | null
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          chave?: string
+          descricao?: string | null
+          id?: number
+          unidade?: string | null
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: []
+      }
+      print3d_produto_imagens: {
+        Row: {
+          cor: string | null
+          created_at: string
+          id: number
+          nome_arquivo: string | null
+          produto_id: number
+          storage_path: string
+        }
+        Insert: {
+          cor?: string | null
+          created_at?: string
+          id?: number
+          nome_arquivo?: string | null
+          produto_id: number
+          storage_path: string
+        }
+        Update: {
+          cor?: string | null
+          created_at?: string
+          id?: number
+          nome_arquivo?: string | null
+          produto_id?: number
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "print3d_produto_imagens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "print3d_produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      print3d_produtos: {
+        Row: {
+          ativo: boolean
+          categoria: string | null
+          created_at: string
+          embalagem_centavos: number
+          id: number
+          impressora_id: number | null
+          mao_de_obra_centavos: number
+          material_id: number | null
+          nome_interno: string | null
+          nome_marketplace: string
+          perfil_impressao: string | null
+          peso_gramas: number
+          sku: string | null
+          tempo_impressao_min: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          categoria?: string | null
+          created_at?: string
+          embalagem_centavos?: number
+          id?: number
+          impressora_id?: number | null
+          mao_de_obra_centavos?: number
+          material_id?: number | null
+          nome_interno?: string | null
+          nome_marketplace: string
+          perfil_impressao?: string | null
+          peso_gramas?: number
+          sku?: string | null
+          tempo_impressao_min?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string | null
+          created_at?: string
+          embalagem_centavos?: number
+          id?: number
+          impressora_id?: number | null
+          mao_de_obra_centavos?: number
+          material_id?: number | null
+          nome_interno?: string | null
+          nome_marketplace?: string
+          perfil_impressao?: string | null
+          peso_gramas?: number
+          sku?: string | null
+          tempo_impressao_min?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "print3d_produtos_impressora_id_fkey"
+            columns: ["impressora_id"]
+            isOneToOne: false
+            referencedRelation: "print3d_impressoras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "print3d_produtos_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "print3d_materiais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      print3d_vendas: {
+        Row: {
+          created_at: string
+          custo_total_centavos: number
+          data_venda: string
+          id: number
+          marketplace_id: number | null
+          produto_id: number
+          quantidade: number
+          receita_centavos: number
+        }
+        Insert: {
+          created_at?: string
+          custo_total_centavos?: number
+          data_venda?: string
+          id?: number
+          marketplace_id?: number | null
+          produto_id: number
+          quantidade?: number
+          receita_centavos?: number
+        }
+        Update: {
+          created_at?: string
+          custo_total_centavos?: number
+          data_venda?: string
+          id?: number
+          marketplace_id?: number | null
+          produto_id?: number
+          quantidade?: number
+          receita_centavos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "print3d_vendas_marketplace_id_fkey"
+            columns: ["marketplace_id"]
+            isOneToOne: false
+            referencedRelation: "print3d_marketplaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "print3d_vendas_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "print3d_produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       produtos: {
         Row: {
           ativo: boolean | null

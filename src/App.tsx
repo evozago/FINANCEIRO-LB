@@ -40,6 +40,14 @@ import ShopifyIntegration from "./pages/ecommerce/ShopifyIntegration";
 import UnificadorPlanilhas from "./pages/ferramentas/UnificadorPlanilhas";
 import Login from "./pages/Login";
 import GerenciarUsuarios from "./pages/admin/GerenciarUsuarios";
+import Impressao3dHome from "./pages/impressao3d/Impressao3dHome";
+import Produtos3d from "./pages/impressao3d/Produtos3d";
+import Materiais3d from "./pages/impressao3d/Materiais3d";
+import Impressoras3d from "./pages/impressao3d/Impressoras3d";
+import Marketplaces3d from "./pages/impressao3d/Marketplaces3d";
+import Estoque3d from "./pages/impressao3d/Estoque3d";
+import Vendas3d from "./pages/impressao3d/Vendas3d";
+import Parametros3d from "./pages/impressao3d/Parametros3d";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -111,6 +119,16 @@ const AppRoutes = () => (
 
       {/* Relatórios */}
       <Route path="relatorios" element={<Relatorios />} />
+
+      {/* Impressão 3D */}
+      <Route path="impressao3d" element={<Impressao3dHome />} />
+      <Route path="impressao3d/produtos" element={<Produtos3d />} />
+      <Route path="impressao3d/materiais" element={<Materiais3d />} />
+      <Route path="impressao3d/impressoras" element={<Impressoras3d />} />
+      <Route path="impressao3d/marketplaces" element={<Marketplaces3d />} />
+      <Route path="impressao3d/estoque" element={<Estoque3d />} />
+      <Route path="impressao3d/vendas" element={<Vendas3d />} />
+      <Route path="impressao3d/parametros" element={<Parametros3d />} />
 
       {/* Admin */}
       <Route path="admin/usuarios" element={<GerenciarUsuarios />} />
