@@ -13,7 +13,8 @@ import {
   Tags,
   FileSpreadsheet,
   LogOut,
-  Settings
+  Settings,
+  Printer
 } from 'lucide-react';
 import { EntradaNfeCard } from '@/components/dashboard/EntradaNfeCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -151,6 +152,14 @@ const modules: ModuleCardProps[] = [
     href: '/ia/cerebro',
     color: 'bg-gradient-to-br from-violet-500 to-violet-600',
     moduloId: 'admin'
+  },
+  {
+    title: 'Impressão 3D',
+    description: 'Custos, precificação marketplace e controle de produção',
+    icon: Printer,
+    href: '/impressao3d',
+    color: 'bg-gradient-to-br from-rose-500 to-rose-600',
+    moduloId: 'impressao3d'
   }
 ];
 

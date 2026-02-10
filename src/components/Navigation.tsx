@@ -89,6 +89,20 @@ const navigationItems = [
     href: '/ia/cerebro',
     icon: Brain,
   },
+  {
+    title: 'Impressão 3D',
+    icon: Package,
+    submenu: [
+      { title: 'Painel', href: '/impressao3d' },
+      { title: 'Produtos', href: '/impressao3d/produtos' },
+      { title: 'Materiais', href: '/impressao3d/materiais' },
+      { title: 'Impressoras', href: '/impressao3d/impressoras' },
+      { title: 'Marketplaces', href: '/impressao3d/marketplaces' },
+      { title: 'Estoque', href: '/impressao3d/estoque' },
+      { title: 'Vendas', href: '/impressao3d/vendas' },
+      { title: 'Parâmetros', href: '/impressao3d/parametros' },
+    ],
+  },
 ];
 
 export function Navigation() {
