@@ -42,6 +42,7 @@ function getAllTagContents(xmlText: string, tagName: string): string[] {
 }
 
 // ===== CALCULAR FRETE (SOAP) =====
+// Manual: TipoServico é string "EXP" ou "STD", ValorDeclarado em reais com vírgula
 async function calcularFreteSingle(params: {
   cep_destino: string;
   peso: number;
@@ -131,6 +132,8 @@ async function calcularFrete(params: {
 }
 
 // ===== REGISTRAR COLETA (SOAP) =====
+// Manual: TipoServico é numérico: 1=Standard, 7=Super Expresso
+// Default changed to 7 (Expresso) per manual specification
 async function registrarColeta(params: {
   cod_remessa?: string;
   pedido: string;
@@ -157,7 +160,8 @@ async function registrarColeta(params: {
   nfe_chave?: string;
 }) {
   const creds = getCredentials();
-  const tipoServico = params.tipo_servico ?? 1;
+  // CORRIGIDO: Default 7 = Expresso (antes era 1 = Standard)
+  const tipoServico = params.tipo_servico ?? 7;
   const volumes = params.volumes ?? 1;
 
   let docFiscalXml = '';
@@ -174,7 +178,7 @@ async function registrarColeta(params: {
         </item>
       </DocFiscalNFe>`;
   } else {
-    // Usar DocFiscalO (Outros/Declaração) quando não tem NF-e
+    // DocFiscalO (Declaração) quando não tem NF-e
     docFiscalXml = `
       <DocFiscalO>
         <item>
@@ -244,7 +248,10 @@ async function registrarColeta(params: {
 
   if (codigoProc !== '1') {
     const criticaBlocks = getAllTagContents(xmlText, 'CriticaVolume');
-    const erros = criticaBlocks.map(block => getTagText(block, 'Descricao')).filter(Boolean);
+    const erros = criticaBlocks.map(block => {
+      const descErro = getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao');
+      return descErro;
+    }).filter(Boolean);
     throw new Error(`Erro Total Express (código ${codigoProc}): ${erros.length > 0 ? erros.join('; ') : 'Erro ao registrar coleta'}`);
   }
 
@@ -265,7 +272,7 @@ async function registrarColeta(params: {
   };
 }
 
-// ===== OBTER TRACKING (SOAP) =====
+// ===== OBTER TRACKING (SOAP - método legado para consulta por data) =====
 async function obterTracking(params: { data_consulta?: string }) {
   const creds = getCredentials();
   const dataConsulta = params.data_consulta || new Date().toISOString().split('T')[0];
@@ -314,9 +321,9 @@ async function obterTracking(params: { data_consulta?: string }) {
       trackings.push({
         awb,
         pedido,
-        status: getTagText(item, 'Status'),
-        data_hora: getTagText(item, 'DataHora'),
-        descricao: getTagText(item, 'Descricao'),
+        status: getTagText(item, 'CodStatus') || getTagText(item, 'Status'),
+        data_hora: getTagText(item, 'DataStatus') || getTagText(item, 'DataHora'),
+        descricao: getTagText(item, 'DescStatus') || getTagText(item, 'Descricao'),
         cidade: getTagText(item, 'Cidade'),
       });
     }
@@ -325,7 +332,9 @@ async function obterTracking(params: { data_consulta?: string }) {
   return { trackings };
 }
 
-// ===== RASTREAR POR PEDIDO (REST API) =====
+// ===== RASTREAR POR PEDIDO (REST API - conforme manual Status de Entrega) =====
+// Endpoint: POST https://apis.totalexpress.com.br/ics-tracking-encomenda-lv/v1/tracking
+// Body: { "pedidos": ["..."], "comprovanteEntrega": true }
 async function rastrearPorPedido(params: { pedidos: string[] }) {
   const creds = getCredentials();
 
@@ -350,66 +359,80 @@ async function rastrearPorPedido(params: { pedidos: string[] }) {
   return await response.json();
 }
 
-// ===== RASTREAR POR AWB (via SOAP ObterTracking) =====
+// ===== RASTREAR POR AWB (REST API direta - conforme manual Status de Entrega) =====
+// CORRIGIDO: Agora usa REST API direta ao invés de loop SOAP de 7 dias
+// Body: { "awbs": ["ABCD000000000tx", ...], "comprovanteEntrega": true }
+// Limite: 50 AWBs por request
 async function rastrearPorAwb(params: { awbs: string[] }) {
   const creds = getCredentials();
-  
-  // Use SOAP ObterTracking which works with our credentials
-  // Fetch last 7 days to capture recent events
-  const results: Array<{ awb: string; eventos: Array<{ descricao: string; codigo: string; data: string; cidade: string }> }> = [];
-  
-  const today = new Date();
-  const dates: string[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().split('T')[0]);
+
+  // Dividir em lotes de 50 (limite da API conforme manual)
+  const batches: string[][] = [];
+  for (let i = 0; i < params.awbs.length; i += 50) {
+    batches.push(params.awbs.slice(i, i + 50));
   }
-  
-  // Collect all tracking events from recent days
-  const allTrackings: Array<{ awb: string; descricao: string; codigo: string; data_hora: string; cidade: string }> = [];
-  
-  for (const dataConsulta of dates) {
-    try {
-      const trackResult = await obterTracking({ data_consulta: dataConsulta });
-      for (const t of trackResult.trackings) {
-        if (t.awb && params.awbs.includes(t.awb)) {
-          allTrackings.push({
-            awb: t.awb,
-            descricao: t.descricao,
-            codigo: t.status,
-            data_hora: t.data_hora,
-            cidade: t.cidade,
-          });
+
+  const allResults: Array<{ awb: string; eventos: Array<{ descricao: string; codigo: string; data: string; cidade: string }> }> = [];
+
+  for (const batch of batches) {
+    const response = await fetch(TRACKING_REST_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': basicAuth(creds.user, creds.password),
+        'User-Agent': 'LovableApp/1.0',
+      },
+      body: JSON.stringify({
+        awbs: batch,
+        comprovanteEntrega: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Erro REST tracking AWBs: ${response.status} - ${errorText}`);
+      continue;
+    }
+
+    const data = await response.json();
+    console.log('REST Tracking response:', JSON.stringify(data).substring(0, 1000));
+
+    // Parse the REST API response format
+    // Response contains "data" array with encomendas, each with tracking events
+    const encomendas = data?.data || data?.encomendas || [];
+    if (Array.isArray(encomendas)) {
+      for (const enc of encomendas) {
+        const awb = enc.awb || enc.AWB || '';
+        const eventos: Array<{ descricao: string; codigo: string; data: string; cidade: string }> = [];
+        
+        const statusList = enc.tracking || enc.statusTotal || enc.status || [];
+        if (Array.isArray(statusList)) {
+          for (const st of statusList) {
+            eventos.push({
+              descricao: st.descricao || st.descStatus || st.DescStatus || '',
+              codigo: String(st.codigo || st.codStatus || st.CodStatus || ''),
+              data: st.data || st.dataStatus || st.DataStatus || '',
+              cidade: st.cidade || st.Cidade || '',
+            });
+          }
+        }
+
+        if (awb) {
+          // Sort by date desc (most recent first)
+          eventos.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+          allResults.push({ awb, eventos });
         }
       }
-    } catch (e) {
-      console.warn(`Erro ao buscar tracking para data ${dataConsulta}:`, e);
     }
   }
-  
-  // Group by AWB
-  const grouped: Record<string, Array<{ descricao: string; codigo: string; data: string; cidade: string }>> = {};
-  for (const t of allTrackings) {
-    if (!grouped[t.awb]) grouped[t.awb] = [];
-    grouped[t.awb].push({
-      descricao: t.descricao,
-      codigo: t.codigo,
-      data: t.data_hora,
-      cidade: t.cidade,
-    });
-  }
-  
-  // Sort events by date desc (most recent first)
-  for (const awb of Object.keys(grouped)) {
-    grouped[awb].sort((a, b) => (b.data || '').localeCompare(a.data || ''));
-    results.push({ awb, eventos: grouped[awb] });
-  }
-  
-  return results;
+
+  return allResults;
 }
 
 // ===== SMART LABEL (REST API) =====
+// CORRIGIDO conforme manual oficial:
+// - servicoTipo: 7 = Expresso (antes era 1 = Standard)
+// - Estrutura do body corrigida conforme documentação oficial
 async function smartLabel(params: {
   pedido: string;
   tipo_servico?: number;
@@ -435,6 +458,7 @@ async function smartLabel(params: {
 }) {
   const creds = getCredentials();
 
+  // Montar docFiscal conforme manual
   const docFiscal: Record<string, unknown> = {};
   if (params.nfe_numero && params.nfe_chave) {
     docFiscal.nfe = [{
@@ -446,6 +470,7 @@ async function smartLabel(params: {
       nfeChave: params.nfe_chave,
     }];
   } else {
+    // "outros" para declaração de conteúdo convencional
     docFiscal.outros = [{
       nfoTipo: '00',
       nfoNumero: parseInt(params.pedido) || 1,
@@ -455,11 +480,13 @@ async function smartLabel(params: {
     }];
   }
 
+  // CORRIGIDO: servicoTipo default 7 = Expresso (antes era 1)
+  // Estrutura conforme manual oficial SmartLabel
   const body = {
     remetenteId: parseInt(creds.reid),
     cnpj: creds.cnpj,
     encomendas: [{
-      servicoTipo: params.tipo_servico ?? 1,
+      servicoTipo: params.tipo_servico ?? 7,
       entregaTipo: 0,
       peso: params.peso || 0.5,
       volumes: params.volumes ?? 1,
@@ -508,57 +535,103 @@ async function smartLabel(params: {
 }
 
 // ===== MAPEAMENTO DE STATUS TOTAL EXPRESS → LOCAL =====
+// CORRIGIDO: Agora usa TODOS os IDs oficiais do Anexo 1 do manual
 function mapearStatusTotalExpress(descricao: string, codigo?: string): { status: string; status_detalhe: string } {
   const desc = (descricao || '').toUpperCase().trim();
   const cod = codigo || '';
 
-  // Entregue
-  if (desc.includes('ENTREGUE') || desc.includes('ENTREGA REALIZADA') || cod === '1') {
+  // ===== ENTREGUE =====
+  // ID 1: ENTREGA REALIZADA
+  if (cod === '1' || desc.includes('ENTREGA REALIZADA') || desc.includes('ENTREGUE')) {
     return { status: 'entregue', status_detalhe: descricao };
   }
 
-  // Problemas / Erros
-  const problemCodes = ['6','9','13','14','15','16','21','27','43','141'];
-  if (problemCodes.includes(cod) ||
-      desc.includes('RECUSADA') ||
-      desc.includes('NÃO LOCALIZADO') ||
-      desc.includes('AVARIADA') ||
-      desc.includes('ROUBO') ||
-      desc.includes('ROUBADO') ||
-      desc.includes('FALECEU') ||
-      desc.includes('AUSENTE') ||
-      desc.includes('FECHADO') ||
-      desc.includes('FORA DO PERÍMETRO') ||
-      desc.includes('DUPLICIDADE') ||
-      desc.includes('ANÁLISE')) {
+  // ===== PROBLEMAS / OCORRÊNCIAS =====
+  // IDs do Anexo 1 que indicam problemas
+  const problemaCodes = new Set([
+    '6',   // ENDERECO DESTINATARIO NAO LOCALIZADO
+    '8',   // DUAS OU MAIS VEZES AUSENTE/FECHADO
+    '9',   // RECUSADA - MERCADORIA EM DESACORDO
+    '10',  // SINISTRO LIQUIDADO
+    '11',  // RECUSADA - AVARIA DA MERCADORIA/EMBALAGEM
+    '12',  // SERVIÇO NÃO ATENDIDO
+    '13',  // LOCALIDADE FORA DO PERIMETRO URBANO
+    '14',  // MERCADORIA AVARIADA
+    '15',  // EMBALAGEM EM ANALISE
+    '16',  // RECUSADA - PEDIDO/COLETA EM DUPLICIDADE
+    '18',  // EXTRAVIO / HUB
+    '19',  // EXTRAVIO POR DIVERGÊNCIA DE COLETA
+    '21',  // CLIENTE AUSENTE/ESTABELECIMENTO FECHADO
+    '22',  // MERCADORIA ENVIADA PARA SALVADOS
+    '23',  // EXTRAVIO DE MERCADORIA EM TRANSITO
+    '24',  // ACAREAÇÃO SEM SUCESSO – MERCADORIA EXTRAVIADA
+    '27',  // ROUBO DE CARGA
+    '30',  // EXTRAVIO / AGENTE
+    '31',  // EXTRAVIO / COURIER OU MOTORISTA
+    '32',  // EXTRAVIO / TRANSFERÊNCIA AEREA
+    '33',  // EXTRAVIO / TRANSFERÊNCIA RODOVIARIA
+    '35',  // EXTRAVIO / ROUBO - TRANSPORTADORAS
+    '36',  // EXTRAVIO / ROUBO - ECT
+    '39',  // DESTINATARIO MUDOU-SE
+    '40',  // CANCELADO PELO DESTINATARIO
+    '41',  // DESTINATARIO DESCONHECIDO
+    '42',  // DESTINATARIO DEMITIDO
+    '43',  // DESTINATARIO FALECEU
+    '44',  // FALTA BLOCO DO EDIFICIO/SALA
+    '45',  // FALTA NOME DE CONTATO/DEPARTAMENTO/RAMAL
+    '46',  // FALTA NUMERO APT/CASA
+  ]);
+  if (problemaCodes.has(cod)) {
+    return { status: 'problema', status_detalhe: descricao };
+  }
+  // Fallback textual para problemas
+  if (desc.includes('RECUSADA') || desc.includes('NÃO LOCALIZADO') ||
+      desc.includes('AVARIADA') || desc.includes('ROUBO') || desc.includes('ROUBADO') ||
+      desc.includes('FALECEU') || desc.includes('EXTRAVIO') || desc.includes('SINISTRO') ||
+      desc.includes('FORA DO PERÍMETRO') || desc.includes('FORA DO PERIMETRO') ||
+      desc.includes('DUPLICIDADE') || desc.includes('ANÁLISE') || desc.includes('ANALISE') ||
+      desc.includes('CANCELADO') || desc.includes('DESCONHECIDO') || desc.includes('MUDOU-SE') ||
+      desc.includes('DEMITIDO') || desc.includes('CONFISCADO') || desc.includes('AVARIA')) {
     return { status: 'problema', status_detalhe: descricao };
   }
 
-  // Saiu para entrega
-  if (desc.includes('SAIU PARA ENTREGA') || desc.includes('EM ROTA DE ENTREGA')) {
+  // ===== DEVOLUÇÃO =====
+  // IDs 25, 26, 34 + textuais
+  const devolucaoCodes = new Set(['25', '26', '34']);
+  if (devolucaoCodes.has(cod) ||
+      desc.includes('DEVOLUÇÃO') || desc.includes('DEVOLVID')) {
+    return { status: 'problema', status_detalhe: `Devolução: ${descricao}` };
+  }
+
+  // ===== SAIU PARA ENTREGA =====
+  if (desc.includes('SAIU PARA ENTREGA') || desc.includes('EM ROTA DE ENTREGA') ||
+      desc.includes('PROCESSO DE ENTREGA')) {
     return { status: 'saiu_entrega', status_detalhe: descricao };
   }
 
-  // Em trânsito
-  if (desc.includes('COLETA REALIZADA') || cod === '83' ||
-      desc.includes('COLETA RECEBIDA') ||
-      desc.includes('RECEBIDA E PROCESSADA') ||
-      desc.includes('EMBARCADO PARA') ||
-      desc.includes('TRANSFERÊNCIA PARA') ||
-      desc.includes('EM TRÂNSITO') ||
-      desc.includes('CD ')) {
-    return { status: 'em_transito', status_detalhe: descricao };
-  }
-
-  // Coletado (início do processo)
-  if (desc.includes('COLETA') || desc.includes('INÍCIO DE COLETA')) {
+  // ===== COLETADO =====
+  // ID 83: COLETA REALIZADA
+  if (cod === '83' || desc.includes('COLETA REALIZADA') ||
+      desc.includes('INÍCIO DE COLETA')) {
     return { status: 'coletado', status_detalhe: descricao };
   }
 
-  // Pendente
-  if (desc.includes('PROCESSO DE COLETA') ||
-      desc.includes('ARQUIVO RECEBIDO') ||
-      desc.includes('POSTAGEM')) {
+  // ===== EM TRÂNSITO =====
+  // Inclui recebimentos em CD, transferências, embarcados
+  if (desc.includes('COLETA RECEBIDA') || desc.includes('RECEBIDA E PROCESSADA') ||
+      desc.includes('EMBARCADO PARA') || desc.includes('TRANSFERENCIA PARA') ||
+      desc.includes('TRANSFERÊNCIA PARA') || desc.includes('RECEBIDO CD') ||
+      desc.includes('EM TRÂNSITO') || desc.includes('EM TRANSITO') ||
+      desc.includes('CD ') || desc.includes('REDESPACHO') ||
+      desc.includes('ENTREGA PROGRAMADA') || desc.includes('EM AGENDAMENTO') ||
+      desc.includes('DISPONÍVEL PARA RETIRADA') || desc.includes('FORA DE ROTA') ||
+      cod === '29' || cod === '37' || cod === '38') {
+    return { status: 'em_transito', status_detalhe: descricao };
+  }
+
+  // ===== PENDENTE =====
+  if (desc.includes('PROCESSO DE COLETA') || desc.includes('ARQUIVO RECEBIDO') ||
+      desc.includes('POSTAGEM') || desc.includes('AGUARDANDO')) {
     return { status: 'pendente', status_detalhe: descricao };
   }
 
@@ -573,6 +646,7 @@ async function rastrearEAtualizar(params: { awbs: string[] }) {
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  // CORRIGIDO: Agora usa REST API direta ao invés de loop SOAP de 7 dias
   const trackingResult = await rastrearPorAwb({ awbs: params.awbs });
   
   const updates: Array<{ awb: string; status: string; status_detalhe: string; tracking_historico: unknown }> = [];
