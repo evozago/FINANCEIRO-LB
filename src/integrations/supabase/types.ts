@@ -599,6 +599,111 @@ export type Database = {
         }
         Relationships: []
       }
+      envios: {
+        Row: {
+          awb: string | null
+          cod_remessa: string | null
+          created_at: string | null
+          dest_bairro: string | null
+          dest_cep: string
+          dest_cidade: string | null
+          dest_complemento: string | null
+          dest_cpf_cnpj: string | null
+          dest_email: string | null
+          dest_endereco: string | null
+          dest_estado: string | null
+          dest_nome: string
+          dest_numero: string | null
+          dest_telefone: string | null
+          etiqueta_gerada: boolean | null
+          etiqueta_url: string | null
+          id: number
+          num_protocolo: string | null
+          peso_kg: number | null
+          prazo_entrega_dias: number | null
+          shopify_fulfillment_id: number | null
+          shopify_order_id: number | null
+          shopify_order_name: string | null
+          status: string | null
+          status_detalhe: string | null
+          tipo_servico: number | null
+          tracking_historico: Json | null
+          ultimo_tracking_at: string | null
+          updated_at: string | null
+          valor_declarado_centavos: number | null
+          valor_frete_centavos: number | null
+          volumes: number | null
+        }
+        Insert: {
+          awb?: string | null
+          cod_remessa?: string | null
+          created_at?: string | null
+          dest_bairro?: string | null
+          dest_cep: string
+          dest_cidade?: string | null
+          dest_complemento?: string | null
+          dest_cpf_cnpj?: string | null
+          dest_email?: string | null
+          dest_endereco?: string | null
+          dest_estado?: string | null
+          dest_nome: string
+          dest_numero?: string | null
+          dest_telefone?: string | null
+          etiqueta_gerada?: boolean | null
+          etiqueta_url?: string | null
+          id?: number
+          num_protocolo?: string | null
+          peso_kg?: number | null
+          prazo_entrega_dias?: number | null
+          shopify_fulfillment_id?: number | null
+          shopify_order_id?: number | null
+          shopify_order_name?: string | null
+          status?: string | null
+          status_detalhe?: string | null
+          tipo_servico?: number | null
+          tracking_historico?: Json | null
+          ultimo_tracking_at?: string | null
+          updated_at?: string | null
+          valor_declarado_centavos?: number | null
+          valor_frete_centavos?: number | null
+          volumes?: number | null
+        }
+        Update: {
+          awb?: string | null
+          cod_remessa?: string | null
+          created_at?: string | null
+          dest_bairro?: string | null
+          dest_cep?: string
+          dest_cidade?: string | null
+          dest_complemento?: string | null
+          dest_cpf_cnpj?: string | null
+          dest_email?: string | null
+          dest_endereco?: string | null
+          dest_estado?: string | null
+          dest_nome?: string
+          dest_numero?: string | null
+          dest_telefone?: string | null
+          etiqueta_gerada?: boolean | null
+          etiqueta_url?: string | null
+          id?: number
+          num_protocolo?: string | null
+          peso_kg?: number | null
+          prazo_entrega_dias?: number | null
+          shopify_fulfillment_id?: number | null
+          shopify_order_id?: number | null
+          shopify_order_name?: string | null
+          status?: string | null
+          status_detalhe?: string | null
+          tipo_servico?: number | null
+          tracking_historico?: Json | null
+          ultimo_tracking_at?: string | null
+          updated_at?: string | null
+          valor_declarado_centavos?: number | null
+          valor_frete_centavos?: number | null
+          volumes?: number | null
+        }
+        Relationships: []
+      }
       faixas_etarias_produto: {
         Row: {
           ativo: boolean | null
