@@ -185,18 +185,34 @@ export function useXMLImport() {
   // Verificação de duplicatas - busca pelo campo numero_nota
   const verificarDuplicata = async (xmlData: XMLData): Promise<{ isDuplicate: boolean; reason: string }> => {
     try {
-      const chaveOuNumero = xmlData.chaveAcesso || xmlData.numeroNFe;
-      if (chaveOuNumero) {
+      // Verificar pela chave de acesso no campo observacoes
+      if (xmlData.chaveAcesso) {
+        const { data: existingByChave, error: errChave } = await supabase
+          .from('contas_pagar')
+          .select('id')
+          .ilike('observacoes', `%${xmlData.chaveAcesso}%`)
+          .limit(1);
+        
+        if (!errChave && existingByChave && existingByChave.length > 0) {
+          return {
+            isDuplicate: true,
+            reason: `chave ${xmlData.chaveAcesso.substring(0, 15)}...`
+          };
+        }
+      }
+      // Verificar pelo número da nota
+      const numero = xmlData.numeroNFe;
+      if (numero) {
         const { data: existing, error } = await supabase
           .from('contas_pagar')
           .select('id')
-          .eq('numero_nota', chaveOuNumero)
+          .eq('numero_nota', numero)
           .limit(1);
         
         if (!error && existing && existing.length > 0) {
           return {
             isDuplicate: true,
-            reason: `chave/número ${chaveOuNumero.substring(0, 15)}...`
+            reason: `número ${numero}`
           };
         }
       }
@@ -294,7 +310,8 @@ export function useXMLImport() {
           filial_id: filialId,
           descricao: `NFe ${xmlData.numeroNFe || 'sem número'} - ${xmlData.razaoSocialEmitente}`,
           referencia: `NFe ${xmlData.numeroNFe || 'sem número'}`,
-          numero_nota: xmlData.chaveAcesso || xmlData.numeroNFe
+          numero_nota: xmlData.numeroNFe || xmlData.chaveAcesso,
+          observacoes: xmlData.chaveAcesso ? `Chave NFe: ${xmlData.chaveAcesso}` : null
         }])
         .select('id')
         .single();

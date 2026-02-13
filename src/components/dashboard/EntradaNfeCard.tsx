@@ -48,16 +48,20 @@ export function EntradaNfeCard() {
         return;
       }
 
-      // Busca chaves que existem no financeiro (numero_nota em contas_pagar)
+      // Busca chaves que existem no financeiro (na observações de contas_pagar)
       const chaves = entradasData.map(e => e.chave_nfe);
-      const { data: contasData, error: contasError } = await supabase
-        .from("contas_pagar")
-        .select("numero_nota")
-        .in("numero_nota", chaves);
-
-      if (contasError) throw contasError;
-
-      const chavesNoFinanceiro = new Set((contasData || []).map(c => c.numero_nota));
+      const chavesNoFinanceiro = new Set<string>();
+      
+      for (const chave of chaves) {
+        const { data: contasData } = await supabase
+          .from("contas_pagar")
+          .select("id")
+          .ilike("observacoes", `%${chave}%`)
+          .limit(1);
+        if (contasData && contasData.length > 0) {
+          chavesNoFinanceiro.add(chave);
+        }
+      }
 
       const entradasComStatus: EntradaNfe[] = entradasData.map(e => ({
         ...e,
