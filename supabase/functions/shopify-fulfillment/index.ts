@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,7 +43,6 @@ serve(async (req) => {
     let result: unknown;
 
     switch (action) {
-      // List orders (for the shipping dashboard)
       case 'get_orders': {
         const status = params.fulfillment_status || 'unfulfilled';
         const limit = params.limit || 50;
@@ -51,7 +51,6 @@ serve(async (req) => {
         break;
       }
 
-      // Get single order
       case 'get_order': {
         const { order_id } = params;
         if (!order_id) throw new Error('order_id é obrigatório');
@@ -60,12 +59,88 @@ serve(async (req) => {
         break;
       }
 
-      // Create fulfillment with tracking
+      case 'import_orders': {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        const statuses = params.fulfillment_status || 'any';
+        const limit = params.limit || 250;
+        const data = await shopifyFetch(`/orders.json?status=any&fulfillment_status=${statuses}&limit=${limit}`);
+        const allOrders = data.orders || [];
+
+        const { data: existingEnvios } = await supabase
+          .from('envios')
+          .select('shopify_order_id')
+          .not('shopify_order_id', 'is', null);
+        
+        const existingIds = new Set((existingEnvios || []).map((e: { shopify_order_id: number }) => e.shopify_order_id));
+
+        const newEnvios: Array<Record<string, unknown>> = [];
+
+        for (const order of allOrders) {
+          if (existingIds.has(order.id)) continue;
+
+          const shipping = (order.shipping_address as Record<string, string>) || {};
+          const totalWeight = (order.line_items as Array<{ grams: number; quantity: number }>)?.reduce(
+            (acc: number, item: { grams: number; quantity: number }) => acc + (item.grams || 0) * (item.quantity || 1), 0
+          ) || 0;
+
+          let status = 'pendente';
+          if (order.fulfillment_status === 'fulfilled') status = 'entregue';
+          else if (order.fulfillment_status === 'partial') status = 'em_transito';
+
+          let awb = '';
+          let fulfillmentId = null;
+          const fulfillments = (order.fulfillments as Array<Record<string, unknown>>) || [];
+          if (fulfillments.length > 0) {
+            const lastFulfillment = fulfillments[fulfillments.length - 1];
+            awb = (lastFulfillment.tracking_number as string) || '';
+            fulfillmentId = lastFulfillment.id as number;
+          }
+
+          newEnvios.push({
+            shopify_order_id: order.id,
+            shopify_order_name: order.name || `#${order.order_number}`,
+            shopify_fulfillment_id: fulfillmentId,
+            dest_nome: shipping.name || (order.customer as Record<string, string>)?.first_name || 'Sem nome',
+            dest_cpf_cnpj: '',
+            dest_endereco: shipping.address1 || '',
+            dest_numero: shipping.address2 || 'S/N',
+            dest_complemento: '',
+            dest_bairro: shipping.company || '',
+            dest_cidade: shipping.city || '',
+            dest_estado: shipping.province_code || '',
+            dest_cep: (shipping.zip || '').replace(/\D/g, ''),
+            dest_email: (order.email as string) || '',
+            dest_telefone: shipping.phone || (order.phone as string) || '',
+            peso_kg: totalWeight > 0 ? totalWeight / 1000 : null,
+            valor_declarado_centavos: Math.round(parseFloat(order.total_price as string || '0') * 100),
+            status,
+            awb: awb || null,
+            volumes: 1,
+          });
+        }
+
+        if (newEnvios.length > 0) {
+          const { error: insertError } = await supabase
+            .from('envios')
+            .insert(newEnvios);
+          if (insertError) throw new Error(`Erro ao inserir envios: ${insertError.message}`);
+        }
+
+        result = {
+          total_orders: allOrders.length,
+          already_imported: existingIds.size,
+          new_imported: newEnvios.length,
+        };
+        break;
+      }
+
       case 'create_fulfillment': {
-        const { order_id, tracking_number, tracking_company, tracking_url, line_items } = params;
+        const { order_id, tracking_number, tracking_company, tracking_url } = params;
         if (!order_id) throw new Error('order_id é obrigatório');
 
-        // First get fulfillment orders
         const foData = await shopifyFetch(`/orders/${order_id}/fulfillment_orders.json`);
         const fulfillmentOrders = foData.fulfillment_orders || [];
         
@@ -73,7 +148,6 @@ serve(async (req) => {
           throw new Error('Nenhum fulfillment order encontrado');
         }
 
-        // Get the open fulfillment order
         const openFO = fulfillmentOrders.find((fo: { status: string }) => fo.status === 'open') || fulfillmentOrders[0];
 
         const fulfillmentBody: Record<string, unknown> = {
@@ -98,7 +172,6 @@ serve(async (req) => {
         break;
       }
 
-      // Update tracking on existing fulfillment
       case 'update_tracking': {
         const { fulfillment_id, tracking_number, tracking_company, tracking_url } = params;
         if (!fulfillment_id) throw new Error('fulfillment_id é obrigatório');

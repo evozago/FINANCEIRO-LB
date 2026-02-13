@@ -13,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import {
   Truck, Search, RefreshCw, Package, MapPin, Tag, CheckCircle2,
-  AlertCircle, Clock, Send, FileText, Settings, Loader2
+  AlertCircle, Clock, Send, FileText, Settings, Loader2, Download
 } from 'lucide-react';
 
 interface Envio {
@@ -89,8 +89,9 @@ export default function GerenciarEnvios() {
 
   // Config dialog
   const [configDialog, setConfigDialog] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
 
-  const { loading: apiLoading, calcularFrete, registrarColeta, rastrearPorAwb, registerCarrierService, smartLabel } = useTotalExpress();
+  const { loading: apiLoading, calcularFrete, registrarColeta, rastrearPorAwb, registerCarrierService, smartLabel, importOrders } = useTotalExpress();
 
   const loadEnvios = useCallback(async () => {
     setIsLoading(true);
@@ -242,6 +243,18 @@ export default function GerenciarEnvios() {
     }
   };
 
+  const handleImportOrders = async () => {
+    setImportLoading(true);
+    const result = await importOrders();
+    if (result) {
+      toast.success(`Importados ${result.new_imported} novos pedidos (${result.already_imported} já existiam)`);
+      loadEnvios();
+    } else {
+      toast.error('Erro ao importar pedidos do Shopify');
+    }
+    setImportLoading(false);
+  };
+
   const stats = {
     total: envios.length,
     pendentes: envios.filter(e => e.status === 'pendente').length,
@@ -263,6 +276,11 @@ export default function GerenciarEnvios() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={handleImportOrders} disabled={importLoading}>
+            {importLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            Importar Pedidos Shopify
+          </Button>
+
           <Dialog open={freteDialog} onOpenChange={setFreteDialog}>
             <DialogTrigger asChild>
               <Button variant="outline">
