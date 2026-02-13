@@ -72,6 +72,14 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 const EMPTY_MANUAL_FORM = {
+  pedido: '',
+  tipo_servico: '7',
+  tipo_entrega: '0',
+  cond_frete: 'CIF',
+  natureza: 'Mercadoria Diversa',
+  volumes: '1',
+  peso_kg: '0.5',
+  valor_declarado: '100',
   dest_nome: '',
   dest_cpf_cnpj: '',
   dest_endereco: '',
@@ -82,11 +90,14 @@ const EMPTY_MANUAL_FORM = {
   dest_estado: '',
   dest_cep: '',
   dest_email: '',
+  dest_ddd: '',
   dest_telefone: '',
-  peso_kg: '0.5',
-  volumes: '1',
-  valor_declarado: '100',
-  pedido: '',
+  nfe_numero: '',
+  nfe_serie: '',
+  nfe_data: '',
+  nfe_val_total: '',
+  nfe_val_prod: '',
+  nfe_chave: '',
 };
 
 export default function GerenciarEnvios() {
@@ -332,56 +343,83 @@ export default function GerenciarEnvios() {
 
   // === MANUAL SHIPMENT ===
   const handleManualSubmit = async () => {
-    if (!manualForm.dest_nome.trim() || !manualForm.dest_cep.trim()) {
-      toast.error('Nome e CEP são obrigatórios');
-      return;
-    }
+    // Validações conforme manual oficial da API
+    const cep = manualForm.dest_cep.replace(/\D/g, '');
+    const cpfCnpj = manualForm.dest_cpf_cnpj.replace(/\D/g, '');
+    
+    if (!manualForm.dest_nome.trim()) { toast.error('Nome do destinatário é obrigatório'); return; }
+    if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) { toast.error('CPF (11 dígitos) ou CNPJ (14 dígitos) inválido'); return; }
+    if (!manualForm.dest_endereco.trim()) { toast.error('Endereço é obrigatório'); return; }
+    if (!manualForm.dest_numero.trim()) { toast.error('Número do endereço é obrigatório'); return; }
+    if (!manualForm.dest_bairro.trim()) { toast.error('Bairro é obrigatório'); return; }
+    if (!manualForm.dest_cidade.trim()) { toast.error('Cidade é obrigatória'); return; }
+    if (!manualForm.dest_estado.trim() || manualForm.dest_estado.length !== 2) { toast.error('Estado (UF) inválido — 2 letras'); return; }
+    if (cep.length !== 8) { toast.error('CEP deve ter 8 dígitos'); return; }
+    if (!manualForm.pedido.trim()) { toast.error('Nº do Pedido é obrigatório'); return; }
+
     setManualLoading(true);
     try {
+      const valorDeclaradoCentavos = Math.round(parseFloat(manualForm.valor_declarado || '0') * 100);
+      
       // 1. Create envio record
       const { data: envioData, error: insertError } = await supabase.from('envios').insert({
         dest_nome: manualForm.dest_nome,
-        dest_cpf_cnpj: manualForm.dest_cpf_cnpj || null,
-        dest_endereco: manualForm.dest_endereco || null,
-        dest_numero: manualForm.dest_numero || null,
+        dest_cpf_cnpj: cpfCnpj,
+        dest_endereco: manualForm.dest_endereco,
+        dest_numero: manualForm.dest_numero,
         dest_complemento: manualForm.dest_complemento || null,
-        dest_bairro: manualForm.dest_bairro || null,
-        dest_cidade: manualForm.dest_cidade || null,
-        dest_estado: manualForm.dest_estado || null,
-        dest_cep: manualForm.dest_cep,
+        dest_bairro: manualForm.dest_bairro,
+        dest_cidade: manualForm.dest_cidade,
+        dest_estado: manualForm.dest_estado.toUpperCase(),
+        dest_cep: cep,
         dest_email: manualForm.dest_email || null,
         dest_telefone: manualForm.dest_telefone || null,
         peso_kg: parseFloat(manualForm.peso_kg) || 0.5,
         volumes: parseInt(manualForm.volumes) || 1,
-        valor_declarado_centavos: Math.round(parseFloat(manualForm.valor_declarado) * 100),
+        valor_declarado_centavos: valorDeclaradoCentavos,
+        tipo_servico: parseInt(manualForm.tipo_servico),
         status: 'pendente',
       }).select().single();
 
       if (insertError) throw insertError;
-
       toast.success('Envio criado com sucesso!');
 
-      // 2. Register coleta automatically
-      const pedido = manualForm.pedido || envioData.id.toString();
-      const coletaResult = await registrarColeta({
-        pedido,
+      // 2. Register coleta with all fields per manual
+      const coletaParams: Record<string, unknown> = {
+        pedido: manualForm.pedido,
         dest_nome: manualForm.dest_nome,
-        dest_cpf_cnpj: manualForm.dest_cpf_cnpj || '',
-        dest_endereco: manualForm.dest_endereco || '',
-        dest_numero: manualForm.dest_numero || 'S/N',
+        dest_cpf_cnpj: cpfCnpj,
+        dest_endereco: manualForm.dest_endereco,
+        dest_numero: manualForm.dest_numero,
         dest_complemento: manualForm.dest_complemento || '',
-        dest_bairro: manualForm.dest_bairro || '',
-        dest_cidade: manualForm.dest_cidade || '',
-        dest_estado: manualForm.dest_estado || '',
-        dest_cep: manualForm.dest_cep,
+        dest_bairro: manualForm.dest_bairro,
+        dest_cidade: manualForm.dest_cidade,
+        dest_estado: manualForm.dest_estado.toUpperCase(),
+        dest_cep: cep,
         dest_email: manualForm.dest_email || '',
+        dest_ddd: manualForm.dest_ddd || '',
         dest_telefone: manualForm.dest_telefone || '',
         peso: parseFloat(manualForm.peso_kg) || 0.5,
         volumes: parseInt(manualForm.volumes) || 1,
-        tipo_servico: 7,
-        nfe_val_total: Math.round(parseFloat(manualForm.valor_declarado) * 100),
-        nfe_val_prod: Math.round(parseFloat(manualForm.valor_declarado) * 100),
-      });
+        tipo_servico: parseInt(manualForm.tipo_servico),
+        tipo_entrega: parseInt(manualForm.tipo_entrega),
+        cond_frete: manualForm.cond_frete,
+        natureza: manualForm.natureza,
+        nfe_val_total: valorDeclaradoCentavos,
+        nfe_val_prod: valorDeclaradoCentavos,
+      };
+
+      // NF-e fields (optional)
+      if (manualForm.nfe_numero && manualForm.nfe_chave) {
+        coletaParams.nfe_numero = manualForm.nfe_numero;
+        coletaParams.nfe_serie = manualForm.nfe_serie || '1';
+        coletaParams.nfe_data = manualForm.nfe_data || new Date().toISOString().split('T')[0];
+        coletaParams.nfe_chave = manualForm.nfe_chave;
+        if (manualForm.nfe_val_total) coletaParams.nfe_val_total = Math.round(parseFloat(manualForm.nfe_val_total) * 100);
+        if (manualForm.nfe_val_prod) coletaParams.nfe_val_prod = Math.round(parseFloat(manualForm.nfe_val_prod) * 100);
+      }
+
+      const coletaResult = await registrarColeta(coletaParams);
 
       if (coletaResult) {
         await supabase.from('envios').update({
@@ -393,23 +431,23 @@ export default function GerenciarEnvios() {
 
         // 3. Generate label automatically
         const labelResult = await smartLabel({
-          pedido,
+          pedido: manualForm.pedido,
           dest_nome: manualForm.dest_nome,
-          dest_cpf_cnpj: manualForm.dest_cpf_cnpj || '',
-          dest_endereco: manualForm.dest_endereco || '',
-          dest_numero: manualForm.dest_numero || 'S/N',
+          dest_cpf_cnpj: cpfCnpj,
+          dest_endereco: manualForm.dest_endereco,
+          dest_numero: manualForm.dest_numero,
           dest_complemento: manualForm.dest_complemento || '',
-          dest_bairro: manualForm.dest_bairro || '',
-          dest_cidade: manualForm.dest_cidade || '',
-          dest_estado: manualForm.dest_estado || '',
-          dest_cep: manualForm.dest_cep,
+          dest_bairro: manualForm.dest_bairro,
+          dest_cidade: manualForm.dest_cidade,
+          dest_estado: manualForm.dest_estado.toUpperCase(),
+          dest_cep: cep,
           dest_email: manualForm.dest_email || '',
           dest_telefone: manualForm.dest_telefone || '',
           peso: parseFloat(manualForm.peso_kg) || 0.5,
           volumes: parseInt(manualForm.volumes) || 1,
-          tipo_servico: 7,
-          nfe_val_total: Math.round(parseFloat(manualForm.valor_declarado) * 100),
-          nfe_val_prod: Math.round(parseFloat(manualForm.valor_declarado) * 100),
+          tipo_servico: parseInt(manualForm.tipo_servico),
+          nfe_val_total: valorDeclaradoCentavos,
+          nfe_val_prod: valorDeclaradoCentavos,
         });
         if (labelResult) {
           await supabase.from('envios').update({ etiqueta_gerada: true }).eq('id', envioData.id);
@@ -696,83 +734,160 @@ export default function GerenciarEnvios() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label>Nome do destinatário *</Label>
-                <Input value={manualForm.dest_nome} onChange={e => updateManualField('dest_nome', e.target.value)} placeholder="Nome completo" />
-              </div>
-              <div>
-                <Label>CPF/CNPJ</Label>
-                <Input value={manualForm.dest_cpf_cnpj} onChange={e => updateManualField('dest_cpf_cnpj', e.target.value)} placeholder="000.000.000-00" />
-              </div>
-              <div>
-                <Label>Nº Pedido (referência)</Label>
-                <Input value={manualForm.pedido} onChange={e => updateManualField('pedido', e.target.value)} placeholder="Opcional" />
+            {/* Dados do Pedido */}
+            <div>
+              <h4 className="font-medium text-sm mb-3 flex items-center gap-2"><FileText className="h-4 w-4" /> Dados do Pedido</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <Label>Nº Pedido *</Label>
+                  <Input value={manualForm.pedido} onChange={e => updateManualField('pedido', e.target.value)} placeholder="PED-2026-001" />
+                </div>
+                <div>
+                  <Label>Tipo Serviço</Label>
+                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={manualForm.tipo_servico} onChange={e => updateManualField('tipo_servico', e.target.value)}>
+                    <option value="7">7 - Expresso</option>
+                    <option value="1">1 - Standard</option>
+                    <option value="5">5 - Premium</option>
+                    <option value="11">11 - Total Hoje</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Tipo Entrega</Label>
+                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={manualForm.tipo_entrega} onChange={e => updateManualField('tipo_entrega', e.target.value)}>
+                    <option value="0">0 - Entrega Normal</option>
+                    <option value="1">1 - GoBack (Devolução)</option>
+                    <option value="2">2 - RMA (Retorno)</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Cond. Frete</Label>
+                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={manualForm.cond_frete} onChange={e => updateManualField('cond_frete', e.target.value)}>
+                    <option value="CIF">CIF (Cliente paga)</option>
+                    <option value="FOB">FOB (Remetente paga)</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Volumes</Label>
+                  <Input type="number" min="1" value={manualForm.volumes} onChange={e => updateManualField('volumes', e.target.value)} />
+                </div>
+                <div>
+                  <Label>Natureza</Label>
+                  <Input value={manualForm.natureza} onChange={e => updateManualField('natureza', e.target.value)} placeholder="Mercadoria Diversa" />
+                </div>
               </div>
             </div>
 
+            {/* Destinatário */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium text-sm mb-3">Destinatário *</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label>Nome *</Label>
+                  <Input value={manualForm.dest_nome} onChange={e => updateManualField('dest_nome', e.target.value)} placeholder="Nome completo" />
+                </div>
+                <div>
+                  <Label>CPF/CNPJ * (sem máscara)</Label>
+                  <Input value={manualForm.dest_cpf_cnpj} onChange={e => updateManualField('dest_cpf_cnpj', e.target.value)} placeholder="12345678901" />
+                </div>
+                <div>
+                  <Label>CEP * (8 dígitos)</Label>
+                  <Input value={manualForm.dest_cep} onChange={e => updateManualField('dest_cep', e.target.value)} placeholder="01310100" maxLength={9} />
+                </div>
+              </div>
+            </div>
+
+            {/* Endereço */}
             <div className="border-t pt-4">
               <h4 className="font-medium text-sm mb-3">Endereço</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <Label>Endereço *</Label>
-                  <Input value={manualForm.dest_endereco} onChange={e => updateManualField('dest_endereco', e.target.value)} placeholder="Rua, Avenida..." />
+                  <Input value={manualForm.dest_endereco} onChange={e => updateManualField('dest_endereco', e.target.value)} placeholder="Rua das Flores" />
                 </div>
                 <div>
-                  <Label>Número</Label>
+                  <Label>Número *</Label>
                   <Input value={manualForm.dest_numero} onChange={e => updateManualField('dest_numero', e.target.value)} placeholder="123" />
                 </div>
                 <div>
                   <Label>Complemento</Label>
-                  <Input value={manualForm.dest_complemento} onChange={e => updateManualField('dest_complemento', e.target.value)} placeholder="Apto, Bloco..." />
+                  <Input value={manualForm.dest_complemento} onChange={e => updateManualField('dest_complemento', e.target.value)} placeholder="Apto 456" />
                 </div>
                 <div>
-                  <Label>Bairro</Label>
-                  <Input value={manualForm.dest_bairro} onChange={e => updateManualField('dest_bairro', e.target.value)} placeholder="Bairro" />
+                  <Label>Bairro *</Label>
+                  <Input value={manualForm.dest_bairro} onChange={e => updateManualField('dest_bairro', e.target.value)} placeholder="Centro" />
                 </div>
                 <div>
-                  <Label>CEP *</Label>
-                  <Input value={manualForm.dest_cep} onChange={e => updateManualField('dest_cep', e.target.value)} placeholder="00000-000" />
+                  <Label>Cidade *</Label>
+                  <Input value={manualForm.dest_cidade} onChange={e => updateManualField('dest_cidade', e.target.value)} placeholder="São Paulo" />
                 </div>
                 <div>
-                  <Label>Cidade</Label>
-                  <Input value={manualForm.dest_cidade} onChange={e => updateManualField('dest_cidade', e.target.value)} placeholder="Cidade" />
-                </div>
-                <div>
-                  <Label>Estado</Label>
-                  <Input value={manualForm.dest_estado} onChange={e => updateManualField('dest_estado', e.target.value)} placeholder="UF" maxLength={2} />
+                  <Label>Estado (UF) *</Label>
+                  <Input value={manualForm.dest_estado} onChange={e => updateManualField('dest_estado', e.target.value.toUpperCase())} placeholder="SP" maxLength={2} />
                 </div>
               </div>
             </div>
 
+            {/* Contato */}
             <div className="border-t pt-4">
-              <h4 className="font-medium text-sm mb-3">Contato</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <h4 className="font-medium text-sm mb-3">Contato (recomendado)</h4>
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label>E-mail</Label>
                   <Input value={manualForm.dest_email} onChange={e => updateManualField('dest_email', e.target.value)} placeholder="email@exemplo.com" />
                 </div>
                 <div>
+                  <Label>DDD</Label>
+                  <Input value={manualForm.dest_ddd} onChange={e => updateManualField('dest_ddd', e.target.value)} placeholder="11" maxLength={2} />
+                </div>
+                <div>
                   <Label>Telefone</Label>
-                  <Input value={manualForm.dest_telefone} onChange={e => updateManualField('dest_telefone', e.target.value)} placeholder="(00) 00000-0000" />
+                  <Input value={manualForm.dest_telefone} onChange={e => updateManualField('dest_telefone', e.target.value)} placeholder="987654321" />
                 </div>
               </div>
             </div>
 
+            {/* Pacote */}
             <div className="border-t pt-4">
               <h4 className="font-medium text-sm mb-3">Pacote</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Peso (kg)</Label>
                   <Input type="number" step="0.1" value={manualForm.peso_kg} onChange={e => updateManualField('peso_kg', e.target.value)} />
                 </div>
                 <div>
-                  <Label>Volumes</Label>
-                  <Input type="number" value={manualForm.volumes} onChange={e => updateManualField('volumes', e.target.value)} />
-                </div>
-                <div>
                   <Label>Valor declarado (R$)</Label>
                   <Input type="number" step="0.01" value={manualForm.valor_declarado} onChange={e => updateManualField('valor_declarado', e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            {/* NF-e (Opcional) */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium text-sm mb-3">Nota Fiscal NF-e (opcional)</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <Label>Número NF-e</Label>
+                  <Input value={manualForm.nfe_numero} onChange={e => updateManualField('nfe_numero', e.target.value)} placeholder="123456789" />
+                </div>
+                <div>
+                  <Label>Série</Label>
+                  <Input value={manualForm.nfe_serie} onChange={e => updateManualField('nfe_serie', e.target.value)} placeholder="001" />
+                </div>
+                <div>
+                  <Label>Data Emissão</Label>
+                  <Input type="date" value={manualForm.nfe_data} onChange={e => updateManualField('nfe_data', e.target.value)} />
+                </div>
+                <div>
+                  <Label>Valor Total (R$)</Label>
+                  <Input type="number" step="0.01" value={manualForm.nfe_val_total} onChange={e => updateManualField('nfe_val_total', e.target.value)} placeholder="1234.56" />
+                </div>
+                <div>
+                  <Label>Valor Produtos (R$)</Label>
+                  <Input type="number" step="0.01" value={manualForm.nfe_val_prod} onChange={e => updateManualField('nfe_val_prod', e.target.value)} placeholder="1200.00" />
+                </div>
+                <div className="col-span-2 md:col-span-3">
+                  <Label>Chave NF-e (44 dígitos)</Label>
+                  <Input value={manualForm.nfe_chave} onChange={e => updateManualField('nfe_chave', e.target.value)} placeholder="35260213123456789012345678901234567890" maxLength={44} />
                 </div>
               </div>
             </div>

@@ -138,6 +138,8 @@ async function registrarColeta(params: {
   cod_remessa?: string;
   pedido: string;
   tipo_servico?: number;
+  tipo_entrega?: number;
+  cond_frete?: string;
   volumes?: number;
   peso?: number;
   dest_nome: string;
@@ -151,7 +153,9 @@ async function registrarColeta(params: {
   dest_cep: string;
   dest_email?: string;
   dest_telefone?: string;
+  dest_ddd?: string;
   natureza?: string;
+  isencao_icms?: number;
   nfe_numero?: string;
   nfe_serie?: string;
   nfe_data?: string;
@@ -160,9 +164,11 @@ async function registrarColeta(params: {
   nfe_chave?: string;
 }) {
   const creds = getCredentials();
-  // CORRIGIDO: Default 7 = Expresso (antes era 1 = Standard)
   const tipoServico = params.tipo_servico ?? 7;
+  const tipoEntrega = params.tipo_entrega ?? 0;
+  const condFrete = params.cond_frete || 'CIF';
   const volumes = params.volumes ?? 1;
+  const isencaoIcms = params.isencao_icms ?? 0;
 
   let docFiscalXml = '';
   if (params.nfe_numero && params.nfe_chave) {
@@ -204,12 +210,12 @@ async function registrarColeta(params: {
         <Encomendas>
           <item>
             <TipoServico>${tipoServico}</TipoServico>
-            <TipoEntrega>0</TipoEntrega>
+            <TipoEntrega>${tipoEntrega}</TipoEntrega>
             <Volumes>${volumes}</Volumes>
-            <CondFrete>CIF</CondFrete>
+            <CondFrete>${condFrete}</CondFrete>
             <Pedido>${params.pedido}</Pedido>
-            <Natureza>${params.natureza || 'Mercadoria'}</Natureza>
-            <IsencaoIcms>0</IsencaoIcms>
+            <Natureza>${params.natureza || 'Mercadoria Diversa'}</Natureza>
+            <IsencaoIcms>${isencaoIcms}</IsencaoIcms>
             ${params.peso ? `<Peso>${params.peso.toFixed(2)}</Peso>` : ''}
             <DestNome>${params.dest_nome}</DestNome>
             <DestCpfCnpj>${(params.dest_cpf_cnpj || '').replace(/\D/g, '')}</DestCpfCnpj>
@@ -221,6 +227,7 @@ async function registrarColeta(params: {
             <DestEstado>${params.dest_estado}</DestEstado>
             <DestCep>${params.dest_cep.replace(/\D/g, '')}</DestCep>
             ${params.dest_email ? `<DestEmail>${params.dest_email}</DestEmail>` : ''}
+            ${params.dest_ddd ? `<DestDdd>${params.dest_ddd.replace(/\D/g, '')}</DestDdd>` : ''}
             ${params.dest_telefone ? `<DestTelefone1>${params.dest_telefone.replace(/\D/g, '')}</DestTelefone1>` : ''}
             ${docFiscalXml}
           </item>
