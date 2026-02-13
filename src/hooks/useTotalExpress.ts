@@ -64,6 +64,9 @@ export function useTotalExpress() {
   const getOrders = useCallback((fulfillmentStatus?: string) =>
     callApi<unknown[]>('shopify-fulfillment', { action: 'get_orders', fulfillment_status: fulfillmentStatus }), [callApi]);
 
+  const importOrders = useCallback((fulfillmentStatus?: string) =>
+    callApi<{ total_orders: number; already_imported: number; new_imported: number }>('shopify-fulfillment', { action: 'import_orders', fulfillment_status: fulfillmentStatus || 'any' }), [callApi]);
+
   const createFulfillment = useCallback((params: Record<string, unknown>) =>
     callApi<unknown>('shopify-fulfillment', { action: 'create_fulfillment', ...params }), [callApi]);
 
@@ -85,6 +88,7 @@ export function useTotalExpress() {
     rastrearPorAwb,
     smartLabel,
     getOrders,
+    importOrders,
     createFulfillment,
     updateTracking,
     registerCarrierService,
