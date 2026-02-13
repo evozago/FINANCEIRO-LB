@@ -21,6 +21,7 @@ serve(async (req) => {
 
     const storeDomain = SHOPIFY_STORE_DOMAIN.replace(/^https?:\/\//, '').replace(/\/$/, '');
     const baseUrl = `https://${storeDomain}/admin/api/2024-01`;
+    const graphqlUrl = `https://${storeDomain}/admin/api/2024-01/graphql.json`;
 
     const shopifyFetch = async (endpoint: string, options: RequestInit = {}) => {
       const response = await fetch(`${baseUrl}${endpoint}`, {
@@ -39,6 +40,27 @@ serve(async (req) => {
       return response.json();
     };
 
+    const shopifyGraphQL = async (query: string, variables: Record<string, unknown> = {}) => {
+      const response = await fetch(graphqlUrl, {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query, variables }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Shopify GraphQL error: ${response.status} - ${errorText}`);
+      }
+
+      const json = await response.json();
+      if (json.errors && json.errors.length > 0) {
+        throw new Error(`Shopify GraphQL errors: ${JSON.stringify(json.errors)}`);
+      }
+      return json.data;
+    };
     const { action, ...params } = await req.json();
     let result: unknown;
 
@@ -141,6 +163,7 @@ serve(async (req) => {
         const { order_id, tracking_number, tracking_company, tracking_url } = params;
         if (!order_id) throw new Error('order_id é obrigatório');
 
+        // Get fulfillment orders via REST to find the GID
         const foData = await shopifyFetch(`/orders/${order_id}/fulfillment_orders.json`);
         const fulfillmentOrders = foData.fulfillment_orders || [];
         
@@ -149,26 +172,52 @@ serve(async (req) => {
         }
 
         const openFO = fulfillmentOrders.find((fo: { status: string }) => fo.status === 'open') || fulfillmentOrders[0];
+        const fulfillmentOrderGid = `gid://shopify/FulfillmentOrder/${openFO.id}`;
 
-        const fulfillmentBody: Record<string, unknown> = {
+        const awb = tracking_number || '';
+        const trackingUrl = tracking_url || (awb ? `https://www.totalexpress.com.br/rastreamento/${awb}` : '');
+
+        const mutation = `
+          mutation fulfillmentCreateV2($fulfillment: FulfillmentV2Input!) {
+            fulfillmentCreateV2(fulfillment: $fulfillment) {
+              fulfillment {
+                id
+                status
+                trackingInfo {
+                  company
+                  number
+                  url
+                }
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `;
+
+        const variables = {
           fulfillment: {
-            line_items_by_fulfillment_order: [{
-              fulfillment_order_id: openFO.id,
+            lineItemsByFulfillmentOrder: [{
+              fulfillmentOrderId: fulfillmentOrderGid,
             }],
-            tracking_info: {
-              number: tracking_number || '',
+            trackingInfo: {
               company: tracking_company || 'Total Express',
-              url: tracking_url || '',
+              number: awb,
+              url: trackingUrl,
             },
-            notify_customer: true,
+            notifyCustomer: true,
           },
         };
 
-        const data = await shopifyFetch('/fulfillments.json', {
-          method: 'POST',
-          body: JSON.stringify(fulfillmentBody),
-        });
-        result = data.fulfillment;
+        const data = await shopifyGraphQL(mutation, variables);
+        
+        if (data.fulfillmentCreateV2.userErrors?.length > 0) {
+          throw new Error(`Fulfillment errors: ${JSON.stringify(data.fulfillmentCreateV2.userErrors)}`);
+        }
+
+        result = data.fulfillmentCreateV2.fulfillment;
         break;
       }
 
