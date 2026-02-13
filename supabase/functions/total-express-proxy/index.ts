@@ -641,11 +641,13 @@ async function smartLabel(params: {
     }],
   };
 
+  // SmartLabel is a REST API - use REST credentials (same as tracking)
+  const restCreds = getRestCredentials();
   const response = await fetch(SMARTLABEL_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': basicAuth(creds.user, creds.password),
+      'Authorization': basicAuth(restCreds.user, restCreds.password),
       'User-Agent': 'LovableApp/1.0',
     },
     body: JSON.stringify(body),
