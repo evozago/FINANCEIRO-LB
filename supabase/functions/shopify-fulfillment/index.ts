@@ -109,7 +109,7 @@ serve(async (req) => {
           ) || 0;
 
           let status = 'pendente';
-          if (order.fulfillment_status === 'fulfilled') status = 'entregue';
+          if (order.fulfillment_status === 'fulfilled') status = 'em_transito';
           else if (order.fulfillment_status === 'partial') status = 'em_transito';
 
           let awb = '';
@@ -271,7 +271,7 @@ serve(async (req) => {
             }
 
             let status = 'pendente';
-            if (order.fulfillment_status === 'fulfilled') status = 'entregue';
+            if (order.fulfillment_status === 'fulfilled') status = 'em_transito';
             else if (order.fulfillment_status === 'partial') status = 'em_transito';
             else if (awb) status = 'em_transito';
 
