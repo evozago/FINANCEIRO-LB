@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import {
   Truck, Search, RefreshCw, Package, MapPin, Tag, CheckCircle2,
   AlertCircle, Clock, Send, FileText, Settings, Loader2, Download,
-  Edit2, Save, X, RotateCcw
+  Edit2, Save, X, RotateCcw, Plus, Zap
 } from 'lucide-react';
 
 interface Envio {
@@ -71,6 +71,24 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+const EMPTY_MANUAL_FORM = {
+  dest_nome: '',
+  dest_cpf_cnpj: '',
+  dest_endereco: '',
+  dest_numero: '',
+  dest_complemento: '',
+  dest_bairro: '',
+  dest_cidade: '',
+  dest_estado: '',
+  dest_cep: '',
+  dest_email: '',
+  dest_telefone: '',
+  peso_kg: '0.5',
+  volumes: '1',
+  valor_declarado: '100',
+  pedido: '',
+};
+
 export default function GerenciarEnvios() {
   const [envios, setEnvios] = useState<Envio[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -97,7 +115,15 @@ export default function GerenciarEnvios() {
   const [editAwbValue, setEditAwbValue] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
 
-  const { loading: apiLoading, calcularFrete, registrarColeta, rastrearPorAwb, rastrearEAtualizar, registerCarrierService, smartLabel, importOrders, syncTracking } = useTotalExpress();
+  // Manual shipment dialog
+  const [manualDialog, setManualDialog] = useState(false);
+  const [manualForm, setManualForm] = useState(EMPTY_MANUAL_FORM);
+  const [manualLoading, setManualLoading] = useState(false);
+
+  // One-click flow loading
+  const [oneClickLoading, setOneClickLoading] = useState<number | null>(null);
+
+  const { loading: apiLoading, calcularFrete, registrarColeta, rastrearPorAwb, rastrearEAtualizar, registerCarrierService, smartLabel, importOrders, createFulfillment, syncTracking } = useTotalExpress();
 
   const loadEnvios = useCallback(async () => {
     setIsLoading(true);
@@ -302,11 +328,207 @@ export default function GerenciarEnvios() {
     setImportLoading(false);
   };
 
+  // === MANUAL SHIPMENT ===
+  const handleManualSubmit = async () => {
+    if (!manualForm.dest_nome.trim() || !manualForm.dest_cep.trim()) {
+      toast.error('Nome e CEP são obrigatórios');
+      return;
+    }
+    setManualLoading(true);
+    try {
+      // 1. Create envio record
+      const { data: envioData, error: insertError } = await supabase.from('envios').insert({
+        dest_nome: manualForm.dest_nome,
+        dest_cpf_cnpj: manualForm.dest_cpf_cnpj || null,
+        dest_endereco: manualForm.dest_endereco || null,
+        dest_numero: manualForm.dest_numero || null,
+        dest_complemento: manualForm.dest_complemento || null,
+        dest_bairro: manualForm.dest_bairro || null,
+        dest_cidade: manualForm.dest_cidade || null,
+        dest_estado: manualForm.dest_estado || null,
+        dest_cep: manualForm.dest_cep,
+        dest_email: manualForm.dest_email || null,
+        dest_telefone: manualForm.dest_telefone || null,
+        peso_kg: parseFloat(manualForm.peso_kg) || 0.5,
+        volumes: parseInt(manualForm.volumes) || 1,
+        valor_declarado_centavos: Math.round(parseFloat(manualForm.valor_declarado) * 100),
+        status: 'pendente',
+      }).select().single();
+
+      if (insertError) throw insertError;
+
+      toast.success('Envio criado com sucesso!');
+
+      // 2. Register coleta automatically
+      const pedido = manualForm.pedido || envioData.id.toString();
+      const coletaResult = await registrarColeta({
+        pedido,
+        dest_nome: manualForm.dest_nome,
+        dest_cpf_cnpj: manualForm.dest_cpf_cnpj || '',
+        dest_endereco: manualForm.dest_endereco || '',
+        dest_numero: manualForm.dest_numero || 'S/N',
+        dest_complemento: manualForm.dest_complemento || '',
+        dest_bairro: manualForm.dest_bairro || '',
+        dest_cidade: manualForm.dest_cidade || '',
+        dest_estado: manualForm.dest_estado || '',
+        dest_cep: manualForm.dest_cep,
+        dest_email: manualForm.dest_email || '',
+        dest_telefone: manualForm.dest_telefone || '',
+        peso: parseFloat(manualForm.peso_kg) || 0.5,
+        volumes: parseInt(manualForm.volumes) || 1,
+        nfe_val_total: Math.round(parseFloat(manualForm.valor_declarado) * 100),
+        nfe_val_prod: Math.round(parseFloat(manualForm.valor_declarado) * 100),
+      });
+
+      if (coletaResult) {
+        await supabase.from('envios').update({
+          awb: coletaResult.awb,
+          num_protocolo: coletaResult.num_protocolo,
+          status: 'coletado',
+        }).eq('id', envioData.id);
+        toast.success(`Coleta registrada! AWB: ${coletaResult.awb}`);
+
+        // 3. Generate label automatically
+        const labelResult = await smartLabel({
+          pedido,
+          dest_nome: manualForm.dest_nome,
+          dest_cpf_cnpj: manualForm.dest_cpf_cnpj || '',
+          dest_endereco: manualForm.dest_endereco || '',
+          dest_numero: manualForm.dest_numero || 'S/N',
+          dest_complemento: manualForm.dest_complemento || '',
+          dest_bairro: manualForm.dest_bairro || '',
+          dest_cidade: manualForm.dest_cidade || '',
+          dest_estado: manualForm.dest_estado || '',
+          dest_cep: manualForm.dest_cep,
+          dest_email: manualForm.dest_email || '',
+          dest_telefone: manualForm.dest_telefone || '',
+          peso: parseFloat(manualForm.peso_kg) || 0.5,
+          volumes: parseInt(manualForm.volumes) || 1,
+          nfe_val_total: Math.round(parseFloat(manualForm.valor_declarado) * 100),
+          nfe_val_prod: Math.round(parseFloat(manualForm.valor_declarado) * 100),
+        });
+        if (labelResult) {
+          await supabase.from('envios').update({ etiqueta_gerada: true }).eq('id', envioData.id);
+          toast.success('Etiqueta gerada automaticamente!');
+        }
+      }
+
+      setManualDialog(false);
+      setManualForm(EMPTY_MANUAL_FORM);
+      loadEnvios();
+    } catch (err) {
+      console.error('Erro ao criar envio manual:', err);
+      toast.error('Erro ao criar envio');
+    }
+    setManualLoading(false);
+  };
+
+  // === ONE-CLICK SHOPIFY FLOW ===
+  const handleOneClickFlow = async (envio: Envio) => {
+    if (!envio.shopify_order_id) {
+      toast.error('Este envio não tem pedido Shopify vinculado');
+      return;
+    }
+    setOneClickLoading(envio.id);
+    try {
+      let awb = envio.awb;
+      let numProtocolo = envio.num_protocolo;
+
+      // Step 1: Register coleta (if no AWB)
+      if (!awb) {
+        toast.info('Passo 1/3: Registrando coleta...');
+        const coletaResult = await registrarColeta({
+          pedido: envio.shopify_order_name || envio.id.toString(),
+          dest_nome: envio.dest_nome,
+          dest_cpf_cnpj: envio.dest_cpf_cnpj || '',
+          dest_endereco: envio.dest_endereco || '',
+          dest_numero: envio.dest_numero || 'S/N',
+          dest_complemento: envio.dest_complemento || '',
+          dest_bairro: envio.dest_bairro || '',
+          dest_cidade: envio.dest_cidade || '',
+          dest_estado: envio.dest_estado || '',
+          dest_cep: envio.dest_cep,
+          dest_email: envio.dest_email || '',
+          dest_telefone: envio.dest_telefone || '',
+          peso: envio.peso_kg || 0.5,
+          volumes: envio.volumes,
+          nfe_val_total: envio.valor_declarado_centavos,
+          nfe_val_prod: envio.valor_declarado_centavos,
+        });
+        if (!coletaResult) {
+          toast.error('Erro no passo 1: Registrar coleta');
+          setOneClickLoading(null);
+          return;
+        }
+        awb = coletaResult.awb;
+        numProtocolo = coletaResult.num_protocolo;
+        await supabase.from('envios').update({
+          awb, num_protocolo: numProtocolo, status: 'coletado',
+        }).eq('id', envio.id);
+        toast.success(`Coleta registrada! AWB: ${awb}`);
+      }
+
+      // Step 2: Generate label
+      if (!envio.etiqueta_gerada) {
+        toast.info('Passo 2/3: Gerando etiqueta...');
+        const labelResult = await smartLabel({
+          pedido: envio.shopify_order_name || envio.id.toString(),
+          dest_nome: envio.dest_nome,
+          dest_cpf_cnpj: envio.dest_cpf_cnpj || '',
+          dest_endereco: envio.dest_endereco || '',
+          dest_numero: envio.dest_numero || 'S/N',
+          dest_complemento: envio.dest_complemento || '',
+          dest_bairro: envio.dest_bairro || '',
+          dest_cidade: envio.dest_cidade || '',
+          dest_estado: envio.dest_estado || '',
+          dest_cep: envio.dest_cep,
+          dest_email: envio.dest_email || '',
+          dest_telefone: envio.dest_telefone || '',
+          peso: envio.peso_kg || 0.5,
+          volumes: envio.volumes,
+          nfe_val_total: envio.valor_declarado_centavos,
+          nfe_val_prod: envio.valor_declarado_centavos,
+        });
+        if (labelResult) {
+          await supabase.from('envios').update({ etiqueta_gerada: true }).eq('id', envio.id);
+          toast.success('Etiqueta gerada!');
+        } else {
+          toast.warning('Etiqueta não gerada, mas continuando...');
+        }
+      }
+
+      // Step 3: Create fulfillment in Shopify
+      if (!envio.shopify_fulfillment_id && awb) {
+        toast.info('Passo 3/3: Criando fulfillment no Shopify...');
+        const fulfillResult = await createFulfillment({
+          order_id: envio.shopify_order_id,
+          tracking_number: awb,
+          tracking_company: 'Total Express',
+        });
+        if (fulfillResult) {
+          toast.success('Fulfillment criado no Shopify! Cliente notificado.');
+        } else {
+          toast.warning('Erro ao criar fulfillment no Shopify');
+        }
+      }
+
+      loadEnvios();
+    } catch (err) {
+      console.error('Erro no fluxo automático:', err);
+      toast.error('Erro no fluxo automático');
+    }
+    setOneClickLoading(null);
+  };
+
   const stats = {
     total: envios.length,
     pendentes: envios.filter(e => e.status === 'pendente').length,
     emTransito: envios.filter(e => ['coletado', 'em_transito', 'saiu_entrega'].includes(e.status)).length,
     entregues: envios.filter(e => e.status === 'entregue').length,
+  };
+
+  const updateManualField = (field: string, value: string) => {
+    setManualForm(prev => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -323,6 +545,11 @@ export default function GerenciarEnvios() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button onClick={() => setManualDialog(true)} className="bg-primary">
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Envio Manual
+          </Button>
+
           <Button variant="outline" onClick={handleBulkTracking} disabled={bulkTrackingLoading}>
             {bulkTrackingLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Atualizar Rastreios
@@ -449,6 +676,110 @@ export default function GerenciarEnvios() {
           </Button>
         </div>
       </div>
+
+      {/* Manual Shipment Dialog */}
+      <Dialog open={manualDialog} onOpenChange={setManualDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              Novo Envio Manual
+            </DialogTitle>
+            <DialogDescription>
+              Crie um envio sem pedido Shopify. A coleta será registrada e a etiqueta gerada automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label>Nome do destinatário *</Label>
+                <Input value={manualForm.dest_nome} onChange={e => updateManualField('dest_nome', e.target.value)} placeholder="Nome completo" />
+              </div>
+              <div>
+                <Label>CPF/CNPJ</Label>
+                <Input value={manualForm.dest_cpf_cnpj} onChange={e => updateManualField('dest_cpf_cnpj', e.target.value)} placeholder="000.000.000-00" />
+              </div>
+              <div>
+                <Label>Nº Pedido (referência)</Label>
+                <Input value={manualForm.pedido} onChange={e => updateManualField('pedido', e.target.value)} placeholder="Opcional" />
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-medium text-sm mb-3">Endereço</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label>Endereço *</Label>
+                  <Input value={manualForm.dest_endereco} onChange={e => updateManualField('dest_endereco', e.target.value)} placeholder="Rua, Avenida..." />
+                </div>
+                <div>
+                  <Label>Número</Label>
+                  <Input value={manualForm.dest_numero} onChange={e => updateManualField('dest_numero', e.target.value)} placeholder="123" />
+                </div>
+                <div>
+                  <Label>Complemento</Label>
+                  <Input value={manualForm.dest_complemento} onChange={e => updateManualField('dest_complemento', e.target.value)} placeholder="Apto, Bloco..." />
+                </div>
+                <div>
+                  <Label>Bairro</Label>
+                  <Input value={manualForm.dest_bairro} onChange={e => updateManualField('dest_bairro', e.target.value)} placeholder="Bairro" />
+                </div>
+                <div>
+                  <Label>CEP *</Label>
+                  <Input value={manualForm.dest_cep} onChange={e => updateManualField('dest_cep', e.target.value)} placeholder="00000-000" />
+                </div>
+                <div>
+                  <Label>Cidade</Label>
+                  <Input value={manualForm.dest_cidade} onChange={e => updateManualField('dest_cidade', e.target.value)} placeholder="Cidade" />
+                </div>
+                <div>
+                  <Label>Estado</Label>
+                  <Input value={manualForm.dest_estado} onChange={e => updateManualField('dest_estado', e.target.value)} placeholder="UF" maxLength={2} />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-medium text-sm mb-3">Contato</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>E-mail</Label>
+                  <Input value={manualForm.dest_email} onChange={e => updateManualField('dest_email', e.target.value)} placeholder="email@exemplo.com" />
+                </div>
+                <div>
+                  <Label>Telefone</Label>
+                  <Input value={manualForm.dest_telefone} onChange={e => updateManualField('dest_telefone', e.target.value)} placeholder="(00) 00000-0000" />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-medium text-sm mb-3">Pacote</h4>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label>Peso (kg)</Label>
+                  <Input type="number" step="0.1" value={manualForm.peso_kg} onChange={e => updateManualField('peso_kg', e.target.value)} />
+                </div>
+                <div>
+                  <Label>Volumes</Label>
+                  <Input type="number" value={manualForm.volumes} onChange={e => updateManualField('volumes', e.target.value)} />
+                </div>
+                <div>
+                  <Label>Valor declarado (R$)</Label>
+                  <Input type="number" step="0.01" value={manualForm.valor_declarado} onChange={e => updateManualField('valor_declarado', e.target.value)} />
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManualDialog(false)}>Cancelar</Button>
+            <Button onClick={handleManualSubmit} disabled={manualLoading}>
+              {manualLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+              Criar Envio + Registrar Coleta + Etiqueta
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -587,11 +918,34 @@ export default function GerenciarEnvios() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              {!envio.awb && (
+                              {/* One-click flow for Shopify orders */}
+                              {envio.shopify_order_id && !envio.shopify_fulfillment_id && (
+                                <Button
+                                  size="sm" variant="default"
+                                  onClick={() => handleOneClickFlow(envio)}
+                                  disabled={oneClickLoading === envio.id}
+                                  title="Fluxo automático: Coleta + Etiqueta + Fulfillment"
+                                  className="bg-primary"
+                                >
+                                  {oneClickLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                                </Button>
+                              )}
+                              {!envio.awb && !envio.shopify_order_id && (
                                 <Button
                                   size="sm" variant="outline"
                                   onClick={() => handleRegistrarColeta(envio)}
                                   disabled={actionLoading === envio.id}
+                                  title="Registrar Coleta"
+                                >
+                                  {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                                </Button>
+                              )}
+                              {!envio.awb && envio.shopify_order_id && !envio.shopify_fulfillment_id && (
+                                <Button
+                                  size="sm" variant="outline"
+                                  onClick={() => handleRegistrarColeta(envio)}
+                                  disabled={actionLoading === envio.id}
+                                  title="Registrar Coleta"
                                 >
                                   {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
                                 </Button>
