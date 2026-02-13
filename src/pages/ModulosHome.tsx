@@ -14,7 +14,8 @@ import {
   FileSpreadsheet,
   LogOut,
   Settings,
-  Printer
+  Printer,
+  Truck
 } from 'lucide-react';
 import { EntradaNfeCard } from '@/components/dashboard/EntradaNfeCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -119,6 +120,14 @@ const modules: ModuleCardProps[] = [
     icon: ShoppingBag,
     href: '/ecommerce/shopify',
     color: 'bg-gradient-to-br from-indigo-500 to-indigo-600',
+    moduloId: 'ecommerce'
+  },
+  {
+    title: 'Envios',
+    description: 'Coletas, etiquetas e rastreamento via Total Express',
+    icon: Truck,
+    href: '/ecommerce/envios',
+    color: 'bg-gradient-to-br from-amber-500 to-amber-600',
     moduloId: 'ecommerce'
   },
   {
