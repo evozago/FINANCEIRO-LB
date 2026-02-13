@@ -198,7 +198,7 @@ async function registrarColeta(params: {
       <DocFiscalO>
         <item>
           <NfoTipo>00</NfoTipo>
-          <NfoNumero>${params.pedido}</NfoNumero>
+          <NfoNumero>${(params.pedido || '').replace(/\D/g, '') || '0'}</NfoNumero>
           <NfoData>${new Date().toISOString().split('T')[0]}</NfoData>
           <NfoValTotal>${((params.nfe_val_total || 0) / 100).toFixed(2)}</NfoValTotal>
           <NfoValProd>${((params.nfe_val_prod || 0) / 100).toFixed(2)}</NfoValProd>
@@ -263,11 +263,26 @@ async function registrarColeta(params: {
   const codigoProc = getTagText(xmlText, 'CodigoProc');
 
   if (codigoProc !== '1') {
-    const criticaBlocks = getAllTagContents(xmlText, 'CriticaVolume');
-    const erros = criticaBlocks.map(block => {
-      const descErro = getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao');
-      return descErro;
-    }).filter(Boolean);
+    // ErrosIndividuais contains <item xsi:type="tns:CriticaVolume"> not <CriticaVolume>
+    const errosSection = getAllTagContents(xmlText, 'ErrosIndividuais');
+    let erros: string[] = [];
+    if (errosSection.length > 0) {
+      const itemBlocks = getAllTagContents(errosSection[0], 'item');
+      erros = itemBlocks.map(block => {
+        const pedido = getTagText(block, 'Pedido') || '';
+        const codErro = getTagText(block, 'CodigoErro') || '';
+        const descErro = getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao') || '';
+        return `[${pedido}] Erro ${codErro}: ${descErro}`;
+      }).filter(e => e.length > 5);
+    }
+    // Fallback: try CriticaVolume directly
+    if (erros.length === 0) {
+      const criticaBlocks = getAllTagContents(xmlText, 'CriticaVolume');
+      erros = criticaBlocks.map(block => {
+        return getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao') || '';
+      }).filter(Boolean);
+    }
+    console.error('Total Express erros individuais:', JSON.stringify(erros));
     throw new Error(`Erro Total Express (código ${codigoProc}): ${erros.length > 0 ? erros.join('; ') : 'Erro ao registrar coleta'}`);
   }
 

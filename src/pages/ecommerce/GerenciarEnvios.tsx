@@ -479,8 +479,9 @@ export default function GerenciarEnvios() {
       // Step 1: Register coleta (if no AWB)
       if (!awb) {
         toast.info('Passo 1/3: Registrando coleta...');
+        const pedidoNum = (envio.shopify_order_name || envio.id.toString()).replace(/\D/g, '');
         const coletaResult = await registrarColeta({
-          pedido: envio.shopify_order_name || envio.id.toString(),
+          pedido: pedidoNum,
           dest_nome: envio.dest_nome,
           dest_cpf_cnpj: envio.dest_cpf_cnpj || '',
           dest_endereco: envio.dest_endereco || '',
@@ -494,7 +495,7 @@ export default function GerenciarEnvios() {
           dest_telefone: envio.dest_telefone || '',
           peso: envio.peso_kg || 0.5,
           volumes: envio.volumes,
-          tipo_servico: 7,
+          tipo_servico: envio.tipo_servico || 1,
           nfe_val_total: envio.valor_declarado_centavos,
           nfe_val_prod: envio.valor_declarado_centavos,
         });
@@ -514,8 +515,9 @@ export default function GerenciarEnvios() {
       // Step 2: Generate label
       if (!envio.etiqueta_gerada) {
         toast.info('Passo 2/3: Gerando etiqueta...');
+        const labelPedidoNum = (envio.shopify_order_name || envio.id.toString()).replace(/\D/g, '');
         const labelResult = await smartLabel({
-          pedido: envio.shopify_order_name || envio.id.toString(),
+          pedido: labelPedidoNum,
           dest_nome: envio.dest_nome,
           dest_cpf_cnpj: envio.dest_cpf_cnpj || '',
           dest_endereco: envio.dest_endereco || '',
@@ -529,7 +531,7 @@ export default function GerenciarEnvios() {
           dest_telefone: envio.dest_telefone || '',
           peso: envio.peso_kg || 0.5,
           volumes: envio.volumes,
-          tipo_servico: 7,
+          tipo_servico: envio.tipo_servico || 1,
           nfe_val_total: envio.valor_declarado_centavos,
           nfe_val_prod: envio.valor_declarado_centavos,
         });
