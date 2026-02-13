@@ -476,8 +476,8 @@ export default function GerenciarEnvios() {
       let awb = envio.awb;
       let numProtocolo = envio.num_protocolo;
 
-      // Step 1: Register coleta (if no AWB)
-      if (!awb) {
+      // Step 1: Register coleta (if no AWB and no existing protocol)
+      if (!awb && !numProtocolo) {
         toast.info('Passo 1/3: Registrando coleta...');
         const pedidoNum = (envio.shopify_order_name || envio.id.toString()).replace(/\D/g, '');
         // Extract CPF/CNPJ from name if field is empty
