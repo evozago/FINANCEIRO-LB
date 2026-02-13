@@ -480,10 +480,20 @@ export default function GerenciarEnvios() {
       if (!awb) {
         toast.info('Passo 1/3: Registrando coleta...');
         const pedidoNum = (envio.shopify_order_name || envio.id.toString()).replace(/\D/g, '');
+        // Extract CPF/CNPJ from name if field is empty
+        let cpfCnpj = (envio.dest_cpf_cnpj || '').replace(/\D/g, '');
+        let destNome = envio.dest_nome;
+        if (!cpfCnpj) {
+          const match = destNome.match(/\b(\d{11}|\d{14})\b/);
+          if (match) {
+            cpfCnpj = match[1];
+            destNome = destNome.replace(match[1], '').trim();
+          }
+        }
         const coletaResult = await registrarColeta({
           pedido: pedidoNum,
-          dest_nome: envio.dest_nome,
-          dest_cpf_cnpj: envio.dest_cpf_cnpj || '',
+          dest_nome: destNome,
+          dest_cpf_cnpj: cpfCnpj,
           dest_endereco: envio.dest_endereco || '',
           dest_numero: envio.dest_numero || 'S/N',
           dest_complemento: envio.dest_complemento || '',
@@ -516,10 +526,17 @@ export default function GerenciarEnvios() {
       if (!envio.etiqueta_gerada) {
         toast.info('Passo 2/3: Gerando etiqueta...');
         const labelPedidoNum = (envio.shopify_order_name || envio.id.toString()).replace(/\D/g, '');
+        // Reuse extracted CPF/CNPJ logic
+        let labelCpf = (envio.dest_cpf_cnpj || '').replace(/\D/g, '');
+        let labelNome = envio.dest_nome;
+        if (!labelCpf) {
+          const m = labelNome.match(/\b(\d{11}|\d{14})\b/);
+          if (m) { labelCpf = m[1]; labelNome = labelNome.replace(m[1], '').trim(); }
+        }
         const labelResult = await smartLabel({
           pedido: labelPedidoNum,
-          dest_nome: envio.dest_nome,
-          dest_cpf_cnpj: envio.dest_cpf_cnpj || '',
+          dest_nome: labelNome,
+          dest_cpf_cnpj: labelCpf,
           dest_endereco: envio.dest_endereco || '',
           dest_numero: envio.dest_numero || 'S/N',
           dest_complemento: envio.dest_complemento || '',

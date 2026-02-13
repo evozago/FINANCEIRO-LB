@@ -6,6 +6,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+// Extract CPF/CNPJ from Shopify order data (note_attributes, company name, or dest_nome)
+function extractCpfCnpj(order: Record<string, unknown>, shipping: Record<string, string>): string {
+  // 1. Check note_attributes (common Brazilian Shopify apps store CPF here)
+  const noteAttrs = (order.note_attributes as Array<{ name: string; value: string }>) || [];
+  for (const attr of noteAttrs) {
+    const name = (attr.name || '').toLowerCase();
+    if (name.includes('cpf') || name.includes('cnpj') || name.includes('documento')) {
+      const val = (attr.value || '').replace(/\D/g, '');
+      if (val.length === 11 || val.length === 14) return val;
+    }
+  }
+  // 2. Check order note field
+  const note = (order.note as string) || '';
+  const noteMatch = note.match(/\b(\d{11}|\d{14})\b/);
+  if (noteMatch) return noteMatch[1];
+  // 3. Extract from shipping name (e.g. "Claudineia Kindermann 08801406908")
+  const name = shipping.name || '';
+  const nameMatch = name.match(/\b(\d{11}|\d{14})\b/);
+  if (nameMatch) return nameMatch[1];
+  // 4. Check company field
+  const company = shipping.company || '';
+  const companyMatch = company.match(/\b(\d{11}|\d{14})\b/);
+  if (companyMatch) return companyMatch[1];
+  return '';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -126,7 +152,7 @@ serve(async (req) => {
             shopify_order_name: order.name || `#${order.order_number}`,
             shopify_fulfillment_id: fulfillmentId,
             dest_nome: shipping.name || (order.customer as Record<string, string>)?.first_name || 'Sem nome',
-            dest_cpf_cnpj: '',
+            dest_cpf_cnpj: extractCpfCnpj(order, shipping),
             dest_endereco: shipping.address1 || '',
             dest_numero: shipping.address2 || 'S/N',
             dest_complemento: '',
