@@ -350,29 +350,63 @@ async function rastrearPorPedido(params: { pedidos: string[] }) {
   return await response.json();
 }
 
-// ===== RASTREAR POR AWB (REST API) =====
+// ===== RASTREAR POR AWB (via SOAP ObterTracking) =====
 async function rastrearPorAwb(params: { awbs: string[] }) {
   const creds = getCredentials();
-
-  const response = await fetch(TRACKING_REST_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': basicAuth(creds.user, creds.password),
-      'User-Agent': 'LovableApp/1.0',
-    },
-    body: JSON.stringify({
-      awbs: params.awbs,
-      comprovanteEntrega: true,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Erro ao rastrear: ${response.status} - ${errorText}`);
+  
+  // Use SOAP ObterTracking which works with our credentials
+  // Fetch last 7 days to capture recent events
+  const results: Array<{ awb: string; eventos: Array<{ descricao: string; codigo: string; data: string; cidade: string }> }> = [];
+  
+  const today = new Date();
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().split('T')[0]);
   }
-
-  return await response.json();
+  
+  // Collect all tracking events from recent days
+  const allTrackings: Array<{ awb: string; descricao: string; codigo: string; data_hora: string; cidade: string }> = [];
+  
+  for (const dataConsulta of dates) {
+    try {
+      const trackResult = await obterTracking({ data_consulta: dataConsulta });
+      for (const t of trackResult.trackings) {
+        if (t.awb && params.awbs.includes(t.awb)) {
+          allTrackings.push({
+            awb: t.awb,
+            descricao: t.descricao,
+            codigo: t.status,
+            data_hora: t.data_hora,
+            cidade: t.cidade,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn(`Erro ao buscar tracking para data ${dataConsulta}:`, e);
+    }
+  }
+  
+  // Group by AWB
+  const grouped: Record<string, Array<{ descricao: string; codigo: string; data: string; cidade: string }>> = {};
+  for (const t of allTrackings) {
+    if (!grouped[t.awb]) grouped[t.awb] = [];
+    grouped[t.awb].push({
+      descricao: t.descricao,
+      codigo: t.codigo,
+      data: t.data_hora,
+      cidade: t.cidade,
+    });
+  }
+  
+  // Sort events by date desc (most recent first)
+  for (const awb of Object.keys(grouped)) {
+    grouped[awb].sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+    results.push({ awb, eventos: grouped[awb] });
+  }
+  
+  return results;
 }
 
 // ===== SMART LABEL (REST API) =====
@@ -543,27 +577,15 @@ async function rastrearEAtualizar(params: { awbs: string[] }) {
   
   const updates: Array<{ awb: string; status: string; status_detalhe: string; tracking_historico: unknown }> = [];
 
-  // The REST API returns an object with tracking data per AWB
-  const items = Array.isArray(trackingResult) ? trackingResult : (trackingResult?.data || trackingResult?.tracking || [trackingResult]);
-  
-  for (const awb of params.awbs) {
-    // Find tracking events for this AWB
-    let eventos: Array<{ descricao?: string; status?: string; codigo?: string; data?: string }> = [];
-    
-    if (Array.isArray(items)) {
-      for (const item of items) {
-        const itemAwb = item?.awb || item?.AWB || '';
-        if (itemAwb === awb) {
-          eventos = item?.eventos || item?.historico || [item];
-        }
-      }
-    }
+  for (const item of trackingResult) {
+    const awb = item.awb;
+    const eventos = item.eventos || [];
     
     if (eventos.length === 0) continue;
     
     // Get the most recent event
-    const ultimoEvento = eventos[0]; // Usually sorted most recent first
-    const descricao = ultimoEvento?.descricao || ultimoEvento?.status || '';
+    const ultimoEvento = eventos[0];
+    const descricao = ultimoEvento?.descricao || '';
     const codigo = ultimoEvento?.codigo?.toString() || '';
     
     const mapped = mapearStatusTotalExpress(descricao, codigo);
