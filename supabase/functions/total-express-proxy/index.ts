@@ -124,27 +124,10 @@ async function calcularFrete(params: {
   largura?: number;
   profundidade?: number;
 }) {
-  // If user specified a type, use it directly
-  if (params.tipo_servico) {
-    const result = await calcularFreteSingle({ ...params, tipo_servico: params.tipo_servico });
-    if (result.success) return result.data;
-    throw new Error(`Erro Total Express (${result.error})`);
-  }
-
-  // Try common service types: E (Expresso), N (Normal), R (Rodoviário), 1, 2, 3
-  const tiposParaTentar = ['E', 'N', 'R', '1', '2', '3', 'STD'];
-  const errors: string[] = [];
-
-  for (const tipo of tiposParaTentar) {
-    const result = await calcularFreteSingle({ ...params, tipo_servico: tipo });
-    if (result.success) {
-      console.log(`✅ Tipo de serviço válido encontrado: ${tipo}`);
-      return result.data;
-    }
-    errors.push(`${tipo}: ${result.error}`);
-  }
-
-  throw new Error(`Nenhum tipo de serviço válido encontrado. Tentativas: ${errors.join(' | ')}`);
+  const tipoServico = params.tipo_servico || 'EXP';
+  const result = await calcularFreteSingle({ ...params, tipo_servico: tipoServico });
+  if (result.success) return result.data;
+  throw new Error(`Erro Total Express (${result.error})`);
 }
 
 // ===== REGISTRAR COLETA (SOAP) =====

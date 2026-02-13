@@ -11,13 +11,10 @@ function basicAuth(user: string, password: string): string {
   return 'Basic ' + btoa(`${user}:${password}`);
 }
 
-function parseXml(xmlText: string): Document {
-  return new DOMParser().parseFromString(xmlText, 'text/xml');
-}
-
-function getTagText(doc: Document, tagName: string): string {
-  const el = doc.getElementsByTagName(tagName)[0];
-  return el?.textContent || '';
+function getTagText(xmlText: string, tagName: string): string {
+  const regex = new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'i');
+  const match = xmlText.match(regex);
+  return match?.[1]?.trim() || '';
 }
 
 async function calcularFreteSoap(cepDestino: string, pesoKg: number, valorCentavos: number, tipoServico: string) {
@@ -55,13 +52,12 @@ async function calcularFreteSoap(cepDestino: string, pesoKg: number, valorCentav
   });
 
   const xmlText = await response.text();
-  const doc = parseXml(xmlText);
-  const codigoProc = getTagText(doc, 'CodigoProc');
+  const codigoProc = getTagText(xmlText, 'CodigoProc');
 
   if (codigoProc !== '1') return null;
 
-  const prazo = parseInt(getTagText(doc, 'Prazo')) || 0;
-  const valorServico = parseFloat(getTagText(doc, 'ValorServico').replace(',', '.')) || 0;
+  const prazo = parseInt(getTagText(xmlText, 'Prazo')) || 0;
+  const valorServico = parseFloat(getTagText(xmlText, 'ValorServico').replace(',', '.')) || 0;
 
   return { prazo, valor: valorServico };
 }
@@ -101,11 +97,8 @@ serve(async (req) => {
       const totalValue = rate.items?.reduce((acc: number, item: { price: number; quantity: number }) => 
         acc + (item.price || 0) * (item.quantity || 1), 0) || 0;
 
-      // Try both STD and EXP
-      const [stdResult, expResult] = await Promise.allSettled([
-        calcularFreteSoap(destPostalCode, totalKg, totalValue, 'STD'),
-        calcularFreteSoap(destPostalCode, totalKg, totalValue, 'EXP'),
-      ]);
+      // Use EXP service type (contract-specific)
+      const expResult = await calcularFreteSoap(destPostalCode, totalKg, totalValue, 'EXP');
 
       const rates: Array<{
         service_name: string;
@@ -118,26 +111,13 @@ serve(async (req) => {
 
       const now = new Date();
 
-      if (stdResult.status === 'fulfilled' && stdResult.value) {
+      if (expResult) {
         const delivery = new Date(now);
-        delivery.setDate(delivery.getDate() + stdResult.value.prazo);
+        delivery.setDate(delivery.getDate() + expResult.prazo);
         rates.push({
-          service_name: `Total Express Standard (${stdResult.value.prazo} dias úteis)`,
-          service_code: 'total_express_std',
-          total_price: Math.round(stdResult.value.valor * 100).toString(),
-          currency: 'BRL',
-          min_delivery_date: delivery.toISOString().split('T')[0],
-          max_delivery_date: delivery.toISOString().split('T')[0],
-        });
-      }
-
-      if (expResult.status === 'fulfilled' && expResult.value) {
-        const delivery = new Date(now);
-        delivery.setDate(delivery.getDate() + expResult.value.prazo);
-        rates.push({
-          service_name: `Total Express Expresso (${expResult.value.prazo} dias úteis)`,
+          service_name: `Total Express (${expResult.prazo} dias úteis)`,
           service_code: 'total_express_exp',
-          total_price: Math.round(expResult.value.valor * 100).toString(),
+          total_price: Math.round(expResult.valor * 100).toString(),
           currency: 'BRL',
           min_delivery_date: delivery.toISOString().split('T')[0],
           max_delivery_date: delivery.toISOString().split('T')[0],
@@ -155,7 +135,7 @@ serve(async (req) => {
         (body.cep_destino || '').replace(/\D/g, ''),
         body.peso || 0.5,
         body.valor || 10000,
-        body.tipo_servico || 'STD'
+        body.tipo_servico || 'EXP'
       );
       return new Response(JSON.stringify({ success: true, data: result }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
