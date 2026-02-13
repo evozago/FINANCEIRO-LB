@@ -299,8 +299,8 @@ export function useXMLImport() {
             valor_total_centavos: Math.round(xmlData.valorTotal * 100),
             fornecedor_id: fornecedorId,
             num_parcelas: 1,
-            categoria_id: 1,
-            filial_id: 1,
+            categoria_id: null,
+            filial_id: null,
               referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - ${xmlData.razaoSocialEmitente}`,
               numero_nota: xmlData.chaveAcesso || xmlData.numeroNFe
           }]);
@@ -331,8 +331,8 @@ export function useXMLImport() {
               valor_total_centavos: Math.round(parcela.valor * 100),
               fornecedor_id: fornecedorId,
               num_parcelas: xmlData.duplicatas.length,
-              categoria_id: 1,
-              filial_id: 1,
+              categoria_id: null,
+              filial_id: null,
               referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - Parcela ${i + 1}/${xmlData.duplicatas.length}`,
               numero_nota: xmlData.chaveAcesso || xmlData.numeroNFe
             }]);
