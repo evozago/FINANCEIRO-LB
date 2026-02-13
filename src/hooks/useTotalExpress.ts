@@ -58,6 +58,9 @@ export function useTotalExpress() {
   const rastrearPorAwb = useCallback((awbs: string[]) =>
     callApi<unknown>('total-express-proxy', { action: 'rastrear_awb', awbs }), [callApi]);
 
+  const rastrearEAtualizar = useCallback((awbs: string[]) =>
+    callApi<{ updated: number; details: Array<{ awb: string; status: string; status_detalhe: string }> }>('total-express-proxy', { action: 'rastrear_e_atualizar', awbs }), [callApi]);
+
   const smartLabel = useCallback((params: Record<string, unknown>) =>
     callApi<unknown>('total-express-proxy', { action: 'smart_label', ...params }), [callApi]);
 
@@ -86,6 +89,7 @@ export function useTotalExpress() {
     registrarColeta,
     rastrearPorPedido,
     rastrearPorAwb,
+    rastrearEAtualizar,
     smartLabel,
     getOrders,
     importOrders,
