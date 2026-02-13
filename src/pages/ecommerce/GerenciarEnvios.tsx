@@ -1200,25 +1200,25 @@ export default function GerenciarEnvios() {
                                   {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
                                 </Button>
                               )}
+                              {(envio.awb || envio.num_protocolo || envio.status === 'registrado' || envio.status === 'aguardando_coleta') && !envio.etiqueta_gerada && (
+                                <Button
+                                  size="sm" variant="outline"
+                                  onClick={() => handleGerarEtiqueta(envio)}
+                                  disabled={actionLoading === envio.id}
+                                  title="Gerar Etiqueta"
+                                >
+                                  {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
+                                </Button>
+                              )}
                               {envio.awb && (
-                                <>
-                                  <Button
-                                    size="sm" variant="outline"
-                                    onClick={() => handleGerarEtiqueta(envio)}
-                                    disabled={actionLoading === envio.id}
-                                    title="Gerar Etiqueta"
-                                  >
-                                    {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
-                                  </Button>
-                                  <Button
-                                    size="sm" variant="outline"
-                                    onClick={() => handleRastrear(envio)}
-                                    disabled={actionLoading === envio.id}
-                                    title="Rastrear"
-                                  >
-                                    {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
-                                  </Button>
-                                </>
+                                <Button
+                                  size="sm" variant="outline"
+                                  onClick={() => handleRastrear(envio)}
+                                  disabled={actionLoading === envio.id}
+                                  title="Rastrear"
+                                >
+                                  {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
+                                </Button>
                               )}
                             </div>
                           </TableCell>
