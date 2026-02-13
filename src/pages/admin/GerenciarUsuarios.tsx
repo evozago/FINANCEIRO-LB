@@ -14,18 +14,17 @@ import { toast } from 'sonner';
 import { Plus, Trash2, Shield, Users, Loader2 } from 'lucide-react';
 
 const ALL_MODULOS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'cadastros', label: 'Cadastros' },
-  { id: 'financeiro', label: 'Financeiro' },
-  { id: 'vendas', label: 'Vendas' },
-  { id: 'compras', label: 'Compras' },
-  { id: 'produtos', label: 'Produtos' },
-  { id: 'estoque', label: 'Estoque' },
-  { id: 'crm', label: 'CRM' },
-  { id: 'ecommerce', label: 'E-commerce' },
-  { id: 'ferramentas', label: 'Ferramentas' },
-  { id: 'relatorios', label: 'Relatórios' },
-  { id: 'admin', label: 'Administração' },
+  { id: 'dashboard', label: 'Dashboard', desc: 'Visão geral e entrada de notas' },
+  { id: 'financeiro', label: 'Financeiro', desc: 'Contas a pagar, bancos, caixa, categorias' },
+  { id: 'vendas', label: 'Vendas', desc: 'Registro de vendas, metas, relatórios' },
+  { id: 'compras', label: 'Compras', desc: 'Pedidos de compra e importação XML' },
+  { id: 'produtos', label: 'Classificador Produtos', desc: 'Importar e classificar produtos' },
+  { id: 'cadastros', label: 'Cadastros', desc: 'PF, PJ, filiais, cargos, marcas' },
+  { id: 'ecommerce', label: 'E-commerce / Envios', desc: 'Shopify, etiquetas, rastreamento' },
+  { id: 'impressao3d', label: 'Impressão 3D', desc: 'Custos, precificação, produção' },
+  { id: 'ferramentas', label: 'Ferramentas', desc: 'Unificador de planilhas' },
+  { id: 'relatorios', label: 'Relatórios', desc: 'Relatórios gerais e exportação' },
+  { id: 'admin', label: 'Administração / IA', desc: 'Cérebro IA, gerenciamento' },
 ];
 
 interface UserData {
@@ -76,13 +75,13 @@ export default function GerenciarUsuarios() {
   useEffect(() => { loadUsers(); }, []);
 
   const handleCreateUser = async () => {
-    if (!newEmail || !newPassword || !newNome) {
-      toast.error('Preencha todos os campos');
+    if (!newPassword || !newNome) {
+      toast.error('Preencha nome e senha');
       return;
     }
     setCreating(true);
     try {
-      await callAdmin({ action: 'create-user', email: newEmail, password: newPassword, nome: newNome, role: newRole });
+      await callAdmin({ action: 'create-user', email: newEmail || null, password: newPassword, nome: newNome, role: newRole });
       toast.success('Usuário criado com sucesso!');
       setOpenCreate(false);
       setNewEmail(''); setNewPassword(''); setNewNome(''); setNewRole('operador');
@@ -160,8 +159,8 @@ export default function GerenciarUsuarios() {
                   <Input value={newNome} onChange={(e) => setNewNome(e.target.value)} placeholder="Nome completo" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="email@exemplo.com" />
+                  <Label>Email <span className="text-xs text-muted-foreground">(opcional)</span></Label>
+                  <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Deixe vazio para gerar automaticamente" />
                 </div>
                 <div className="space-y-2">
                   <Label>Senha</Label>
@@ -197,9 +196,9 @@ export default function GerenciarUsuarios() {
           <DialogHeader>
             <DialogTitle>Módulos do perfil: {selectedRole}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 pt-4">
+          <div className="space-y-3 pt-4 max-h-[400px] overflow-y-auto">
             {ALL_MODULOS.map((mod) => (
-              <div key={mod.id} className="flex items-center space-x-2">
+              <div key={mod.id} className="flex items-start space-x-2 p-2 rounded-md hover:bg-muted/50">
                 <Checkbox
                   id={mod.id}
                   checked={selectedModulos.includes(mod.id)}
@@ -209,8 +208,12 @@ export default function GerenciarUsuarios() {
                     );
                   }}
                   disabled={selectedRole === 'admin'}
+                  className="mt-0.5"
                 />
-                <Label htmlFor={mod.id}>{mod.label}</Label>
+                <div className="flex flex-col">
+                  <Label htmlFor={mod.id} className="font-medium">{mod.label}</Label>
+                  <span className="text-xs text-muted-foreground">{mod.desc}</span>
+                </div>
               </div>
             ))}
             <Button onClick={handleSaveModulos} className="w-full mt-4">Salvar</Button>

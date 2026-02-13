@@ -69,8 +69,11 @@ serve(async (req: Request) => {
 
     if (action === "create-user") {
       const { email, password, nome, role } = params;
+      // Generate placeholder email if not provided
+      const userEmail = email || `${nome.toLowerCase().replace(/\s+/g, '.')}.${Date.now()}@interno.local`;
+      
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email,
+        email: userEmail,
         password,
         email_confirm: true,
         user_metadata: { nome },
