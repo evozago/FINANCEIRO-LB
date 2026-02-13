@@ -177,41 +177,21 @@ export function useXMLImport() {
     }
   };
 
-  // Verificação de duplicatas - ESTRATÉGIA FINANCEIROLB
+  // Verificação de duplicatas - busca pelo campo numero_nota
   const verificarDuplicata = async (xmlData: XMLData): Promise<{ isDuplicate: boolean; reason: string }> => {
     try {
-      // Critério 1: Verificar por número da NFe (mais confiável) - ESTRATÉGIA FINANCEIROLB
-      if (xmlData.numeroNFe) {
-        const { data: existingByNumber, error: numberCheckError } = await supabase
+      const chaveOuNumero = xmlData.chaveAcesso || xmlData.numeroNFe;
+      if (chaveOuNumero) {
+        const { data: existing, error } = await supabase
           .from('contas_pagar')
-          .select('id, descricao, observacoes')
-          .ilike('descricao', `%NFe ${xmlData.numeroNFe}%`)
+          .select('id')
+          .eq('numero_nota', chaveOuNumero)
           .limit(1);
         
-        if (numberCheckError) {
-          console.error('Erro ao verificar NFe por número:', numberCheckError);
-        } else if (existingByNumber && existingByNumber.length > 0) {
+        if (!error && existing && existing.length > 0) {
           return {
             isDuplicate: true,
-            reason: `número da NFe ${xmlData.numeroNFe}`
-          };
-        }
-      }
-      
-      // Critério 2: Verificar por chave de acesso completa - ESTRATÉGIA FINANCEIROLB
-      if (xmlData.chaveAcesso) {
-        const { data: existingByKey, error: keyCheckError } = await supabase
-          .from('contas_pagar')
-          .select('id, descricao, observacoes')
-          .ilike('observacoes', `%${xmlData.chaveAcesso}%`)
-          .limit(1);
-        
-        if (keyCheckError) {
-          console.error('Erro ao verificar NFe por chave:', keyCheckError);
-        } else if (existingByKey && existingByKey.length > 0) {
-          return {
-            isDuplicate: true,
-            reason: `chave de acesso ${xmlData.chaveAcesso.substring(0, 10)}...`
+            reason: `chave/número ${chaveOuNumero.substring(0, 15)}...`
           };
         }
       }
@@ -275,77 +255,69 @@ export function useXMLImport() {
     }
   };
 
-  // Criar contas a pagar - ADAPTADO DA ESTRATÉGIA FINANCEIROLB
+  // Criar contas a pagar com parcelas
   const criarContasPagar = async (xmlData: XMLData, fornecedorId: number | null): Promise<boolean> => {
     try {
-      const documentNumber = xmlData.numeroNFe || (xmlData.chaveAcesso?.slice(-8)) || 'sem-numero';
-      
-      if (xmlData.duplicatas.length === 1) {
-        // Parcela única - ESTRATÉGIA FINANCEIROLB
-        const parcela = xmlData.duplicatas[0];
-        let vencimento = parcela.vencimento || xmlData.dataEmissao;
-        let status = 'pendente';
-        
-        // Se não tem data de vencimento, usar data de emissão + 30 dias
-        if (!parcela.vencimento) {
-          const dataVenc = new Date(xmlData.dataEmissao);
-          dataVenc.setDate(dataVenc.getDate() + 30);
-          vencimento = dataVenc.toISOString().split('T')[0];
-        }
-        
-        const { error: insertError } = await supabase
-          .from('contas_pagar')
-          .insert([{
-            valor_total_centavos: Math.round(xmlData.valorTotal * 100),
-            fornecedor_id: fornecedorId,
-            num_parcelas: 1,
-            categoria_id: null,
-            filial_id: null,
-              referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - ${xmlData.razaoSocialEmitente}`,
-              numero_nota: xmlData.chaveAcesso || xmlData.numeroNFe
-          }]);
-        
-        if (insertError) {
-          console.error('Erro ao inserir conta única:', insertError);
-          return false;
-        }
-        
-        console.log(`NFe ${xmlData.numeroNFe || 'sem número'} importada com sucesso (conta única)`);
-        return true;
-        
-      } else {
-        // Múltiplas parcelas - ESTRATÉGIA FINANCEIROLB
-        for (let i = 0; i < xmlData.duplicatas.length; i++) {
-          const parcela = xmlData.duplicatas[i];
-          let vencimento = parcela.vencimento || xmlData.dataEmissao;
-          let status = 'pendente';
-          
-          // Se não tem data de vencimento, usar data de emissão
-          if (!parcela.vencimento) {
-            vencimento = xmlData.dataEmissao;
-          }
-          
-          const { error: insertError } = await supabase
-            .from('contas_pagar')
-            .insert([{
-              valor_total_centavos: Math.round(parcela.valor * 100),
-              fornecedor_id: fornecedorId,
-              num_parcelas: xmlData.duplicatas.length,
-              categoria_id: null,
-              filial_id: null,
-              referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - Parcela ${i + 1}/${xmlData.duplicatas.length}`,
-              numero_nota: xmlData.chaveAcesso || xmlData.numeroNFe
-            }]);
-          
-          if (insertError) {
-            console.error('Erro ao inserir parcela:', insertError);
-            return false;
-          }
-        }
-        
-        console.log(`NFe ${xmlData.numeroNFe || 'sem número'} importada com sucesso (${xmlData.duplicatas.length} parcelas)`);
-        return true;
+      const numParcelas = xmlData.duplicatas.length || 1;
+      const valorTotal = Math.round(xmlData.valorTotal * 100);
+
+      // 1. Criar UMA conta_pagar
+      const { data: contaCriada, error: insertError } = await supabase
+        .from('contas_pagar')
+        .insert([{
+          valor_total_centavos: valorTotal,
+          fornecedor_id: fornecedorId,
+          num_parcelas: numParcelas,
+          categoria_id: null,
+          filial_id: null,
+          descricao: `NFe ${xmlData.numeroNFe || 'sem número'} - ${xmlData.razaoSocialEmitente}`,
+          referencia: `NFe ${xmlData.numeroNFe || 'sem número'}`,
+          numero_nota: xmlData.chaveAcesso || xmlData.numeroNFe
+        }])
+        .select('id')
+        .single();
+
+      if (insertError || !contaCriada) {
+        console.error('Erro ao inserir conta:', insertError);
+        return false;
       }
+
+      // 2. Criar parcelas em contas_pagar_parcelas
+      const parcelas = xmlData.duplicatas.length > 0
+        ? xmlData.duplicatas.map((parcela, i) => {
+            let vencimento = parcela.vencimento || xmlData.dataEmissao;
+            if (!vencimento) {
+              const dataVenc = new Date(xmlData.dataEmissao);
+              dataVenc.setDate(dataVenc.getDate() + 30 * (i + 1));
+              vencimento = dataVenc.toISOString().split('T')[0];
+            }
+            return {
+              conta_id: contaCriada.id,
+              numero_parcela: i + 1,
+              valor_centavos: Math.round(parcela.valor * 100),
+              vencimento,
+              pago: false
+            };
+          })
+        : [{
+            conta_id: contaCriada.id,
+            numero_parcela: 1,
+            valor_centavos: valorTotal,
+            vencimento: xmlData.dataEmissao || new Date().toISOString().split('T')[0],
+            pago: false
+          }];
+
+      const { error: parcelasError } = await supabase
+        .from('contas_pagar_parcelas')
+        .insert(parcelas);
+
+      if (parcelasError) {
+        console.error('Erro ao inserir parcelas:', parcelasError);
+        // Conta foi criada mas parcelas falharam - ainda retorna true
+      }
+
+      console.log(`NFe ${xmlData.numeroNFe || 'sem número'} importada: 1 conta + ${parcelas.length} parcela(s)`);
+      return true;
 
     } catch (error) {
       console.error('Erro ao criar contas a pagar:', error);
