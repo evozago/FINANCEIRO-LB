@@ -2,3 +2,12 @@ project_id = "yimrllhmdbuabvryvirn"
 
 [functions.shopify-api]
 verify_jwt = false
+
+[functions.total-express-proxy]
+verify_jwt = false
+
+[functions.carrier-service]
+verify_jwt = false
+
+[functions.shopify-fulfillment]
+verify_jwt = false

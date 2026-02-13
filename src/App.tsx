@@ -37,6 +37,7 @@ import DashboardProdutos from "./pages/produtos/DashboardProdutos";
 import ListaProdutos from "./pages/produtos/ListaProdutos";
 import GeradorReferencias from "./pages/produtos/GeradorReferencias";
 import ShopifyIntegration from "./pages/ecommerce/ShopifyIntegration";
+import GerenciarEnvios from "./pages/ecommerce/GerenciarEnvios";
 import UnificadorPlanilhas from "./pages/ferramentas/UnificadorPlanilhas";
 import Login from "./pages/Login";
 import GerenciarUsuarios from "./pages/admin/GerenciarUsuarios";
@@ -112,6 +113,7 @@ const AppRoutes = () => (
 
       {/* E-commerce */}
       <Route path="ecommerce/shopify" element={<ShopifyIntegration />} />
+      <Route path="ecommerce/envios" element={<GerenciarEnvios />} />
       <Route path="ecommerce" element={<PlaceholderModule title="E-commerce" />} />
 
       {/* Ferramentas */}
