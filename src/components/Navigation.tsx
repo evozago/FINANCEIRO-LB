@@ -12,7 +12,9 @@ import {
   Brain,
   Barcode,
   LogOut,
-  Shield
+  Shield,
+  ShoppingBag,
+  Truck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -77,6 +79,14 @@ const navigationItems = [
       { title: 'Categorias', href: '/produtos/categorias' },
       { title: 'Regras', href: '/produtos/regras' },
       { title: 'Dashboard', href: '/produtos/dashboard' },
+    ],
+  },
+  {
+    title: 'E-commerce',
+    icon: ShoppingBag,
+    submenu: [
+      { title: 'Shopify', href: '/ecommerce/shopify' },
+      { title: 'Envios', href: '/ecommerce/envios' },
     ],
   },
   {
