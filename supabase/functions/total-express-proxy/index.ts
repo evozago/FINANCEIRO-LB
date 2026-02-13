@@ -382,58 +382,154 @@ async function rastrearPorAwb(params: { awbs: string[] }) {
   const allResults: Array<{ awb: string; eventos: Array<{ descricao: string; codigo: string; data: string; cidade: string }> }> = [];
 
   for (const batch of batches) {
-    const response = await fetch(TRACKING_REST_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': basicAuth(creds.user, creds.password),
-        'User-Agent': 'LovableApp/1.0',
-      },
-      body: JSON.stringify({
-        awbs: batch,
-        comprovanteEntrega: true,
-      }),
-    });
+    try {
+      const response = await fetch(TRACKING_REST_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': basicAuth(creds.user, creds.password),
+          'User-Agent': 'LovableApp/1.0',
+        },
+        body: JSON.stringify({
+          awbs: batch,
+          comprovanteEntrega: true,
+        }),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Erro REST tracking AWBs: ${response.status} - ${errorText}`);
-      continue;
-    }
-
-    const data = await response.json();
-    console.log('REST Tracking response:', JSON.stringify(data).substring(0, 1000));
-
-    // Parse the REST API response format
-    // Response contains "data" array with encomendas, each with tracking events
-    const encomendas = data?.data || data?.encomendas || [];
-    if (Array.isArray(encomendas)) {
-      for (const enc of encomendas) {
-        const awb = enc.awb || enc.AWB || '';
-        const eventos: Array<{ descricao: string; codigo: string; data: string; cidade: string }> = [];
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`REST tracking falhou (${response.status}): ${errorText}`);
+        console.log('Tentando fallback via SOAP ObterTracking...');
         
-        const statusList = enc.tracking || enc.statusTotal || enc.status || [];
-        if (Array.isArray(statusList)) {
-          for (const st of statusList) {
-            eventos.push({
-              descricao: st.descricao || st.descStatus || st.DescStatus || '',
-              codigo: String(st.codigo || st.codStatus || st.CodStatus || ''),
-              data: st.data || st.dataStatus || st.DataStatus || '',
-              cidade: st.cidade || st.Cidade || '',
-            });
+        // FALLBACK: usar SOAP ObterTracking por data (últimos 30 dias)
+        const fallbackResults = await rastrearPorAwbSoap(batch);
+        allResults.push(...fallbackResults);
+        continue;
+      }
+
+      const data = await response.json();
+      console.log('REST Tracking response:', JSON.stringify(data).substring(0, 1000));
+
+      // Parse the REST API response - suporta múltiplos formatos
+      const encomendas = data?.data || data?.encomendas || data || [];
+      if (Array.isArray(encomendas)) {
+        for (const enc of encomendas) {
+          const awb = enc.awb || enc.AWB || '';
+          const eventos: Array<{ descricao: string; codigo: string; data: string; cidade: string }> = [];
+          
+          const statusList = enc.tracking || enc.statusTotal || enc.status || enc.ocorrencias || [];
+          if (Array.isArray(statusList)) {
+            for (const st of statusList) {
+              eventos.push({
+                descricao: st.descricao || st.descStatus || st.DescStatus || '',
+                codigo: String(st.codigo || st.codStatus || st.CodStatus || st.id || ''),
+                data: st.data || st.dataStatus || st.DataStatus || st.dataHora || '',
+                cidade: st.cidade || st.Cidade || '',
+              });
+            }
+          }
+
+          if (awb) {
+            eventos.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+            allResults.push({ awb, eventos });
           }
         }
-
-        if (awb) {
-          // Sort by date desc (most recent first)
-          eventos.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
-          allResults.push({ awb, eventos });
-        }
       }
+    } catch (err) {
+      console.error('Erro no rastreio REST, tentando SOAP:', err);
+      const fallbackResults = await rastrearPorAwbSoap(batch);
+      allResults.push(...fallbackResults);
     }
   }
 
   return allResults;
+}
+
+// ===== FALLBACK: RASTREAR POR AWB VIA SOAP (ObterTracking por data) =====
+// Quando a REST API falha (ex: autenticação), usa o SOAP buscando últimos 30 dias
+async function rastrearPorAwbSoap(awbs: string[]) {
+  const creds = getCredentials();
+  const awbSet = new Set(awbs.map(a => a.toUpperCase()));
+  const results: Array<{ awb: string; eventos: Array<{ descricao: string; codigo: string; data: string; cidade: string }> }> = [];
+  const awbEventos: Record<string, Array<{ descricao: string; codigo: string; data: string; cidade: string }>> = {};
+
+  // Buscar últimos 30 dias para encontrar eventos dos AWBs
+  const today = new Date();
+  for (let d = 0; d < 30; d++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - d);
+    const dateStr = date.toISOString().split('T')[0];
+
+    const soapBody = `<?xml version="1.0" encoding="UTF-8"?>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"
+  xmlns:ns1="urn:ObterTracking" xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <SOAP-ENV:Body>
+    <ns1:ObterTracking>
+      <ObterTrackingRequest>
+        <DataConsulta>${dateStr}</DataConsulta>
+      </ObterTrackingRequest>
+    </ns1:ObterTracking>
+  </SOAP-ENV:Body>
+</SOAP-ENV:Envelope>`;
+
+    try {
+      const response = await fetch(SOAP_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/xml; charset=utf-8',
+          'Authorization': basicAuth(creds.user, creds.password),
+          'SOAPAction': 'urn:ObterTracking#ObterTracking',
+          'User-Agent': 'LovableApp/1.0',
+        },
+        body: soapBody,
+      });
+
+      const xmlText = await response.text();
+      if (d === 0) {
+        console.log(`SOAP ObterTracking dia ${dateStr} response (${xmlText.length} chars):`, xmlText.substring(0, 500));
+      }
+      const itemBlocks = getAllTagContents(xmlText, 'item');
+      if (d < 3) {
+        console.log(`SOAP dia ${dateStr}: ${itemBlocks.length} items encontrados`);
+      }
+      
+      for (const item of itemBlocks) {
+        const awb = getTagText(item, 'AWB').toUpperCase();
+        if (!awb || !awbSet.has(awb)) continue;
+        
+        const evento = {
+          descricao: getTagText(item, 'DescStatus') || getTagText(item, 'Descricao') || getTagText(item, 'Status'),
+          codigo: getTagText(item, 'CodStatus') || getTagText(item, 'Codigo'),
+          data: getTagText(item, 'DataStatus') || getTagText(item, 'DataHora') || dateStr,
+          cidade: getTagText(item, 'Cidade'),
+        };
+        
+        if (!awbEventos[awb]) awbEventos[awb] = [];
+        awbEventos[awb].push(evento);
+      }
+
+      // Se já encontramos todos os AWBs, parar de buscar
+      if (Object.keys(awbEventos).length >= awbs.length) {
+        const allFound = awbs.every(a => (awbEventos[a.toUpperCase()]?.length || 0) > 0);
+        if (allFound) break;
+      }
+    } catch (err) {
+      console.error(`Erro SOAP tracking data ${dateStr}:`, err);
+    }
+  }
+
+  // Montar resultados
+  for (const awb of awbs) {
+    const eventos = awbEventos[awb.toUpperCase()] || [];
+    if (eventos.length > 0) {
+      eventos.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+      results.push({ awb, eventos });
+    }
+  }
+
+  console.log(`SOAP fallback: encontrados ${results.length}/${awbs.length} AWBs com eventos`);
+  return results;
 }
 
 // ===== SMART LABEL (REST API) =====
