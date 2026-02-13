@@ -301,9 +301,8 @@ export function useXMLImport() {
             num_parcelas: 1,
             categoria_id: 1,
             filial_id: 1,
-            referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - ${xmlData.razaoSocialEmitente}`,
-            numero_nota: xmlData.numeroNFe,
-            chave_nfe: xmlData.chaveAcesso
+              referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - ${xmlData.razaoSocialEmitente}`,
+              numero_nota: xmlData.chaveAcesso || xmlData.numeroNFe
           }]);
         
         if (insertError) {
@@ -335,8 +334,7 @@ export function useXMLImport() {
               categoria_id: 1,
               filial_id: 1,
               referencia: `NFe ${xmlData.numeroNFe || 'sem número'} - Parcela ${i + 1}/${xmlData.duplicatas.length}`,
-              numero_nota: xmlData.numeroNFe,
-              chave_nfe: xmlData.chaveAcesso
+              numero_nota: xmlData.chaveAcesso || xmlData.numeroNFe
             }]);
           
           if (insertError) {
