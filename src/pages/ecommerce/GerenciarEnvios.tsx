@@ -134,6 +134,18 @@ export default function GerenciarEnvios() {
   // One-click flow loading
   const [oneClickLoading, setOneClickLoading] = useState<number | null>(null);
 
+  // NF-e dialog for one-click flow
+  const [nfeDialog, setNfeDialog] = useState(false);
+  const [nfeEnvio, setNfeEnvio] = useState<Envio | null>(null);
+  const [nfeForm, setNfeForm] = useState({
+    nfe_numero: '',
+    nfe_serie: '1',
+    nfe_data: '',
+    nfe_val_total: '',
+    nfe_val_prod: '',
+    nfe_chave: '',
+  });
+
   const { loading: apiLoading, calcularFrete, registrarColeta, rastrearPorAwb, rastrearEAtualizar, registerCarrierService, smartLabel, importOrders, createFulfillment, syncTracking } = useTotalExpress();
 
   const loadEnvios = useCallback(async () => {
@@ -465,6 +477,27 @@ export default function GerenciarEnvios() {
     setManualLoading(false);
   };
 
+  // === OPEN NF-e DIALOG BEFORE ONE-CLICK FLOW ===
+  const openNfeDialog = (envio: Envio) => {
+    setNfeEnvio(envio);
+    setNfeForm({
+      nfe_numero: '',
+      nfe_serie: '1',
+      nfe_data: '',
+      nfe_val_total: envio.valor_declarado_centavos ? (envio.valor_declarado_centavos / 100).toFixed(2) : '',
+      nfe_val_prod: envio.valor_declarado_centavos ? (envio.valor_declarado_centavos / 100).toFixed(2) : '',
+      nfe_chave: '',
+    });
+    setNfeDialog(true);
+  };
+
+  const startOneClickFlow = () => {
+    if (nfeEnvio) {
+      setNfeDialog(false);
+      handleOneClickFlow(nfeEnvio);
+    }
+  };
+
   // === ONE-CLICK SHOPIFY FLOW ===
   const handleOneClickFlow = async (envio: Envio) => {
     if (!envio.shopify_order_id) {
@@ -475,6 +508,16 @@ export default function GerenciarEnvios() {
     try {
       let awb = envio.awb;
       let numProtocolo = envio.num_protocolo;
+
+      // Get NF-e data from the dialog form
+      const nfeData = nfeForm.nfe_numero ? {
+        nfe_numero: nfeForm.nfe_numero,
+        nfe_serie: parseInt(nfeForm.nfe_serie) || 1,
+        nfe_data: nfeForm.nfe_data || new Date().toISOString().split('T')[0],
+        nfe_val_total: Math.round(parseFloat(nfeForm.nfe_val_total || '0') * 100),
+        nfe_val_prod: Math.round(parseFloat(nfeForm.nfe_val_prod || '0') * 100),
+        nfe_chave: nfeForm.nfe_chave,
+      } : {};
 
       // Step 1: Register coleta (if no AWB and no existing protocol)
       if (!awb && !numProtocolo) {
@@ -506,8 +549,9 @@ export default function GerenciarEnvios() {
           peso: envio.peso_kg || 0.5,
           volumes: envio.volumes,
           tipo_servico: envio.tipo_servico || 1,
-          nfe_val_total: envio.valor_declarado_centavos,
-          nfe_val_prod: envio.valor_declarado_centavos,
+          nfe_val_total: nfeData.nfe_val_total || envio.valor_declarado_centavos,
+          nfe_val_prod: nfeData.nfe_val_prod || envio.valor_declarado_centavos,
+          ...nfeData,
         });
         if (!coletaResult) {
           toast.error('Erro no passo 1: Registrar coleta');
@@ -517,16 +561,15 @@ export default function GerenciarEnvios() {
         awb = coletaResult.awb;
         numProtocolo = coletaResult.num_protocolo;
         await supabase.from('envios').update({
-          awb, num_protocolo: numProtocolo, status: 'coletado',
+          awb: awb || undefined, num_protocolo: numProtocolo, status: 'coletado',
         }).eq('id', envio.id);
-        toast.success(`Coleta registrada! AWB: ${awb}`);
+        toast.success(`Coleta registrada! Protocolo: ${numProtocolo}${awb ? ` AWB: ${awb}` : ''}`);
       }
 
-      // Step 2: Generate label
+      // Step 2: Generate label (SmartLabel)
       if (!envio.etiqueta_gerada) {
         toast.info('Passo 2/3: Gerando etiqueta...');
         const labelPedidoNum = (envio.shopify_order_name || envio.id.toString()).replace(/\D/g, '');
-        // Reuse extracted CPF/CNPJ logic
         let labelCpf = (envio.dest_cpf_cnpj || '').replace(/\D/g, '');
         let labelNome = envio.dest_nome;
         if (!labelCpf) {
@@ -549,12 +592,22 @@ export default function GerenciarEnvios() {
           peso: envio.peso_kg || 0.5,
           volumes: envio.volumes,
           tipo_servico: envio.tipo_servico || 1,
-          nfe_val_total: envio.valor_declarado_centavos,
-          nfe_val_prod: envio.valor_declarado_centavos,
-        });
+          nfe_val_total: nfeData.nfe_val_total || envio.valor_declarado_centavos,
+          nfe_val_prod: nfeData.nfe_val_prod || envio.valor_declarado_centavos,
+          ...nfeData,
+        }) as Record<string, unknown> | null;
         if (labelResult) {
-          await supabase.from('envios').update({ etiqueta_gerada: true }).eq('id', envio.id);
-          toast.success('Etiqueta gerada!');
+          // Extract AWB from SmartLabel response
+          const encomendas = labelResult.encomendas as Array<Record<string, unknown>> | undefined;
+          const smartAwb = encomendas?.[0]?.awb as string || '';
+          if (smartAwb && !awb) {
+            awb = smartAwb;
+          }
+          await supabase.from('envios').update({
+            etiqueta_gerada: true,
+            ...(smartAwb ? { awb: smartAwb } : {}),
+          }).eq('id', envio.id);
+          toast.success(`Etiqueta gerada!${smartAwb ? ` AWB: ${smartAwb}` : ''}`);
         } else {
           toast.warning('Etiqueta não gerada, mas continuando...');
         }
@@ -921,7 +974,66 @@ export default function GerenciarEnvios() {
         </DialogContent>
       </Dialog>
 
-      {/* Stats */}
+      {/* NF-e Dialog for One-Click Flow */}
+      <Dialog open={nfeDialog} onOpenChange={setNfeDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Dados Fiscais (Opcional)
+            </DialogTitle>
+            <DialogDescription>
+              Preencha os dados da NF-e se disponíveis, ou clique "Prosseguir sem NF-e" para usar declaração de conteúdo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {nfeEnvio && (
+              <div className="text-sm bg-muted p-3 rounded-md">
+                <p><strong>Pedido:</strong> {nfeEnvio.shopify_order_name || `#${nfeEnvio.id}`}</p>
+                <p><strong>Destinatário:</strong> {nfeEnvio.dest_nome}</p>
+                <p><strong>Status:</strong> {nfeEnvio.num_protocolo ? `Coleta já registrada (Protocolo: ${nfeEnvio.num_protocolo})` : 'Pendente'}</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Número NF-e</Label>
+                <Input value={nfeForm.nfe_numero} onChange={e => setNfeForm(f => ({ ...f, nfe_numero: e.target.value }))} placeholder="123456789" />
+              </div>
+              <div>
+                <Label>Série</Label>
+                <Input value={nfeForm.nfe_serie} onChange={e => setNfeForm(f => ({ ...f, nfe_serie: e.target.value }))} placeholder="1" />
+              </div>
+              <div>
+                <Label>Data Emissão</Label>
+                <Input type="date" value={nfeForm.nfe_data} onChange={e => setNfeForm(f => ({ ...f, nfe_data: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Valor Total (R$)</Label>
+                <Input type="number" step="0.01" value={nfeForm.nfe_val_total} onChange={e => setNfeForm(f => ({ ...f, nfe_val_total: e.target.value }))} placeholder="0.00" />
+              </div>
+              <div>
+                <Label>Valor Produtos (R$)</Label>
+                <Input type="number" step="0.01" value={nfeForm.nfe_val_prod} onChange={e => setNfeForm(f => ({ ...f, nfe_val_prod: e.target.value }))} placeholder="0.00" />
+              </div>
+            </div>
+            <div>
+              <Label>Chave NF-e (44 dígitos)</Label>
+              <Input value={nfeForm.nfe_chave} onChange={e => setNfeForm(f => ({ ...f, nfe_chave: e.target.value }))} placeholder="35260213123456789012345678901234567890" maxLength={44} />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={startOneClickFlow}>
+              <Zap className="h-4 w-4 mr-2" />
+              Prosseguir sem NF-e
+            </Button>
+            <Button onClick={startOneClickFlow} disabled={!nfeForm.nfe_numero || !nfeForm.nfe_chave}>
+              <FileText className="h-4 w-4 mr-2" />
+              Prosseguir com NF-e
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-4">
@@ -1062,7 +1174,7 @@ export default function GerenciarEnvios() {
                               {envio.shopify_order_id && !envio.awb && (
                                 <Button
                                   size="sm" variant="default"
-                                  onClick={() => handleOneClickFlow(envio)}
+                                  onClick={() => openNfeDialog(envio)}
                                   disabled={oneClickLoading === envio.id}
                                   title="Fluxo automático: Coleta + Etiqueta + Fulfillment"
                                   className="bg-primary"
