@@ -1039,8 +1039,8 @@ export default function GerenciarEnvios() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              {/* One-click flow for Shopify orders */}
-                              {envio.shopify_order_id && !envio.shopify_fulfillment_id && (
+                              {/* One-click flow for Shopify orders without AWB */}
+                              {envio.shopify_order_id && !envio.awb && (
                                 <Button
                                   size="sm" variant="default"
                                   onClick={() => handleOneClickFlow(envio)}
@@ -1052,16 +1052,6 @@ export default function GerenciarEnvios() {
                                 </Button>
                               )}
                               {!envio.awb && !envio.shopify_order_id && (
-                                <Button
-                                  size="sm" variant="outline"
-                                  onClick={() => handleRegistrarColeta(envio)}
-                                  disabled={actionLoading === envio.id}
-                                  title="Registrar Coleta"
-                                >
-                                  {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                                </Button>
-                              )}
-                              {!envio.awb && envio.shopify_order_id && !envio.shopify_fulfillment_id && (
                                 <Button
                                   size="sm" variant="outline"
                                   onClick={() => handleRegistrarColeta(envio)}
