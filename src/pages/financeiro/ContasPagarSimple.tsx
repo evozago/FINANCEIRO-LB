@@ -518,7 +518,7 @@ export function ContasPagarSimple() {
     }
 
     const fornecedorIds = [...new Set(allContas.map(c => c.fornecedor_id).filter(Boolean))];
-    const fornecedorPfIds = [...new Set(allContas.map(c => c.fornecedor_pf_id).filter(Boolean))];
+    const fornecedorPfIds = [...new Set(allContas.map(c => c.pessoa_fisica_id).filter(Boolean))];
     const categoriaIds  = [...new Set(allContas.map(c => c.categoria_id).filter(Boolean))];
     const filialIds     = [...new Set(allContas.map(c => c.filial_id).filter(Boolean))];
 
@@ -532,7 +532,7 @@ export function ContasPagarSimple() {
     let fornecedoresPfData: any[] = [];
     for (let i = 0; i < fornecedorPfIds.length; i += 1000) {
       const batch = fornecedorPfIds.slice(i, i + 1000);
-      const { data } = await supabase.from('pessoas_fisicas').select('id, nome_completo').in('id', batch);
+      const { data } = await supabase.from('pessoas_fisicas').select('id, nome').in('id', batch);
       if (data) fornecedoresPfData = [...fornecedoresPfData, ...data];
     }
 
@@ -553,27 +553,27 @@ export function ContasPagarSimple() {
     const parcelasCompletas = allParcelas.map(parcela => {
       const conta = allContas.find(c => c.id === parcela.conta_id);
       const fornecedor = fornecedoresData.find((f: any) => f.id === conta?.fornecedor_id);
-      const fornecedorPf = fornecedoresPfData.find((f: any) => f.id === conta?.fornecedor_pf_id);
+      const fornecedorPf = fornecedoresPfData.find((f: any) => f.id === conta?.pessoa_fisica_id);
       const categoria = categoriasData.find((c: any) => c.id === conta?.categoria_id);
       const filial = filiaisData.find((f: any) => f.id === conta?.filial_id);
       
       // Prioriza PJ, depois PF
       const nomeFornecedor = fornecedor?.nome_fantasia || fornecedor?.razao_social || 
-                             fornecedorPf?.nome_completo || 'N/A';
+                             fornecedorPf?.nome || 'N/A';
       
       return {
         id: parcela.id,
         conta_id: parcela.conta_id,
-        numero_parcela: parcela.numero_parcela || parcela.parcela_num || 1,
-        num_parcelas: conta?.num_parcelas || conta?.qtd_parcelas || 1,
-        valor_parcela_centavos: parcela.valor_parcela_centavos,
+        numero_parcela: parcela.numero_parcela || 1,
+        num_parcelas: conta?.num_parcelas || 1,
+        valor_parcela_centavos: parcela.valor_centavos,
         vencimento: parcela.vencimento,
         pago: parcela.pago,
-        pago_em: parcela.pago_em || null,
+        pago_em: parcela.data_pagamento || null,
         descricao: conta?.descricao || 'N/A',
         fornecedor: nomeFornecedor,
         fornecedor_id: conta?.fornecedor_id || null,
-        fornecedor_pf_id: conta?.fornecedor_pf_id || null,
+        fornecedor_pf_id: conta?.pessoa_fisica_id || null,
         categoria: categoria?.nome || 'N/A',
         categoria_id: conta?.categoria_id || null,
         filial: filial?.nome || 'N/A',
