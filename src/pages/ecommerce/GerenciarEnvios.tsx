@@ -91,7 +91,9 @@ export default function GerenciarEnvios() {
   const [configDialog, setConfigDialog] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
 
-  const { loading: apiLoading, calcularFrete, registrarColeta, rastrearPorAwb, registerCarrierService, smartLabel, importOrders } = useTotalExpress();
+  const [bulkTrackingLoading, setBulkTrackingLoading] = useState(false);
+
+  const { loading: apiLoading, calcularFrete, registrarColeta, rastrearPorAwb, rastrearEAtualizar, registerCarrierService, smartLabel, importOrders } = useTotalExpress();
 
   const loadEnvios = useCallback(async () => {
     setIsLoading(true);
@@ -198,19 +200,31 @@ export default function GerenciarEnvios() {
       return;
     }
     setActionLoading(envio.id);
-    const result = await rastrearPorAwb([envio.awb]);
+    const result = await rastrearEAtualizar([envio.awb]);
     if (result) {
-      const trackingData = result as { data?: unknown[] };
-      await supabase.from('envios').update({
-        tracking_historico: JSON.parse(JSON.stringify(trackingData.data || result)),
-        ultimo_tracking_at: new Date().toISOString(),
-      }).eq('id', envio.id);
-      toast.success('Rastreamento atualizado!');
+      toast.success('Rastreamento atualizado com status real!');
       loadEnvios();
     } else {
       toast.error('Erro ao rastrear');
     }
     setActionLoading(null);
+  };
+
+  const handleBulkTracking = async () => {
+    const awbs = envios.filter(e => e.awb && e.status !== 'entregue').map(e => e.awb!);
+    if (awbs.length === 0) {
+      toast.info('Nenhum envio com AWB para atualizar');
+      return;
+    }
+    setBulkTrackingLoading(true);
+    const result = await rastrearEAtualizar(awbs);
+    if (result) {
+      toast.success(`${result.updated} envios atualizados com status real da Total Express`);
+      loadEnvios();
+    } else {
+      toast.error('Erro ao atualizar rastreamentos');
+    }
+    setBulkTrackingLoading(false);
   };
 
   const handleCalcularFrete = async () => {
@@ -276,6 +290,11 @@ export default function GerenciarEnvios() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={handleBulkTracking} disabled={bulkTrackingLoading}>
+            {bulkTrackingLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Atualizar Rastreios
+          </Button>
+
           <Button variant="outline" onClick={handleImportOrders} disabled={importLoading}>
             {importLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
             Importar Pedidos Shopify

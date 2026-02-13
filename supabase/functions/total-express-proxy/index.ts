@@ -473,6 +473,125 @@ async function smartLabel(params: {
   return data;
 }
 
+// ===== MAPEAMENTO DE STATUS TOTAL EXPRESS → LOCAL =====
+function mapearStatusTotalExpress(descricao: string, codigo?: string): { status: string; status_detalhe: string } {
+  const desc = (descricao || '').toUpperCase().trim();
+  const cod = codigo || '';
+
+  // Entregue
+  if (desc.includes('ENTREGUE') || desc.includes('ENTREGA REALIZADA') || cod === '1') {
+    return { status: 'entregue', status_detalhe: descricao };
+  }
+
+  // Problemas / Erros
+  const problemCodes = ['6','9','13','14','15','16','21','27','43','141'];
+  if (problemCodes.includes(cod) ||
+      desc.includes('RECUSADA') ||
+      desc.includes('NÃO LOCALIZADO') ||
+      desc.includes('AVARIADA') ||
+      desc.includes('ROUBO') ||
+      desc.includes('ROUBADO') ||
+      desc.includes('FALECEU') ||
+      desc.includes('AUSENTE') ||
+      desc.includes('FECHADO') ||
+      desc.includes('FORA DO PERÍMETRO') ||
+      desc.includes('DUPLICIDADE') ||
+      desc.includes('ANÁLISE')) {
+    return { status: 'problema', status_detalhe: descricao };
+  }
+
+  // Saiu para entrega
+  if (desc.includes('SAIU PARA ENTREGA') || desc.includes('EM ROTA DE ENTREGA')) {
+    return { status: 'saiu_entrega', status_detalhe: descricao };
+  }
+
+  // Em trânsito
+  if (desc.includes('COLETA REALIZADA') || cod === '83' ||
+      desc.includes('COLETA RECEBIDA') ||
+      desc.includes('RECEBIDA E PROCESSADA') ||
+      desc.includes('EMBARCADO PARA') ||
+      desc.includes('TRANSFERÊNCIA PARA') ||
+      desc.includes('EM TRÂNSITO') ||
+      desc.includes('CD ')) {
+    return { status: 'em_transito', status_detalhe: descricao };
+  }
+
+  // Coletado (início do processo)
+  if (desc.includes('COLETA') || desc.includes('INÍCIO DE COLETA')) {
+    return { status: 'coletado', status_detalhe: descricao };
+  }
+
+  // Pendente
+  if (desc.includes('PROCESSO DE COLETA') ||
+      desc.includes('ARQUIVO RECEBIDO') ||
+      desc.includes('POSTAGEM')) {
+    return { status: 'pendente', status_detalhe: descricao };
+  }
+
+  // Default: em trânsito (se tem tracking, está em movimento)
+  return { status: 'em_transito', status_detalhe: descricao };
+}
+
+// ===== RASTREAR E ATUALIZAR STATUS NO BANCO =====
+async function rastrearEAtualizar(params: { awbs: string[] }) {
+  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const trackingResult = await rastrearPorAwb({ awbs: params.awbs });
+  
+  const updates: Array<{ awb: string; status: string; status_detalhe: string; tracking_historico: unknown }> = [];
+
+  // The REST API returns an object with tracking data per AWB
+  const items = Array.isArray(trackingResult) ? trackingResult : (trackingResult?.data || trackingResult?.tracking || [trackingResult]);
+  
+  for (const awb of params.awbs) {
+    // Find tracking events for this AWB
+    let eventos: Array<{ descricao?: string; status?: string; codigo?: string; data?: string }> = [];
+    
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        const itemAwb = item?.awb || item?.AWB || '';
+        if (itemAwb === awb) {
+          eventos = item?.eventos || item?.historico || [item];
+        }
+      }
+    }
+    
+    if (eventos.length === 0) continue;
+    
+    // Get the most recent event
+    const ultimoEvento = eventos[0]; // Usually sorted most recent first
+    const descricao = ultimoEvento?.descricao || ultimoEvento?.status || '';
+    const codigo = ultimoEvento?.codigo?.toString() || '';
+    
+    const mapped = mapearStatusTotalExpress(descricao, codigo);
+    
+    updates.push({
+      awb,
+      status: mapped.status,
+      status_detalhe: mapped.status_detalhe,
+      tracking_historico: eventos,
+    });
+  }
+
+  // Update each envio in the database
+  for (const upd of updates) {
+    await supabase
+      .from('envios')
+      .update({
+        status: upd.status,
+        status_detalhe: upd.status_detalhe,
+        tracking_historico: JSON.parse(JSON.stringify(upd.tracking_historico)),
+        ultimo_tracking_at: new Date().toISOString(),
+      })
+      .eq('awb', upd.awb);
+  }
+
+  return { updated: updates.length, details: updates.map(u => ({ awb: u.awb, status: u.status, status_detalhe: u.status_detalhe })) };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -500,6 +619,9 @@ serve(async (req) => {
         break;
       case 'smart_label':
         result = await smartLabel(params as Parameters<typeof smartLabel>[0]);
+        break;
+      case 'rastrear_e_atualizar':
+        result = await rastrearEAtualizar(params as { awbs: string[] });
         break;
       default:
         throw new Error(`Ação desconhecida: ${action}`);
