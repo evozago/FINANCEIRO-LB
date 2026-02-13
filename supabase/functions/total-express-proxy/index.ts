@@ -21,6 +21,15 @@ function getCredentials() {
   return { user, password, cnpj, reid };
 }
 
+function getRestCredentials() {
+  const user = Deno.env.get('TOTAL_EXPRESS_REST_USER') || Deno.env.get('TOTAL_EXPRESS_USER');
+  const password = Deno.env.get('TOTAL_EXPRESS_REST_PASSWORD') || Deno.env.get('TOTAL_EXPRESS_PASSWORD');
+  if (!user || !password) {
+    throw new Error('Credenciais REST da Total Express não configuradas');
+  }
+  return { user, password };
+}
+
 function basicAuth(user: string, password: string): string {
   return 'Basic ' + btoa(`${user}:${password}`);
 }
@@ -343,7 +352,7 @@ async function obterTracking(params: { data_consulta?: string }) {
 // Endpoint: POST https://apis.totalexpress.com.br/ics-tracking-encomenda-lv/v1/tracking
 // Body: { "pedidos": ["..."], "comprovanteEntrega": true }
 async function rastrearPorPedido(params: { pedidos: string[] }) {
-  const creds = getCredentials();
+  const creds = getRestCredentials();
 
   const response = await fetch(TRACKING_REST_ENDPOINT, {
     method: 'POST',
@@ -371,7 +380,7 @@ async function rastrearPorPedido(params: { pedidos: string[] }) {
 // Body: { "awbs": ["ABCD000000000tx", ...], "comprovanteEntrega": true }
 // Limite: 50 AWBs por request
 async function rastrearPorAwb(params: { awbs: string[] }) {
-  const creds = getCredentials();
+  const creds = getRestCredentials();
 
   // Dividir em lotes de 50 (limite da API conforme manual)
   const batches: string[][] = [];
