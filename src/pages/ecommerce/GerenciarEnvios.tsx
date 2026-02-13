@@ -82,6 +82,9 @@ export default function GerenciarEnvios() {
   const [freteCep, setFreteCep] = useState('');
   const [fretePeso, setFretePeso] = useState('0.5');
   const [freteValor, setFreteValor] = useState('100');
+  const [freteAltura, setFreteAltura] = useState('');
+  const [freteLargura, setFreteLargura] = useState('');
+  const [freteProfundidade, setFreteProfundidade] = useState('');
   const [freteResultado, setFreteResultado] = useState<{ prazo_dias: number; valor_formatado: string; rota: string } | null>(null);
 
   // Config dialog
@@ -218,6 +221,9 @@ export default function GerenciarEnvios() {
       cep_destino: freteCep,
       peso: parseFloat(fretePeso) || 0.5,
       valor_declarado: Math.round(parseFloat(freteValor) * 100),
+      altura: freteAltura ? parseInt(freteAltura) : undefined,
+      largura: freteLargura ? parseInt(freteLargura) : undefined,
+      profundidade: freteProfundidade ? parseInt(freteProfundidade) : undefined,
     });
     if (result) {
       setFreteResultado(result);
@@ -282,6 +288,20 @@ export default function GerenciarEnvios() {
                   <div>
                     <Label>Valor (R$)</Label>
                     <Input type="number" step="0.01" value={freteValor} onChange={e => setFreteValor(e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label>Altura (cm)</Label>
+                    <Input type="number" placeholder="Opcional" value={freteAltura} onChange={e => setFreteAltura(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Largura (cm)</Label>
+                    <Input type="number" placeholder="Opcional" value={freteLargura} onChange={e => setFreteLargura(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Profundidade (cm)</Label>
+                    <Input type="number" placeholder="Opcional" value={freteProfundidade} onChange={e => setFreteProfundidade(e.target.value)} />
                   </div>
                 </div>
                 <Button onClick={handleCalcularFrete} disabled={apiLoading} className="w-full">

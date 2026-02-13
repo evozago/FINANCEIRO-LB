@@ -17,7 +17,7 @@ function getTagText(xmlText: string, tagName: string): string {
   return match?.[1]?.trim() || '';
 }
 
-async function calcularFreteSoap(cepDestino: string, pesoKg: number, valorCentavos: number, tipoServico: string) {
+async function calcularFreteSoap(cepDestino: string, pesoKg: number, valorCentavos: number, tipoServico: string, altura?: number, largura?: number, profundidade?: number) {
   const user = Deno.env.get('TOTAL_EXPRESS_USER')!;
   const password = Deno.env.get('TOTAL_EXPRESS_PASSWORD')!;
 
@@ -36,6 +36,9 @@ async function calcularFreteSoap(cepDestino: string, pesoKg: number, valorCentav
         <Peso xsi:type="xsd:string">${pesoKg.toFixed(2).replace('.', ',')}</Peso>
         <ValorDeclarado xsi:type="xsd:string">${(valorCentavos / 100).toFixed(2).replace('.', ',')}</ValorDeclarado>
         <TipoEntrega xsi:type="xsd:nonNegativeInteger">0</TipoEntrega>
+        ${altura ? `<Altura xsi:type="xsd:nonNegativeInteger">${altura}</Altura>` : ''}
+        ${largura ? `<Largura xsi:type="xsd:nonNegativeInteger">${largura}</Largura>` : ''}
+        ${profundidade ? `<Profundidade xsi:type="xsd:nonNegativeInteger">${profundidade}</Profundidade>` : ''}
       </calcularFreteRequest>
     </urn:calcularFrete>
   </soapenv:Body>
@@ -97,8 +100,28 @@ serve(async (req) => {
       const totalValue = rate.items?.reduce((acc: number, item: { price: number; quantity: number }) => 
         acc + (item.price || 0) * (item.quantity || 1), 0) || 0;
 
+      // Calculate dimensions from Shopify items (cm)
+      // Shopify sends dimensions in cm for carrier service requests
+      let maxAltura = 0, maxLargura = 0, totalProfundidade = 0;
+      if (rate.items) {
+        for (const item of rate.items) {
+          const qty = item.quantity || 1;
+          const h = item.height || 0;
+          const w = item.width || 0;
+          const l = item.length || 0;
+          maxAltura = Math.max(maxAltura, h);
+          maxLargura = Math.max(maxLargura, w);
+          totalProfundidade += l * qty;
+        }
+      }
+
       // Use EXP service type (contract-specific)
-      const expResult = await calcularFreteSoap(destPostalCode, totalKg, totalValue, 'EXP');
+      const expResult = await calcularFreteSoap(
+        destPostalCode, totalKg, totalValue, 'EXP',
+        maxAltura > 0 ? Math.round(maxAltura) : undefined,
+        maxLargura > 0 ? Math.round(maxLargura) : undefined,
+        totalProfundidade > 0 ? Math.round(totalProfundidade) : undefined,
+      );
 
       const rates: Array<{
         service_name: string;
@@ -135,7 +158,10 @@ serve(async (req) => {
         (body.cep_destino || '').replace(/\D/g, ''),
         body.peso || 0.5,
         body.valor || 10000,
-        body.tipo_servico || 'EXP'
+        body.tipo_servico || 'EXP',
+        body.altura,
+        body.largura,
+        body.profundidade,
       );
       return new Response(JSON.stringify({ success: true, data: result }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -172,7 +198,14 @@ serve(async (req) => {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(`Erro Shopify: ${response.status} - ${JSON.stringify(data)}`);
+        // If already configured, treat as success
+        const errorStr = JSON.stringify(data);
+        if (response.status === 422 && errorStr.includes('already configured')) {
+          return new Response(JSON.stringify({ success: true, data: { message: 'Carrier Service já registrado no Shopify', already_exists: true } }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        throw new Error(`Erro Shopify: ${response.status} - ${errorStr}`);
       }
 
       return new Response(JSON.stringify({ success: true, data: data.carrier_service }), {
