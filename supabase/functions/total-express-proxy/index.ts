@@ -42,19 +42,17 @@ function getAllTagContents(xmlText: string, tagName: string): string[] {
 }
 
 // ===== CALCULAR FRETE (SOAP) =====
-async function calcularFrete(params: {
+async function calcularFreteSingle(params: {
   cep_destino: string;
   peso: number;
   valor_declarado: number;
-  tipo_servico?: string;
+  tipo_servico: string;
   tipo_entrega?: number;
   altura?: number;
   largura?: number;
   profundidade?: number;
 }) {
   const creds = getCredentials();
-
-  const tipoServico = params.tipo_servico || 'STD';
   const tipoEntrega = params.tipo_entrega ?? 0;
 
   const soapBody = `<?xml version="1.0" encoding="UTF-8"?>
@@ -67,7 +65,7 @@ async function calcularFrete(params: {
     <urn:calcularFrete soapenv:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
       <calcularFreteRequest xsi:type="web:calcularFreteRequest"
         xmlns:web="http://edi.totalexpress.com.br/soap/webservice_calculo_frete.total">
-        <TipoServico xsi:type="xsd:string">${tipoServico}</TipoServico>
+        <TipoServico xsi:type="xsd:string">${params.tipo_servico}</TipoServico>
         <CepDestino xsi:type="xsd:nonNegativeInteger">${params.cep_destino.replace(/\D/g, '')}</CepDestino>
         <Peso xsi:type="xsd:string">${params.peso.toFixed(2).replace('.', ',')}</Peso>
         <ValorDeclarado xsi:type="xsd:string">${(params.valor_declarado / 100).toFixed(2).replace('.', ',')}</ValorDeclarado>
@@ -91,13 +89,13 @@ async function calcularFrete(params: {
   });
 
   const xmlText = await response.text();
-  console.log('Frete response:', xmlText.substring(0, 500));
+  console.log(`Frete response (tipo=${params.tipo_servico}):`, xmlText.substring(0, 500));
 
   const codigoProc = getTagText(xmlText, 'CodigoProc');
 
   if (codigoProc !== '1') {
     const erro = getTagText(xmlText, 'ErroConsultaFrete') || getTagText(xmlText, 'Erro') || 'Erro no cálculo de frete';
-    throw new Error(`Erro Total Express (código ${codigoProc}): ${erro}`);
+    return { success: false, error: `código ${codigoProc}: ${erro}` };
   }
 
   const prazo = getTagText(xmlText, 'Prazo');
@@ -105,12 +103,48 @@ async function calcularFrete(params: {
   const rota = getTagText(xmlText, 'Rota');
 
   return {
-    prazo_dias: parseInt(prazo) || 0,
-    valor_centavos: Math.round(parseFloat(valorServico.replace(',', '.')) * 100),
-    valor_formatado: `R$ ${valorServico}`,
-    rota,
-    tipo_servico: tipoServico,
+    success: true,
+    data: {
+      prazo_dias: parseInt(prazo) || 0,
+      valor_centavos: Math.round(parseFloat(valorServico.replace(',', '.')) * 100),
+      valor_formatado: `R$ ${valorServico}`,
+      rota,
+      tipo_servico: params.tipo_servico,
+    },
   };
+}
+
+async function calcularFrete(params: {
+  cep_destino: string;
+  peso: number;
+  valor_declarado: number;
+  tipo_servico?: string;
+  tipo_entrega?: number;
+  altura?: number;
+  largura?: number;
+  profundidade?: number;
+}) {
+  // If user specified a type, use it directly
+  if (params.tipo_servico) {
+    const result = await calcularFreteSingle({ ...params, tipo_servico: params.tipo_servico });
+    if (result.success) return result.data;
+    throw new Error(`Erro Total Express (${result.error})`);
+  }
+
+  // Try common service types: E (Expresso), N (Normal), R (Rodoviário), 1, 2, 3
+  const tiposParaTentar = ['E', 'N', 'R', '1', '2', '3', 'STD'];
+  const errors: string[] = [];
+
+  for (const tipo of tiposParaTentar) {
+    const result = await calcularFreteSingle({ ...params, tipo_servico: tipo });
+    if (result.success) {
+      console.log(`✅ Tipo de serviço válido encontrado: ${tipo}`);
+      return result.data;
+    }
+    errors.push(`${tipo}: ${result.error}`);
+  }
+
+  throw new Error(`Nenhum tipo de serviço válido encontrado. Tentativas: ${errors.join(' | ')}`);
 }
 
 // ===== REGISTRAR COLETA (SOAP) =====
