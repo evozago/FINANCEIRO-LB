@@ -175,7 +175,7 @@ serve(async (req) => {
         const fulfillmentOrderGid = `gid://shopify/FulfillmentOrder/${openFO.id}`;
 
         const awb = tracking_number || '';
-        const trackingUrl = tracking_url || (awb ? `https://www.totalexpress.com.br/rastreamento/${awb}` : '');
+        const trackingUrl = tracking_url || (awb ? `https://totalconecta.totalexpress.com.br/rastreamento/rastreamento/encomendas/${awb}` : '');
 
         const mutation = `
           mutation fulfillmentCreateV2($fulfillment: FulfillmentV2Input!) {
