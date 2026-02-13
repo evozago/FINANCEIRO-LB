@@ -25,14 +25,20 @@ function basicAuth(user: string, password: string): string {
   return 'Basic ' + btoa(`${user}:${password}`);
 }
 
-function parseXml(xmlText: string): Document {
-  const { DOMParser } = globalThis;
-  return new DOMParser().parseFromString(xmlText, 'text/xml');
+function getTagText(xmlText: string, tagName: string): string {
+  const regex = new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'i');
+  const match = xmlText.match(regex);
+  return match?.[1]?.trim() || '';
 }
 
-function getTagText(doc: Document, tagName: string): string {
-  const el = doc.getElementsByTagName(tagName)[0];
-  return el?.textContent || '';
+function getAllTagContents(xmlText: string, tagName: string): string[] {
+  const regex = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)</${tagName}>`, 'gi');
+  const results: string[] = [];
+  let match;
+  while ((match = regex.exec(xmlText)) !== null) {
+    results.push(match[1]);
+  }
+  return results;
 }
 
 // ===== CALCULAR FRETE (SOAP) =====
@@ -87,17 +93,16 @@ async function calcularFrete(params: {
   const xmlText = await response.text();
   console.log('Frete response:', xmlText.substring(0, 500));
 
-  const doc = parseXml(xmlText);
-  const codigoProc = getTagText(doc, 'CodigoProc');
+  const codigoProc = getTagText(xmlText, 'CodigoProc');
 
   if (codigoProc !== '1') {
-    const erro = getTagText(doc, 'ErroConsultaFrete') || getTagText(doc, 'Erro') || 'Erro no cálculo de frete';
+    const erro = getTagText(xmlText, 'ErroConsultaFrete') || getTagText(xmlText, 'Erro') || 'Erro no cálculo de frete';
     throw new Error(`Erro Total Express (código ${codigoProc}): ${erro}`);
   }
 
-  const prazo = getTagText(doc, 'Prazo');
-  const valorServico = getTagText(doc, 'ValorServico');
-  const rota = getTagText(doc, 'Rota');
+  const prazo = getTagText(xmlText, 'Prazo');
+  const valorServico = getTagText(xmlText, 'ValorServico');
+  const rota = getTagText(xmlText, 'Rota');
 
   return {
     prazo_dias: parseInt(prazo) || 0,
@@ -218,28 +223,21 @@ async function registrarColeta(params: {
   const xmlText = await response.text();
   console.log('RegistraColeta response:', xmlText.substring(0, 1000));
 
-  const doc = parseXml(xmlText);
-  const codigoProc = getTagText(doc, 'CodigoProc');
+  const codigoProc = getTagText(xmlText, 'CodigoProc');
 
   if (codigoProc !== '1') {
-    // Try to extract individual errors
-    const erros: string[] = [];
-    const criticaEls = doc.getElementsByTagName('CriticaVolume');
-    for (let i = 0; i < criticaEls.length; i++) {
-      const descricao = criticaEls[i].getElementsByTagName('Descricao')[0]?.textContent;
-      if (descricao) erros.push(descricao);
-    }
+    const criticaBlocks = getAllTagContents(xmlText, 'CriticaVolume');
+    const erros = criticaBlocks.map(block => getTagText(block, 'Descricao')).filter(Boolean);
     throw new Error(`Erro Total Express (código ${codigoProc}): ${erros.length > 0 ? erros.join('; ') : 'Erro ao registrar coleta'}`);
   }
 
-  const numProtocolo = getTagText(doc, 'NumProtocolo');
-  const itensProcessados = getTagText(doc, 'ItensProcessados');
+  const numProtocolo = getTagText(xmlText, 'NumProtocolo');
+  const itensProcessados = getTagText(xmlText, 'ItensProcessados');
 
-  // Extract AWB from CriticaVolume
   let awb = '';
-  const criticaEls = doc.getElementsByTagName('CriticaVolume');
-  if (criticaEls.length > 0) {
-    awb = criticaEls[0].getElementsByTagName('AWB')?.[0]?.textContent || '';
+  const criticaBlocks = getAllTagContents(xmlText, 'CriticaVolume');
+  if (criticaBlocks.length > 0) {
+    awb = getTagText(criticaBlocks[0], 'AWB');
   }
 
   return {
@@ -282,7 +280,7 @@ async function obterTracking(params: { data_consulta?: string }) {
   const xmlText = await response.text();
   console.log('ObterTracking response:', xmlText.substring(0, 1000));
 
-  const doc = parseXml(xmlText);
+  const itemBlocks = getAllTagContents(xmlText, 'item');
   const trackings: Array<{
     awb: string;
     pedido: string;
@@ -292,17 +290,19 @@ async function obterTracking(params: { data_consulta?: string }) {
     cidade: string;
   }> = [];
 
-  const items = doc.getElementsByTagName('item');
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    trackings.push({
-      awb: item.getElementsByTagName('AWB')?.[0]?.textContent || '',
-      pedido: item.getElementsByTagName('Pedido')?.[0]?.textContent || '',
-      status: item.getElementsByTagName('Status')?.[0]?.textContent || '',
-      data_hora: item.getElementsByTagName('DataHora')?.[0]?.textContent || '',
-      descricao: item.getElementsByTagName('Descricao')?.[0]?.textContent || '',
-      cidade: item.getElementsByTagName('Cidade')?.[0]?.textContent || '',
-    });
+  for (const item of itemBlocks) {
+    const awb = getTagText(item, 'AWB');
+    const pedido = getTagText(item, 'Pedido');
+    if (awb || pedido) {
+      trackings.push({
+        awb,
+        pedido,
+        status: getTagText(item, 'Status'),
+        data_hora: getTagText(item, 'DataHora'),
+        descricao: getTagText(item, 'Descricao'),
+        cidade: getTagText(item, 'Cidade'),
+      });
+    }
   }
 
   return { trackings };
