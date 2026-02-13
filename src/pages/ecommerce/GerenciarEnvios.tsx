@@ -1200,7 +1200,7 @@ export default function GerenciarEnvios() {
                                   {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
                                 </Button>
                               )}
-                              {(envio.awb || envio.num_protocolo || envio.status === 'registrado' || envio.status === 'aguardando_coleta') && !envio.etiqueta_gerada && (
+                              {(envio.num_protocolo || envio.status === 'registrado' || envio.status === 'aguardando_coleta') && (!envio.etiqueta_gerada || !envio.awb) && (
                                 <Button
                                   size="sm" variant="outline"
                                   onClick={() => handleGerarEtiqueta(envio)}
