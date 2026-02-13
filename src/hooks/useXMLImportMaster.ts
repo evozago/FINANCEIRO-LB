@@ -8,6 +8,7 @@ interface XMLData {
   cnpjEmitente: string;
   razaoSocialEmitente: string;
   nomeFantasiaEmitente?: string;
+  cnpjDestinatario: string;
   valorTotal: number;
   dataEmissao: string;
   duplicatas: {
@@ -118,6 +119,9 @@ export function useXMLImport() {
       const razaoSocialEmitente = emit.querySelector('xNome')?.textContent || 'Fornecedor não identificado';
       const nomeFantasiaEmitente = emit.querySelector('xFant')?.textContent || null;
 
+      // Extrair CNPJ do destinatário para mapear filial
+      const dest = xmlDoc.querySelector('dest');
+      const cnpjDestinatario = dest?.querySelector('CNPJ')?.textContent || '';
       if (!cnpjEmitente || !razaoSocialEmitente) {
         throw new Error('CNPJ ou razão social do emitente não encontrados');
       }
@@ -166,6 +170,7 @@ export function useXMLImport() {
         cnpjEmitente,
         razaoSocialEmitente,
         nomeFantasiaEmitente,
+        cnpjDestinatario,
         valorTotal,
         dataEmissao,
         duplicatas
@@ -261,6 +266,23 @@ export function useXMLImport() {
       const numParcelas = xmlData.duplicatas.length || 1;
       const valorTotal = Math.round(xmlData.valorTotal * 100);
 
+      // Buscar filial pelo CNPJ do destinatário
+      let filialId: number | null = null;
+      if (xmlData.cnpjDestinatario) {
+        const { data: filialData } = await supabase
+          .from('filiais')
+          .select('id')
+          .eq('cnpj', xmlData.cnpjDestinatario)
+          .maybeSingle();
+        if (filialData) {
+          filialId = filialData.id;
+          console.log(`Filial identificada pelo CNPJ destinatário: ${filialId}`);
+        }
+      }
+
+      // Categoria padrão "Fornecedores" (id=1) para notas de compra
+      const categoriaId = 1;
+
       // 1. Criar UMA conta_pagar
       const { data: contaCriada, error: insertError } = await supabase
         .from('contas_pagar')
@@ -268,8 +290,8 @@ export function useXMLImport() {
           valor_total_centavos: valorTotal,
           fornecedor_id: fornecedorId,
           num_parcelas: numParcelas,
-          categoria_id: null,
-          filial_id: null,
+          categoria_id: categoriaId,
+          filial_id: filialId,
           descricao: `NFe ${xmlData.numeroNFe || 'sem número'} - ${xmlData.razaoSocialEmitente}`,
           referencia: `NFe ${xmlData.numeroNFe || 'sem número'}`,
           numero_nota: xmlData.chaveAcesso || xmlData.numeroNFe
