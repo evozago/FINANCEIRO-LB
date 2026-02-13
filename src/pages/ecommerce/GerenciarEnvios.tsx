@@ -173,6 +173,7 @@ export default function GerenciarEnvios() {
       dest_telefone: envio.dest_telefone || '',
       peso: envio.peso_kg || 0.5,
       volumes: envio.volumes,
+      tipo_servico: 7, // Expresso conforme manual oficial
       nfe_val_total: envio.valor_declarado_centavos,
       nfe_val_prod: envio.valor_declarado_centavos,
     });
@@ -208,6 +209,7 @@ export default function GerenciarEnvios() {
       dest_telefone: envio.dest_telefone || '',
       peso: envio.peso_kg || 0.5,
       volumes: envio.volumes,
+      tipo_servico: 7, // Expresso conforme manual oficial
       nfe_val_total: envio.valor_declarado_centavos,
       nfe_val_prod: envio.valor_declarado_centavos,
     });
@@ -376,6 +378,7 @@ export default function GerenciarEnvios() {
         dest_telefone: manualForm.dest_telefone || '',
         peso: parseFloat(manualForm.peso_kg) || 0.5,
         volumes: parseInt(manualForm.volumes) || 1,
+        tipo_servico: 7,
         nfe_val_total: Math.round(parseFloat(manualForm.valor_declarado) * 100),
         nfe_val_prod: Math.round(parseFloat(manualForm.valor_declarado) * 100),
       });
@@ -404,6 +407,7 @@ export default function GerenciarEnvios() {
           dest_telefone: manualForm.dest_telefone || '',
           peso: parseFloat(manualForm.peso_kg) || 0.5,
           volumes: parseInt(manualForm.volumes) || 1,
+          tipo_servico: 7,
           nfe_val_total: Math.round(parseFloat(manualForm.valor_declarado) * 100),
           nfe_val_prod: Math.round(parseFloat(manualForm.valor_declarado) * 100),
         });
@@ -452,6 +456,7 @@ export default function GerenciarEnvios() {
           dest_telefone: envio.dest_telefone || '',
           peso: envio.peso_kg || 0.5,
           volumes: envio.volumes,
+          tipo_servico: 7,
           nfe_val_total: envio.valor_declarado_centavos,
           nfe_val_prod: envio.valor_declarado_centavos,
         });
@@ -486,6 +491,7 @@ export default function GerenciarEnvios() {
           dest_telefone: envio.dest_telefone || '',
           peso: envio.peso_kg || 0.5,
           volumes: envio.volumes,
+          tipo_servico: 7,
           nfe_val_total: envio.valor_declarado_centavos,
           nfe_val_prod: envio.valor_declarado_centavos,
         });
