@@ -266,12 +266,15 @@ async function registrarColeta(params: {
     // ErrosIndividuais contains <item xsi:type="tns:CriticaVolume"> not <CriticaVolume>
     const errosSection = getAllTagContents(xmlText, 'ErrosIndividuais');
     let erros: string[] = [];
+    let alreadyRegistered = false;
     if (errosSection.length > 0) {
       const itemBlocks = getAllTagContents(errosSection[0], 'item');
       erros = itemBlocks.map(block => {
         const pedido = getTagText(block, 'Pedido') || '';
         const codErro = getTagText(block, 'CodigoErro') || '';
         const descErro = getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao') || '';
+        // Error code 2 = "Essa encomenda ja foi cadastrada previamente"
+        if (codErro === '2') alreadyRegistered = true;
         return `[${pedido}] Erro ${codErro}: ${descErro}`;
       }).filter(e => e.length > 5);
     }
@@ -279,9 +282,30 @@ async function registrarColeta(params: {
     if (erros.length === 0) {
       const criticaBlocks = getAllTagContents(xmlText, 'CriticaVolume');
       erros = criticaBlocks.map(block => {
-        return getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao') || '';
+        const descErro = getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao') || '';
+        if (descErro.toLowerCase().includes('cadastrada previamente')) alreadyRegistered = true;
+        return descErro;
       }).filter(Boolean);
     }
+    
+    // If already registered, return success with flag instead of throwing
+    if (alreadyRegistered) {
+      console.log('Encomenda já cadastrada previamente, retornando already_registered=true');
+      const numProtocolo = getTagText(xmlText, 'NumProtocolo');
+      let existingAwb = '';
+      const criticaBlocks = getAllTagContents(xmlText, 'CriticaVolume');
+      if (criticaBlocks.length > 0) {
+        existingAwb = getTagText(criticaBlocks[0], 'AWB');
+      }
+      return {
+        codigo_proc: parseInt(codigoProc),
+        num_protocolo: numProtocolo || 'already_registered',
+        itens_processados: 0,
+        awb: existingAwb,
+        already_registered: true,
+      };
+    }
+    
     console.error('Total Express erros individuais:', JSON.stringify(erros));
     throw new Error(`Erro Total Express (código ${codigoProc}): ${erros.length > 0 ? erros.join('; ') : 'Erro ao registrar coleta'}`);
   }

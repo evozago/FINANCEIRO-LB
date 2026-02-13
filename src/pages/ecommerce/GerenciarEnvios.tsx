@@ -560,12 +560,17 @@ export default function GerenciarEnvios() {
           setOneClickLoading(null);
           return;
         }
+        const alreadyRegistered = (coletaResult as Record<string, unknown>).already_registered === true;
         awb = coletaResult.awb;
         numProtocolo = coletaResult.num_protocolo;
         await supabase.from('envios').update({
           awb: awb || undefined, num_protocolo: numProtocolo, status: 'registrado',
         }).eq('id', envio.id);
-        toast.success(`Coleta registrada! Protocolo: ${numProtocolo}${awb ? ` AWB: ${awb}` : ''}`);
+        if (alreadyRegistered) {
+          toast.info('Coleta já registrada anteriormente. Avançando para etiqueta...');
+        } else {
+          toast.success(`Coleta registrada! Protocolo: ${numProtocolo}${awb ? ` AWB: ${awb}` : ''}`);
+        }
       }
 
       // Step 2: Generate label (SmartLabel)
