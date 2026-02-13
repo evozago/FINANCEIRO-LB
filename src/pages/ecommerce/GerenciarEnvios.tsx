@@ -13,7 +13,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import {
   Truck, Search, RefreshCw, Package, MapPin, Tag, CheckCircle2,
-  AlertCircle, Clock, Send, FileText, Settings, Loader2, Download
+  AlertCircle, Clock, Send, FileText, Settings, Loader2, Download,
+  Edit2, Save, X, RotateCcw
 } from 'lucide-react';
 
 interface Envio {
@@ -92,8 +93,11 @@ export default function GerenciarEnvios() {
   const [importLoading, setImportLoading] = useState(false);
 
   const [bulkTrackingLoading, setBulkTrackingLoading] = useState(false);
+  const [editingAwb, setEditingAwb] = useState<number | null>(null);
+  const [editAwbValue, setEditAwbValue] = useState('');
+  const [syncLoading, setSyncLoading] = useState(false);
 
-  const { loading: apiLoading, calcularFrete, registrarColeta, rastrearPorAwb, rastrearEAtualizar, registerCarrierService, smartLabel, importOrders } = useTotalExpress();
+  const { loading: apiLoading, calcularFrete, registrarColeta, rastrearPorAwb, rastrearEAtualizar, registerCarrierService, smartLabel, importOrders, syncTracking } = useTotalExpress();
 
   const loadEnvios = useCallback(async () => {
     setIsLoading(true);
@@ -227,6 +231,35 @@ export default function GerenciarEnvios() {
     setBulkTrackingLoading(false);
   };
 
+  const handleSaveAwb = async (envio: Envio) => {
+    const newAwb = editAwbValue.trim() || null;
+    const { error } = await supabase.from('envios').update({ awb: newAwb }).eq('id', envio.id);
+    if (error) {
+      toast.error('Erro ao salvar AWB');
+    } else {
+      toast.success('AWB atualizado!');
+      setEditingAwb(null);
+      loadEnvios();
+    }
+  };
+
+  const handleSyncFromShopify = async () => {
+    const orderIds = envios.filter(e => e.shopify_order_id).map(e => e.shopify_order_id!);
+    if (orderIds.length === 0) {
+      toast.info('Nenhum pedido Shopify para sincronizar');
+      return;
+    }
+    setSyncLoading(true);
+    const result = await syncTracking(orderIds);
+    if (result) {
+      toast.success(`${result.synced} pedidos sincronizados do Shopify`);
+      loadEnvios();
+    } else {
+      toast.error('Erro ao sincronizar do Shopify');
+    }
+    setSyncLoading(false);
+  };
+
   const handleCalcularFrete = async () => {
     if (!freteCep || freteCep.replace(/\D/g, '').length !== 8) {
       toast.error('CEP inválido');
@@ -298,6 +331,11 @@ export default function GerenciarEnvios() {
           <Button variant="outline" onClick={handleImportOrders} disabled={importLoading}>
             {importLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
             Importar Pedidos Shopify
+          </Button>
+
+          <Button variant="outline" onClick={handleSyncFromShopify} disabled={syncLoading}>
+            {syncLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+            Sincronizar Rastreios Shopify
           </Button>
 
           <Dialog open={freteDialog} onOpenChange={setFreteDialog}>
@@ -514,10 +552,31 @@ export default function GerenciarEnvios() {
                           </TableCell>
                           <TableCell className="font-mono text-sm">{envio.dest_cep}</TableCell>
                           <TableCell>
-                            {envio.awb ? (
-                              <span className="font-mono text-xs">{envio.awb}</span>
+                            {editingAwb === envio.id ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  value={editAwbValue}
+                                  onChange={e => setEditAwbValue(e.target.value)}
+                                  className="h-7 w-[140px] text-xs font-mono"
+                                  placeholder="Código AWB"
+                                  autoFocus
+                                />
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleSaveAwb(envio)}>
+                                  <Save className="h-3 w-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingAwb(null)}>
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
                             ) : (
-                              <span className="text-muted-foreground text-xs">—</span>
+                              <div className="flex items-center gap-1 group cursor-pointer" onClick={() => { setEditingAwb(envio.id); setEditAwbValue(envio.awb || ''); }}>
+                                {envio.awb ? (
+                                  <span className="font-mono text-xs">{envio.awb}</span>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">—</span>
+                                )}
+                                <Edit2 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
                             )}
                           </TableCell>
                           <TableCell><StatusBadge status={envio.status} /></TableCell>

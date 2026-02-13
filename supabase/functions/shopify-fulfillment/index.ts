@@ -242,6 +242,61 @@ serve(async (req) => {
         break;
       }
 
+      case 'sync_tracking': {
+        // Re-fetch orders from Shopify and update local AWB/tracking data
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        const orderIds = params.order_ids as number[];
+        if (!orderIds || orderIds.length === 0) throw new Error('order_ids é obrigatório');
+
+        let synced = 0;
+        const details: Array<{ order_id: number; awb: string | null; fulfillment_id: number | null }> = [];
+
+        for (const orderId of orderIds) {
+          try {
+            const orderData = await shopifyFetch(`/orders/${orderId}.json`);
+            const order = orderData.order;
+            if (!order) continue;
+
+            const fulfillments = (order.fulfillments as Array<Record<string, unknown>>) || [];
+            let awb: string | null = null;
+            let fulfillmentId: number | null = null;
+
+            if (fulfillments.length > 0) {
+              const lastFulfillment = fulfillments[fulfillments.length - 1];
+              awb = (lastFulfillment.tracking_number as string) || null;
+              fulfillmentId = lastFulfillment.id as number;
+            }
+
+            let status = 'pendente';
+            if (order.fulfillment_status === 'fulfilled') status = 'entregue';
+            else if (order.fulfillment_status === 'partial') status = 'em_transito';
+            else if (awb) status = 'em_transito';
+
+            const updateData: Record<string, unknown> = {
+              shopify_fulfillment_id: fulfillmentId,
+            };
+            if (awb) updateData.awb = awb;
+            if (status !== 'pendente') updateData.status = status;
+
+            await supabase
+              .from('envios')
+              .update(updateData)
+              .eq('shopify_order_id', orderId);
+
+            details.push({ order_id: orderId, awb, fulfillment_id: fulfillmentId });
+            synced++;
+          } catch (e) {
+            console.error(`Erro ao sincronizar pedido ${orderId}:`, e);
+          }
+        }
+
+        result = { synced, details };
+        break;
+      }
+
       default:
         throw new Error(`Ação desconhecida: ${action}`);
     }

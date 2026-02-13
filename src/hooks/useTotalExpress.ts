@@ -76,6 +76,9 @@ export function useTotalExpress() {
   const updateTracking = useCallback((params: Record<string, unknown>) =>
     callApi<unknown>('shopify-fulfillment', { action: 'update_tracking', ...params }), [callApi]);
 
+  const syncTracking = useCallback((orderIds: number[]) =>
+    callApi<{ synced: number; details: Array<{ order_id: number; awb: string | null; fulfillment_id: number | null }> }>('shopify-fulfillment', { action: 'sync_tracking', order_ids: orderIds }), [callApi]);
+
   const registerCarrierService = useCallback(() =>
     callApi<unknown>('carrier-service', { action: 'register_carrier_service' }), [callApi]);
 
@@ -95,6 +98,7 @@ export function useTotalExpress() {
     importOrders,
     createFulfillment,
     updateTracking,
+    syncTracking,
     registerCarrierService,
     testCarrierService,
   };
