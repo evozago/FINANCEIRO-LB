@@ -54,6 +54,8 @@ interface Envio {
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: typeof Clock }> = {
   pendente: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
+  registrado: { label: 'Registrado', color: 'bg-orange-100 text-orange-800', icon: FileText },
+  aguardando_coleta: { label: 'Aguardando Coleta', color: 'bg-amber-100 text-amber-800', icon: Package },
   coletado: { label: 'Coletado', color: 'bg-blue-100 text-blue-800', icon: Package },
   em_transito: { label: 'Em Trânsito', color: 'bg-indigo-100 text-indigo-800', icon: Truck },
   saiu_entrega: { label: 'Saiu p/ Entrega', color: 'bg-purple-100 text-purple-800', icon: Send },
@@ -561,7 +563,7 @@ export default function GerenciarEnvios() {
         awb = coletaResult.awb;
         numProtocolo = coletaResult.num_protocolo;
         await supabase.from('envios').update({
-          awb: awb || undefined, num_protocolo: numProtocolo, status: 'coletado',
+          awb: awb || undefined, num_protocolo: numProtocolo, status: 'registrado',
         }).eq('id', envio.id);
         toast.success(`Coleta registrada! Protocolo: ${numProtocolo}${awb ? ` AWB: ${awb}` : ''}`);
       }
@@ -605,6 +607,7 @@ export default function GerenciarEnvios() {
           }
           await supabase.from('envios').update({
             etiqueta_gerada: true,
+            status: 'aguardando_coleta',
             ...(smartAwb ? { awb: smartAwb } : {}),
           }).eq('id', envio.id);
           toast.success(`Etiqueta gerada!${smartAwb ? ` AWB: ${smartAwb}` : ''}`);
