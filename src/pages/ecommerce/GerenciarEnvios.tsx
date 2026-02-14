@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import {
   Truck, Search, RefreshCw, Package, MapPin, Tag, CheckCircle2,
   AlertCircle, Clock, Send, FileText, Settings, Loader2, Download,
-  Edit2, Save, X, RotateCcw, Plus, Zap
+  Edit2, Save, X, RotateCcw, Plus, Zap, ExternalLink
 } from 'lucide-react';
 
 interface Envio {
@@ -240,10 +240,21 @@ export default function GerenciarEnvios() {
     });
 
     if (result) {
+      // Extract AWB from SmartLabel response (same logic as one-click flow)
+      const resultData = result as Record<string, unknown>;
+      const encomendas = resultData.encomendas as Array<Record<string, unknown>> | undefined;
+      const smartAwb = (encomendas?.[0]?.awb as string) || '';
+      const etiquetaUrl = smartAwb 
+        ? `https://totalconecta.totalexpress.com.br/rastreamento/rastreamento/encomendas/${smartAwb}`
+        : null;
+      
       await supabase.from('envios').update({
         etiqueta_gerada: true,
+        status: 'aguardando_coleta',
+        ...(smartAwb ? { awb: smartAwb } : {}),
+        ...(etiquetaUrl ? { etiqueta_url: etiquetaUrl } : {}),
       }).eq('id', envio.id);
-      toast.success('Etiqueta gerada com sucesso!');
+      toast.success(`Etiqueta gerada com sucesso!${smartAwb ? ` AWB: ${smartAwb}` : ''}`);
       loadEnvios();
     } else {
       toast.error('Erro ao gerar etiqueta');
@@ -1208,6 +1219,18 @@ export default function GerenciarEnvios() {
                                   title="Gerar Etiqueta"
                                 >
                                   {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
+                                </Button>
+                              )}
+                              {envio.awb && envio.etiqueta_gerada && (
+                                <Button
+                                  size="sm" variant="outline"
+                                  onClick={() => {
+                                    const url = envio.etiqueta_url || `https://totalconecta.totalexpress.com.br/rastreamento/rastreamento/encomendas/${envio.awb}`;
+                                    window.open(url, '_blank');
+                                  }}
+                                  title={`Ver Etiqueta / Rastreio (AWB: ${envio.awb})`}
+                                >
+                                  <ExternalLink className="h-3 w-3" />
                                 </Button>
                               )}
                               {envio.awb && (
