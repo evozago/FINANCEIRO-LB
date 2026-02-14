@@ -234,7 +234,7 @@ export default function GerenciarEnvios() {
       dest_telefone: envio.dest_telefone || '',
       peso: envio.peso_kg || 0.5,
       volumes: envio.volumes,
-      tipo_servico: 7, // Expresso conforme manual oficial
+      tipo_servico: envio.tipo_servico || 1, // Usa o tipo do envio (default: 1 Standard)
       nfe_val_total: envio.valor_declarado_centavos,
       nfe_val_prod: envio.valor_declarado_centavos,
     });
