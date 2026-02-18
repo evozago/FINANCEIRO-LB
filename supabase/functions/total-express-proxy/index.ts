@@ -5,10 +5,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+// Ambiente: definido pela variável TOTAL_EXPRESS_ENV ('homologacao' ou 'producao', padrão: producao)
+const IS_HOMOLOGACAO = Deno.env.get('TOTAL_EXPRESS_ENV') === 'homologacao';
+
 const SOAP_ENDPOINT = 'https://edi.totalexpress.com.br/webservice24.php';
 const FRETE_ENDPOINT = 'https://edi.totalexpress.com.br/webservice_calculo_frete_v2.php';
-const SMARTLABEL_ENDPOINT = 'https://apis.totalexpress.com.br/ics-edi-lv/v1/coleta/smartlabel/registrar';
-const TRACKING_REST_ENDPOINT = 'https://apis.totalexpress.com.br/ics-tracking-encomenda-lv/v1/tracking';
+const SMARTLABEL_ENDPOINT = IS_HOMOLOGACAO
+  ? 'https://apis-qa.totalexpress.com.br/ics-edi-lv/v1/coleta/smartLabel/registrar'
+  : 'https://apis.totalexpress.com.br/ics-edi-lv/v1/coleta/smartlabel/registrar';
+const TRACKING_REST_ENDPOINT = IS_HOMOLOGACAO
+  ? 'https://apis-qa.totalexpress.com.br/ics-tracking-encomenda-lv/v1/tracking'
+  : 'https://apis.totalexpress.com.br/ics-tracking-encomenda-lv/v1/tracking';
 
 function getCredentials() {
   const user = Deno.env.get('TOTAL_EXPRESS_USER');
@@ -38,6 +45,49 @@ function getTagText(xmlText: string, tagName: string): string {
   const regex = new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'i');
   const match = xmlText.match(regex);
   return match?.[1]?.trim() || '';
+}
+
+// Extrai e centraliza a lógica de erros do XML de resposta SOAP da Total Express
+function extractSoapError(xmlText: string, context: string): { message: string; alreadyRegistered: boolean } {
+  const codigoProc = getTagText(xmlText, 'CodigoProc');
+  if (codigoProc === '1') {
+    return { message: '', alreadyRegistered: false };
+  }
+
+  const errosSection = getAllTagContents(xmlText, 'ErrosIndividuais');
+  let erros: string[] = [];
+  let alreadyRegistered = false;
+
+  if (errosSection.length > 0) {
+    const itemBlocks = getAllTagContents(errosSection[0], 'item');
+    erros = itemBlocks.map(block => {
+      const pedido = getTagText(block, 'Pedido') || '';
+      const codErro = getTagText(block, 'CodigoErro') || '';
+      const descErro = getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao') || '';
+      if (codErro === '2') {
+        alreadyRegistered = true;
+      }
+      return pedido ? `[Pedido ${pedido}] Erro ${codErro}: ${descErro}` : `Erro ${codErro}: ${descErro}`;
+    }).filter(e => e.length > 5);
+  }
+
+  // Fallback: tentar extrair de CriticaVolume diretamente
+  if (erros.length === 0) {
+    const criticaBlocks = getAllTagContents(xmlText, 'CriticaVolume');
+    erros = criticaBlocks.map(block => {
+      const descErro = getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao') || '';
+      if (descErro.toLowerCase().includes('cadastrada previamente')) {
+        alreadyRegistered = true;
+      }
+      return descErro;
+    }).filter(Boolean);
+  }
+
+  const env = IS_HOMOLOGACAO ? '[HOMOLOGAÇÃO] ' : '';
+  const errorMessage = `${env}Erro Total Express (${context} - código ${codigoProc}): ${
+    erros.length > 0 ? erros.join(' | ') : 'Erro na comunicação com a API'
+  }`;
+  return { message: errorMessage, alreadyRegistered };
 }
 
 function getAllTagContents(xmlText: string, tagName: string): string[] {
@@ -260,54 +310,26 @@ async function registrarColeta(params: {
   const xmlText = await response.text();
   console.log('RegistraColeta response:', xmlText.substring(0, 1000));
 
-  const codigoProc = getTagText(xmlText, 'CodigoProc');
-
-  if (codigoProc !== '1') {
-    // ErrosIndividuais contains <item xsi:type="tns:CriticaVolume"> not <CriticaVolume>
-    const errosSection = getAllTagContents(xmlText, 'ErrosIndividuais');
-    let erros: string[] = [];
-    let alreadyRegistered = false;
-    if (errosSection.length > 0) {
-      const itemBlocks = getAllTagContents(errosSection[0], 'item');
-      erros = itemBlocks.map(block => {
-        const pedido = getTagText(block, 'Pedido') || '';
-        const codErro = getTagText(block, 'CodigoErro') || '';
-        const descErro = getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao') || '';
-        // Error code 2 = "Essa encomenda ja foi cadastrada previamente"
-        if (codErro === '2') alreadyRegistered = true;
-        return `[${pedido}] Erro ${codErro}: ${descErro}`;
-      }).filter(e => e.length > 5);
-    }
-    // Fallback: try CriticaVolume directly
-    if (erros.length === 0) {
-      const criticaBlocks = getAllTagContents(xmlText, 'CriticaVolume');
-      erros = criticaBlocks.map(block => {
-        const descErro = getTagText(block, 'DescricaoErro') || getTagText(block, 'Descricao') || '';
-        if (descErro.toLowerCase().includes('cadastrada previamente')) alreadyRegistered = true;
-        return descErro;
-      }).filter(Boolean);
-    }
-    
-    // If already registered, return success with flag instead of throwing
-    if (alreadyRegistered) {
+  const soapError = extractSoapError(xmlText, 'registrarColeta');
+  if (soapError.message) {
+    if (soapError.alreadyRegistered) {
       console.log('Encomenda já cadastrada previamente, retornando already_registered=true');
       const numProtocolo = getTagText(xmlText, 'NumProtocolo');
       let existingAwb = '';
-      const criticaBlocks = getAllTagContents(xmlText, 'CriticaVolume');
-      if (criticaBlocks.length > 0) {
-        existingAwb = getTagText(criticaBlocks[0], 'AWB');
+      const criticaBlocksExisting = getAllTagContents(xmlText, 'CriticaVolume');
+      if (criticaBlocksExisting.length > 0) {
+        existingAwb = getTagText(criticaBlocksExisting[0], 'AWB');
       }
       return {
-        codigo_proc: parseInt(codigoProc),
+        codigo_proc: 0,
         num_protocolo: numProtocolo || 'already_registered',
         itens_processados: 0,
         awb: existingAwb,
         already_registered: true,
       };
     }
-    
-    console.error('Total Express erros individuais:', JSON.stringify(erros));
-    throw new Error(`Erro Total Express (código ${codigoProc}): ${erros.length > 0 ? erros.join('; ') : 'Erro ao registrar coleta'}`);
+    console.error('Total Express erro:', soapError.message);
+    throw new Error(soapError.message);
   }
 
   const numProtocolo = getTagText(xmlText, 'NumProtocolo');
@@ -320,7 +342,7 @@ async function registrarColeta(params: {
   }
 
   return {
-    codigo_proc: parseInt(codigoProc),
+    codigo_proc: parseInt(getTagText(xmlText, 'CodigoProc')),
     num_protocolo: numProtocolo,
     itens_processados: parseInt(itensProcessados) || 0,
     awb,
