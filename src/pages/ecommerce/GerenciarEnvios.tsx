@@ -18,13 +18,12 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon
 } from 'lucide-react';
 
-type SortField = 'created_at' | 'shopify_order_name' | 'dest_nome' | 'customer_name' | 'status' | 'valor_frete_centavos';
+type SortField = 'created_at' | 'shopify_order_name' | 'dest_nome' | 'status' | 'valor_frete_centavos';
 type SortDir = 'asc' | 'desc';
 
 interface Envio {
   id: number;
   shopify_order_id: number | null;
-  customer_name?: string | null;
   shopify_order_name: string | null;
   shopify_fulfillment_id: number | null;
   dest_nome: string;
@@ -195,7 +194,6 @@ export default function GerenciarEnvios() {
       const term = searchTerm.toLowerCase();
       const matchSearch = !searchTerm ||
         e.dest_nome.toLowerCase().includes(term) ||
-        (e.customer_name || '').toLowerCase().includes(term) ||
         e.awb?.toLowerCase().includes(term) ||
         e.shopify_order_name?.toLowerCase().includes(term) ||
         e.dest_cep.includes(searchTerm) ||
@@ -212,7 +210,6 @@ export default function GerenciarEnvios() {
       if (sortField === 'created_at') { valA = a.created_at; valB = b.created_at; }
       else if (sortField === 'shopify_order_name') { valA = a.shopify_order_name || ''; valB = b.shopify_order_name || ''; }
       else if (sortField === 'dest_nome') { valA = a.dest_nome; valB = b.dest_nome; }
-      else if (sortField === 'customer_name') { valA = a.customer_name || ''; valB = b.customer_name || ''; }
       else if (sortField === 'status') { valA = a.status; valB = b.status; }
       else if (sortField === 'valor_frete_centavos') { valA = a.valor_frete_centavos; valB = b.valor_frete_centavos; }
       if (valA < valB) return sortDir === 'asc' ? -1 : 1;
@@ -1198,10 +1195,7 @@ export default function GerenciarEnvios() {
                           <span className="flex items-center">Pedido <SortIcon field="shopify_order_name" /></span>
                         </TableHead>
                         <TableHead className="cursor-pointer select-none" onClick={() => handleSort('dest_nome')}>
-                          <span className="flex items-center">Destinatário <SortIcon field="dest_nome" /></span>
-                        </TableHead>
-                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('customer_name')}>
-                          <span className="flex items-center">Cliente <SortIcon field="customer_name" /></span>
+                          <span className="flex items-center">Cliente <SortIcon field="dest_nome" /></span>
                         </TableHead>
                         <TableHead>CEP</TableHead>
                         <TableHead>AWB</TableHead>
@@ -1228,13 +1222,6 @@ export default function GerenciarEnvios() {
                             <div className="text-xs text-muted-foreground">
                               {envio.dest_cidade}/{envio.dest_estado}
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            {envio.customer_name && envio.customer_name !== envio.dest_nome ? (
-                              <div className="text-sm text-muted-foreground">{envio.customer_name}</div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
                           </TableCell>
                           <TableCell className="font-mono text-sm">{envio.dest_cep}</TableCell>
                           <TableCell>

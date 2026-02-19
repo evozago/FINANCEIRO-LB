@@ -147,17 +147,15 @@ serve(async (req) => {
             fulfillmentId = lastFulfillment.id as number;
           }
 
+          // No Shopify: customer.first_name = nome completo do cliente, customer.last_name = CPF
           const customer = (order.customer as Record<string, string | Record<string, string>>) || {};
-          const customerFirstName = (customer.first_name as string) || '';
-          const customerLastName = (customer.last_name as string) || '';
-          const customerFullName = [customerFirstName, customerLastName].filter(Boolean).join(' ');
+          const customerName = (customer.first_name as string) || shipping.name || 'Sem nome';
 
           newEnvios.push({
             shopify_order_id: order.id,
             shopify_order_name: order.name || `#${order.order_number}`,
             shopify_fulfillment_id: fulfillmentId,
-            customer_name: customerFullName || shipping.name || 'Sem nome',
-            dest_nome: shipping.name || customerFullName || 'Sem nome',
+            dest_nome: customerName,
             dest_cpf_cnpj: extractCpfCnpj(order, shipping),
             dest_endereco: shipping.address1 || '',
             dest_numero: shipping.address2 || 'S/N',
