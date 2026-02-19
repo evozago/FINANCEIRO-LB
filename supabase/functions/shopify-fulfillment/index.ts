@@ -119,15 +119,17 @@ serve(async (req) => {
 
         const { data: existingEnvios } = await supabase
           .from('envios')
-          .select('shopify_order_id')
+          .select('shopify_order_id, awb, status, nfe_numero, nfe_chave, nfe_serie, nfe_data, nfe_val_total, nfe_val_prod')
           .not('shopify_order_id', 'is', null);
         
-        const existingIds = new Set((existingEnvios || []).map((e: { shopify_order_id: number }) => e.shopify_order_id));
+        // Mapa de dados existentes para preservar campos manuais (AWB, NF-e, etc.)
+        const existingMap = new Map(
+          (existingEnvios || []).map((e: Record<string, unknown>) => [e.shopify_order_id, e])
+        );
 
         const newEnvios: Array<Record<string, unknown>> = [];
 
         for (const order of allOrders) {
-          if (existingIds.has(order.id)) continue;
 
           const shipping = (order.shipping_address as Record<string, string>) || {};
           const totalWeight = (order.line_items as Array<{ grams: number; quantity: number }>)?.reduce(
@@ -151,6 +153,9 @@ serve(async (req) => {
           const customer = (order.customer as Record<string, string | Record<string, string>>) || {};
           const customerName = (customer.first_name as string) || shipping.name || 'Sem nome';
 
+          // Preservar campos manuais de registros já existentes (AWB, NF-e, status manual)
+          const existing = existingMap.get(order.id) as Record<string, unknown> | undefined;
+
           newEnvios.push({
             shopify_order_id: order.id,
             shopify_order_name: order.name || `#${order.order_number}`,
@@ -168,23 +173,33 @@ serve(async (req) => {
             dest_telefone: shipping.phone || (order.phone as string) || '',
             peso_kg: totalWeight > 0 ? totalWeight / 1000 : null,
             valor_declarado_centavos: Math.round(parseFloat(order.total_price as string || '0') * 100),
-            status,
-            awb: awb || null,
+            // Preservar status, AWB e NF-e se já existirem
+            status: existing ? (existing.status as string) : status,
+            awb: existing ? (existing.awb as string | null) : (awb || null),
+            nfe_numero: existing ? existing.nfe_numero : null,
+            nfe_chave: existing ? existing.nfe_chave : null,
+            nfe_serie: existing ? existing.nfe_serie : null,
+            nfe_data: existing ? existing.nfe_data : null,
+            nfe_val_total: existing ? existing.nfe_val_total : null,
+            nfe_val_prod: existing ? existing.nfe_val_prod : null,
             volumes: 1,
           });
         }
 
         if (newEnvios.length > 0) {
-          const { error: insertError } = await supabase
+          const { error: upsertError } = await supabase
             .from('envios')
-            .insert(newEnvios);
-          if (insertError) throw new Error(`Erro ao inserir envios: ${insertError.message}`);
+            .upsert(newEnvios, { onConflict: 'shopify_order_id' });
+          if (upsertError) throw new Error(`Erro ao importar envios: ${upsertError.message}`);
         }
+
+        const newCount = newEnvios.filter(e => !existingMap.has(e.shopify_order_id)).length;
+        const updatedCount = newEnvios.filter(e => existingMap.has(e.shopify_order_id)).length;
 
         result = {
           total_orders: allOrders.length,
-          already_imported: existingIds.size,
-          new_imported: newEnvios.length,
+          new_imported: newCount,
+          updated: updatedCount,
         };
         break;
       }
