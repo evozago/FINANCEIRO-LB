@@ -1343,7 +1343,7 @@ export default function GerenciarEnvios() {
                                   {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
                                 </Button>
                               )}
-                              {envio.awb && (
+                              {(envio.awb || envio.etiqueta_gerada) && (
                                 <Button
                                   size="sm" variant="outline"
                                   onClick={() => {
@@ -1363,7 +1363,7 @@ export default function GerenciarEnvios() {
                                       nfe_numero: envio.nfe_numero || undefined,
                                     });
                                   }}
-                                  title={`Imprimir Etiqueta (AWB: ${envio.awb})`}
+                                  title={envio.awb ? `Imprimir Etiqueta (AWB: ${envio.awb})` : 'Imprimir Etiqueta'}
                                   className="border-green-500 text-green-600 hover:bg-green-50"
                                 >
                                   <Printer className="h-3 w-3" />
