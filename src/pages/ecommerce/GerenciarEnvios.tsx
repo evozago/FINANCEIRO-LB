@@ -14,12 +14,17 @@ import { toast } from 'sonner';
 import {
   Truck, Search, RefreshCw, Package, MapPin, Tag, CheckCircle2,
   AlertCircle, Clock, Send, FileText, Settings, Loader2, Download,
-  Edit2, Save, X, RotateCcw, Plus, Zap, ExternalLink
+  Edit2, Save, X, RotateCcw, Plus, Zap, ExternalLink,
+  ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon
 } from 'lucide-react';
+
+type SortField = 'created_at' | 'shopify_order_name' | 'dest_nome' | 'customer_name' | 'status' | 'valor_frete_centavos';
+type SortDir = 'asc' | 'desc';
 
 interface Envio {
   id: number;
   shopify_order_id: number | null;
+  customer_name?: string | null;
   shopify_order_name: string | null;
   shopify_fulfillment_id: number | null;
   dest_nome: string;
@@ -108,6 +113,10 @@ export default function GerenciarEnvios() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sortField, setSortField] = useState<SortField>('created_at');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   // Cotação de frete
   const [freteDialog, setFreteDialog] = useState(false);
@@ -167,15 +176,49 @@ export default function GerenciarEnvios() {
 
   useEffect(() => { loadEnvios(); }, [loadEnvios]);
 
-  const filteredEnvios = envios.filter(e => {
-    const matchSearch = !searchTerm || 
-      e.dest_nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.awb?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.shopify_order_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.dest_cep.includes(searchTerm);
-    const matchStatus = statusFilter === 'todos' || e.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  const filteredEnvios = envios
+    .filter(e => {
+      const term = searchTerm.toLowerCase();
+      const matchSearch = !searchTerm ||
+        e.dest_nome.toLowerCase().includes(term) ||
+        (e.customer_name || '').toLowerCase().includes(term) ||
+        e.awb?.toLowerCase().includes(term) ||
+        e.shopify_order_name?.toLowerCase().includes(term) ||
+        e.dest_cep.includes(searchTerm) ||
+        e.dest_cpf_cnpj?.includes(searchTerm);
+      const matchStatus = statusFilter === 'todos' || e.status === statusFilter;
+      const createdDate = e.created_at ? e.created_at.substring(0, 10) : '';
+      const matchDateFrom = !dateFrom || createdDate >= dateFrom;
+      const matchDateTo = !dateTo || createdDate <= dateTo;
+      return matchSearch && matchStatus && matchDateFrom && matchDateTo;
+    })
+    .sort((a, b) => {
+      let valA: string | number = '';
+      let valB: string | number = '';
+      if (sortField === 'created_at') { valA = a.created_at; valB = b.created_at; }
+      else if (sortField === 'shopify_order_name') { valA = a.shopify_order_name || ''; valB = b.shopify_order_name || ''; }
+      else if (sortField === 'dest_nome') { valA = a.dest_nome; valB = b.dest_nome; }
+      else if (sortField === 'customer_name') { valA = a.customer_name || ''; valB = b.customer_name || ''; }
+      else if (sortField === 'status') { valA = a.status; valB = b.status; }
+      else if (sortField === 'valor_frete_centavos') { valA = a.valor_frete_centavos; valB = b.valor_frete_centavos; }
+      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
 
   const handleRegistrarColeta = async (envio: Envio) => {
     if (envio.awb) {
@@ -1092,11 +1135,34 @@ export default function GerenciarEnvios() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar por nome, AWB, pedido..."
+                  placeholder="Buscar por nome, destinatário, AWB, pedido, CPF..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-[250px]"
+                  className="pl-10 w-[300px]"
                 />
+              </div>
+              <div className="flex items-center gap-1">
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                  className="w-[140px] text-xs"
+                  title="Data inicial"
+                />
+                <span className="text-muted-foreground text-xs">até</span>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
+                  className="w-[140px] text-xs"
+                  title="Data final"
+                />
+                {(dateFrom || dateTo) && (
+                  <Button variant="ghost" size="sm" onClick={() => { setDateFrom(''); setDateTo(''); }} title="Limpar filtro de data">
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -1128,12 +1194,23 @@ export default function GerenciarEnvios() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Pedido</TableHead>
-                        <TableHead>Destinatário</TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('shopify_order_name')}>
+                          <span className="flex items-center">Pedido <SortIcon field="shopify_order_name" /></span>
+                        </TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('dest_nome')}>
+                          <span className="flex items-center">Destinatário <SortIcon field="dest_nome" /></span>
+                        </TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('customer_name')}>
+                          <span className="flex items-center">Cliente <SortIcon field="customer_name" /></span>
+                        </TableHead>
                         <TableHead>CEP</TableHead>
                         <TableHead>AWB</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Frete</TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('status')}>
+                          <span className="flex items-center">Status <SortIcon field="status" /></span>
+                        </TableHead>
+                        <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('valor_frete_centavos')}>
+                          <span className="flex items-center justify-end">Frete <SortIcon field="valor_frete_centavos" /></span>
+                        </TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1151,6 +1228,13 @@ export default function GerenciarEnvios() {
                             <div className="text-xs text-muted-foreground">
                               {envio.dest_cidade}/{envio.dest_estado}
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {envio.customer_name && envio.customer_name !== envio.dest_nome ? (
+                              <div className="text-sm text-muted-foreground">{envio.customer_name}</div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell className="font-mono text-sm">{envio.dest_cep}</TableCell>
                           <TableCell>
