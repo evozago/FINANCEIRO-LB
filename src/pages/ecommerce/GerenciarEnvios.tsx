@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import {
   Truck, Search, RefreshCw, Package, MapPin, Tag, CheckCircle2,
   AlertCircle, Clock, Send, FileText, Settings, Loader2, Download,
-  Edit2, Save, X, RotateCcw, Plus, Zap, ExternalLink,
+  Edit2, Save, X, RotateCcw, Plus, Zap, ExternalLink, Printer,
   ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon
 } from 'lucide-react';
 
@@ -1343,7 +1343,7 @@ export default function GerenciarEnvios() {
                                   {actionLoading === envio.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
                                 </Button>
                               )}
-                              {envio.awb && envio.etiqueta_gerada && (
+                              {envio.awb && (
                                 <Button
                                   size="sm" variant="outline"
                                   onClick={() => {
@@ -1363,9 +1363,10 @@ export default function GerenciarEnvios() {
                                       nfe_numero: envio.nfe_numero || undefined,
                                     });
                                   }}
-                                  title={`Reimprimir Etiqueta (AWB: ${envio.awb})`}
+                                  title={`Imprimir Etiqueta (AWB: ${envio.awb})`}
+                                  className="border-green-500 text-green-600 hover:bg-green-50"
                                 >
-                                  <ExternalLink className="h-3 w-3" />
+                                  <Printer className="h-3 w-3" />
                                 </Button>
                               )}
                               {envio.awb && (
