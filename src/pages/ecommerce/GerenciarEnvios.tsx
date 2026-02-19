@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { gerarEtiquetaPDF } from '@/lib/gerarEtiquetaTotalExpress';
 import { supabase } from '@/integrations/supabase/client';
 import { useTotalExpress } from '@/hooks/useTotalExpress';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -294,6 +295,31 @@ export default function GerenciarEnvios() {
         ...(smartAwb ? { awb: smartAwb } : {}),
         ...(etiquetaUrl ? { etiqueta_url: etiquetaUrl } : {}),
       }).eq('id', envio.id);
+
+      // Gerar e abrir PDF da etiqueta automaticamente
+      if (smartAwb) {
+        const retorno = (resultData.retorno as Record<string, unknown>) || resultData;
+        const enc = (retorno.encomendas as Array<Record<string, unknown>>)?.[0] || {};
+        const volumes = (enc.volumes as Array<Record<string, unknown>>) || [];
+        const rota = (volumes[0]?.rota as string) || '';
+        gerarEtiquetaPDF({
+          dest_nome: envio.dest_nome,
+          dest_endereco: envio.dest_endereco || '',
+          dest_numero: envio.dest_numero || 'S/N',
+          dest_complemento: envio.dest_complemento || '',
+          dest_bairro: envio.dest_bairro || '',
+          dest_cidade: envio.dest_cidade || '',
+          dest_estado: envio.dest_estado || '',
+          dest_cep: envio.dest_cep,
+          awb: smartAwb,
+          rota,
+          pedido: envio.shopify_order_name || envio.id.toString(),
+          volumes: envio.volumes || 1,
+          peso_kg: envio.peso_kg || 0.5,
+          nfe_numero: envio.nfe_numero || undefined,
+        });
+      }
+
       toast.success(`Etiqueta gerada com sucesso!${smartAwb ? ` AWB: ${smartAwb}` : ''}`);
       loadEnvios();
     } else {
@@ -666,6 +692,31 @@ export default function GerenciarEnvios() {
             status: 'aguardando_coleta',
             ...(smartAwb ? { awb: smartAwb } : {}),
           }).eq('id', envio.id);
+
+          // Gerar e abrir PDF da etiqueta automaticamente
+          if (smartAwb) {
+            const retorno = (labelResult.retorno as Record<string, unknown>) || labelResult;
+            const enc = (retorno.encomendas as Array<Record<string, unknown>>)?.[0] || {};
+            const vols = (enc.volumes as Array<Record<string, unknown>>) || [];
+            const rota = (vols[0]?.rota as string) || '';
+            gerarEtiquetaPDF({
+              dest_nome: envio.dest_nome,
+              dest_endereco: envio.dest_endereco || '',
+              dest_numero: envio.dest_numero || 'S/N',
+              dest_complemento: envio.dest_complemento || '',
+              dest_bairro: envio.dest_bairro || '',
+              dest_cidade: envio.dest_cidade || '',
+              dest_estado: envio.dest_estado || '',
+              dest_cep: envio.dest_cep,
+              awb: smartAwb,
+              rota,
+              pedido: envio.shopify_order_name || envio.id.toString(),
+              volumes: envio.volumes || 1,
+              peso_kg: envio.peso_kg || 0.5,
+              nfe_numero: envio.nfe_numero || undefined,
+            });
+          }
+
           toast.success(`Etiqueta gerada!${smartAwb ? ` AWB: ${smartAwb}` : ''}`);
         } else {
           toast.warning('Etiqueta não gerada, mas continuando...');
@@ -1296,10 +1347,23 @@ export default function GerenciarEnvios() {
                                 <Button
                                   size="sm" variant="outline"
                                   onClick={() => {
-                                    const url = envio.etiqueta_url || `https://totalconecta.totalexpress.com.br/rastreamento/rastreamento/encomendas/${envio.awb}`;
-                                    window.open(url, '_blank');
+                                    gerarEtiquetaPDF({
+                                      dest_nome: envio.dest_nome,
+                                      dest_endereco: envio.dest_endereco || '',
+                                      dest_numero: envio.dest_numero || 'S/N',
+                                      dest_complemento: envio.dest_complemento || '',
+                                      dest_bairro: envio.dest_bairro || '',
+                                      dest_cidade: envio.dest_cidade || '',
+                                      dest_estado: envio.dest_estado || '',
+                                      dest_cep: envio.dest_cep,
+                                      awb: envio.awb!,
+                                      pedido: envio.shopify_order_name || envio.id.toString(),
+                                      volumes: envio.volumes || 1,
+                                      peso_kg: envio.peso_kg || 0.5,
+                                      nfe_numero: envio.nfe_numero || undefined,
+                                    });
                                   }}
-                                  title={`Ver Etiqueta / Rastreio (AWB: ${envio.awb})`}
+                                  title={`Reimprimir Etiqueta (AWB: ${envio.awb})`}
                                 >
                                   <ExternalLink className="h-3 w-3" />
                                 </Button>
