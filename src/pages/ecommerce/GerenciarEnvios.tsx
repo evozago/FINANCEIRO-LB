@@ -1356,7 +1356,7 @@ export default function GerenciarEnvios() {
                                       dest_cidade: envio.dest_cidade || '',
                                       dest_estado: envio.dest_estado || '',
                                       dest_cep: envio.dest_cep,
-                                      awb: envio.awb!,
+                                      awb: envio.awb || undefined,
                                       pedido: envio.shopify_order_name || envio.id.toString(),
                                       volumes: envio.volumes || 1,
                                       peso_kg: envio.peso_kg || 0.5,
