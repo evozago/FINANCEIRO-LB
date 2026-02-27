@@ -316,7 +316,7 @@ export default function GerenciarEnvios() {
           pedido: envio.shopify_order_name || envio.id.toString(),
           volumes: envio.volumes || 1,
           peso_kg: envio.peso_kg || 0.5,
-          nfe_numero: envio.nfe_numero || undefined,
+          nfe_numero: undefined,
         });
       }
 
@@ -713,7 +713,7 @@ export default function GerenciarEnvios() {
               pedido: envio.shopify_order_name || envio.id.toString(),
               volumes: envio.volumes || 1,
               peso_kg: envio.peso_kg || 0.5,
-              nfe_numero: envio.nfe_numero || undefined,
+              nfe_numero: undefined,
             });
           }
 
@@ -1360,7 +1360,7 @@ export default function GerenciarEnvios() {
                                       pedido: envio.shopify_order_name || envio.id.toString(),
                                       volumes: envio.volumes || 1,
                                       peso_kg: envio.peso_kg || 0.5,
-                                      nfe_numero: envio.nfe_numero || undefined,
+                                      nfe_numero: undefined,
                                     });
                                   }}
                                   title={envio.awb ? `Imprimir Etiqueta (AWB: ${envio.awb})` : 'Imprimir Etiqueta'}
