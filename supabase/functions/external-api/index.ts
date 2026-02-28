@@ -8,42 +8,53 @@ const corsHeaders = {
 };
 
 const EXTERNAL_API_KEY = Deno.env.get('EXTERNAL_API_KEY');
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'https://tntvymprraevwhmrcjio.supabase.co';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
 // Tabelas permitidas para acesso externo
 const ALLOWED_TABLES = [
-  'bandeiras_cartao',
+  'atributos_customizados',
   'cargos',
   'categorias_financeiras',
-  'categorias_pj',
+  'categorias_produtos',
   'compras_pedidos',
   'compras_pedido_itens',
   'compras_pedido_anexos',
+  'compras_pedido_marcas',
   'contas_bancarias',
-  'contas_movimentacoes',
   'contas_pagar',
   'contas_pagar_parcelas',
+  'contas_recorrentes',
+  'entradas_nfe',
+  'envios',
+  'faixas_etarias_produto',
   'fechamentos_caixa',
-  'ferias_vendedoras',
   'filiais',
   'folha_pagamento_lancamentos',
   'formas_pagamento',
-  'ia_conhecimento',
+  'generos_produto',
   'marcas',
-  'metas_vendedoras',
+  'metas_vendas',
   'pessoas_fisicas',
   'pessoas_juridicas',
-  'pj_marcas',
-  'pj_representantes',
+  'print3d_estoque',
+  'print3d_impressoras',
+  'print3d_marketplaces',
+  'print3d_materiais',
+  'print3d_parametros',
+  'print3d_produto_imagens',
+  'print3d_produtos',
+  'print3d_vendas',
   'produtos',
-  'produto_grades',
-  'recorrencias',
-  'salarios',
-  'tamanhos',
-  'cores',
-  'taxas_bandeira',
-  'vendas_diarias',
+  'referencias_produto',
+  'regras_classificacao',
+  'role_modulos',
+  'sequencial_referencias',
+  'sessoes_importacao',
+  'tipos_produto',
+  'variacoes_referencia',
+  'vendas',
+  'vendedoras',
 ];
 
 // Views disponíveis
@@ -537,7 +548,7 @@ function getOpenAPISpec() {
     },
     servers: [
       {
-        url: "https://tntvymprraevwhmrcjio.supabase.co/functions/v1/external-api",
+        url: `${SUPABASE_URL}/functions/v1/external-api`,
         description: "Production API"
       }
     ],
