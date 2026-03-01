@@ -77,10 +77,10 @@ serve(async (req) => {
     // Verificar API Key
     const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace('Bearer ', '');
     
-    if (!apiKey || apiKey !== EXTERNAL_API_KEY) {
+    if (!apiKey) {
       return new Response(JSON.stringify({ 
         error: 'Unauthorized', 
-        message: 'API Key inválida ou não fornecida. Use header x-api-key ou Authorization: Bearer <key>' 
+        message: 'API Key não fornecida. Use header x-api-key ou Authorization: Bearer <key>' 
       }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -89,6 +89,35 @@ serve(async (req) => {
 
     // Criar cliente Supabase com service role (acesso total)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY!);
+
+    // Validar chave: aceitar EXTERNAL_API_KEY do env OU chave ativa da tabela api_keys
+    let keyValid = false;
+    if (EXTERNAL_API_KEY && apiKey === EXTERNAL_API_KEY) {
+      keyValid = true;
+    } else {
+      const { data: dbKey } = await supabase
+        .from('api_keys')
+        .select('id')
+        .eq('chave', apiKey)
+        .eq('ativo', true)
+        .maybeSingle();
+      
+      if (dbKey) {
+        keyValid = true;
+        // Atualizar último uso em background
+        supabase.from('api_keys').update({ ultimo_uso_at: new Date().toISOString() }).eq('id', dbKey.id).then();
+      }
+    }
+
+    if (!keyValid) {
+      return new Response(JSON.stringify({ 
+        error: 'Unauthorized', 
+        message: 'API Key inválida ou desativada.' 
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const url = new URL(req.url);
     const pathParts = url.pathname.split('/').filter(Boolean);
