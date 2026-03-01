@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_keys: {
+        Row: {
+          ativo: boolean
+          chave: string
+          created_at: string
+          criado_por: string | null
+          id: string
+          nome: string
+          ultimo_uso_at: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          chave: string
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          nome: string
+          ultimo_uso_at?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          chave?: string
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          nome?: string
+          ultimo_uso_at?: string | null
+        }
+        Relationships: []
+      }
       atributos_customizados: {
         Row: {
           ativo: boolean | null

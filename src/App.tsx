@@ -41,6 +41,7 @@ import GerenciarEnvios from "./pages/ecommerce/GerenciarEnvios";
 import UnificadorPlanilhas from "./pages/ferramentas/UnificadorPlanilhas";
 import Login from "./pages/Login";
 import GerenciarUsuarios from "./pages/admin/GerenciarUsuarios";
+import Configuracoes from "./pages/admin/Configuracoes";
 import Impressao3dHome from "./pages/impressao3d/Impressao3dHome";
 import Produtos3d from "./pages/impressao3d/Produtos3d";
 import Materiais3d from "./pages/impressao3d/Materiais3d";
@@ -134,6 +135,7 @@ const AppRoutes = () => (
 
       {/* Admin */}
       <Route path="admin/usuarios" element={<GerenciarUsuarios />} />
+      <Route path="admin/configuracoes" element={<Configuracoes />} />
 
       <Route path="teste-gemini" element={<TesteGemini />} />
     </Route>

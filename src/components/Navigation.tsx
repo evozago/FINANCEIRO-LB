@@ -14,7 +14,8 @@ import {
   LogOut,
   Shield,
   ShoppingBag,
-  Truck
+  Truck,
+  Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -217,11 +218,18 @@ export function Navigation() {
       {/* Footer */}
       <div className="border-t p-4 space-y-2">
         {role === 'admin' && (
-          <Link to="/admin/usuarios">
-            <Button variant="ghost" size="sm" className="w-full justify-start">
-              <Shield className="mr-2 h-4 w-4" /> Gerenciar Usuários
-            </Button>
-          </Link>
+          <>
+            <Link to="/admin/usuarios">
+              <Button variant="ghost" size="sm" className="w-full justify-start">
+                <Shield className="mr-2 h-4 w-4" /> Gerenciar Usuários
+              </Button>
+            </Link>
+            <Link to="/admin/configuracoes">
+              <Button variant="ghost" size="sm" className="w-full justify-start">
+                <Settings className="mr-2 h-4 w-4" /> Configurações
+              </Button>
+            </Link>
+          </>
         )}
         <div className="flex items-center space-x-3 px-2">
           <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center text-primary-foreground font-semibold text-sm">
