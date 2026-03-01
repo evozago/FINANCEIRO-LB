@@ -147,16 +147,15 @@ export default function NovaContaPagar() {
         .from("contas_pagar")
         .insert({
           fornecedor_id: fornecedorTipo === "pj" ? parseOptionalId(fornecedorId) : null,
-          fornecedor_pf_id: fornecedorTipo === "pf" ? parseOptionalId(fornecedorId) : null,
+          pessoa_fisica_id: fornecedorTipo === "pf" ? parseOptionalId(fornecedorId) : null,
           categoria_id: parseOptionalId(categoriaId),
           filial_id: parseOptionalId(filialId),
           descricao,
           valor_total_centavos: valorTotalCentavos,
           num_parcelas: numParcelas,
           numero_nota: numeroNota || null,
-          chave_nfe: chaveNfe || null,
-          data_emissao: dataEmissao || null,
           referencia: referencia || null,
+          observacoes: [chaveNfe ? `Chave NFe: ${chaveNfe}` : null, dataEmissao ? `Emissão: ${dataEmissao}` : null].filter(Boolean).join(' | ') || null,
         })
         .select()
         .single();
@@ -237,16 +236,15 @@ export default function NovaContaPagar() {
         .from("contas_pagar")
         .insert({
           fornecedor_id: data.fornecedorTipo === "pj" ? data.fornecedorId : null,
-          fornecedor_pf_id: data.fornecedorTipo === "pf" ? data.fornecedorId : null,
+          pessoa_fisica_id: data.fornecedorTipo === "pf" ? data.fornecedorId : null,
           categoria_id: data.categoriaId,
           filial_id: data.filialId,
           descricao: data.descricao || data.fornecedorNome,
           valor_total_centavos: data.valorTotalCentavos,
           num_parcelas: data.numParcelas,
           numero_nota: data.numeroNota || null,
-          chave_nfe: data.chaveNfe || null,
-          data_emissao: data.dataEmissao || null,
           referencia: data.referencia || null,
+          observacoes: [data.chaveNfe ? `Chave NFe: ${data.chaveNfe}` : null, data.dataEmissao ? `Emissão: ${data.dataEmissao}` : null].filter(Boolean).join(' | ') || null,
         })
         .select()
         .single();
