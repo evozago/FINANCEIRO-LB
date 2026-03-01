@@ -42,6 +42,7 @@ import UnificadorPlanilhas from "./pages/ferramentas/UnificadorPlanilhas";
 import Login from "./pages/Login";
 import GerenciarUsuarios from "./pages/admin/GerenciarUsuarios";
 import Configuracoes from "./pages/admin/Configuracoes";
+import CerebroIA from "./pages/ia/CerebroIA";
 import Impressao3dHome from "./pages/impressao3d/Impressao3dHome";
 import Produtos3d from "./pages/impressao3d/Produtos3d";
 import Materiais3d from "./pages/impressao3d/Materiais3d";
@@ -132,6 +133,9 @@ const AppRoutes = () => (
       <Route path="impressao3d/estoque" element={<Estoque3d />} />
       <Route path="impressao3d/vendas" element={<Vendas3d />} />
       <Route path="impressao3d/parametros" element={<Parametros3d />} />
+
+      {/* IA */}
+      <Route path="ia/cerebro" element={<CerebroIA />} />
 
       {/* Admin */}
       <Route path="admin/usuarios" element={<GerenciarUsuarios />} />

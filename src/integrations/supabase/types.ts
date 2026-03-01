@@ -937,6 +937,36 @@ export type Database = {
         }
         Relationships: []
       }
+      ia_conhecimento: {
+        Row: {
+          ativo: boolean
+          conteudo: string
+          created_at: string
+          id: number
+          tipo: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          conteudo: string
+          created_at?: string
+          id?: number
+          tipo?: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          conteudo?: string
+          created_at?: string
+          id?: number
+          tipo?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       marcas: {
         Row: {
           ativo: boolean | null
