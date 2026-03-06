@@ -206,28 +206,97 @@ export default function UnificadorPlanilhas() {
     }
   };
 
-  const downloadMerged = () => {
+  const downloadMerged = async () => {
     if (!mergedData || mergedData.length === 0) return;
 
-    setProgress({ phase: 'generating', percent: 50, message: 'Gerando arquivo...' });
+    setProgress({ phase: 'generating', percent: 10, message: 'Preparando arquivo...' });
 
     try {
-      const worksheet = XLSX.utils.json_to_sheet(mergedData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Unificado');
+      const fileName = `planilha_unificada_${new Date().toISOString().split('T')[0]}`;
 
-      const fileName = `planilha_unificada_${new Date().toISOString().split('T')[0]}.${outputFormat}`;
-      
-      if (outputFormat === 'csv') {
-        XLSX.writeFile(workbook, fileName, { bookType: 'csv' });
+      if (outputFormat === 'csv' || mergedData.length > 50000) {
+        // Para CSV ou arquivos grandes: gerar CSV em chunks (muito mais leve em memória)
+        const actualFormat = mergedData.length > 50000 && outputFormat === 'xlsx' ? 'csv' : outputFormat;
+        
+        if (mergedData.length > 50000 && outputFormat === 'xlsx') {
+          toast.info('Arquivo muito grande para XLSX. Gerando em CSV para evitar travamento.');
+        }
+
+        const columns = mergedColumns;
+        const CHUNK_SIZE = 10000;
+        const csvParts: string[] = [];
+        
+        // Header
+        csvParts.push(columns.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','));
+        
+        for (let i = 0; i < mergedData.length; i += CHUNK_SIZE) {
+          const chunk = mergedData.slice(i, i + CHUNK_SIZE);
+          const lines = chunk.map(row => 
+            columns.map(col => {
+              const val = row[col];
+              if (val === null || val === undefined || val === '') return '';
+              const str = String(val);
+              if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return `"${str.replace(/"/g, '""')}"`;
+              }
+              return str;
+            }).join(',')
+          );
+          csvParts.push(lines.join('\n'));
+          
+          const percent = Math.round(((i + CHUNK_SIZE) / mergedData.length) * 80) + 10;
+          setProgress({ phase: 'generating', percent: Math.min(percent, 90), message: `Gerando... ${Math.min(i + CHUNK_SIZE, mergedData.length).toLocaleString('pt-BR')} / ${mergedData.length.toLocaleString('pt-BR')} linhas` });
+          
+          // Liberar main thread
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        setProgress({ phase: 'generating', percent: 95, message: 'Finalizando download...' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const blob = new Blob([csvParts.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${fileName}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       } else {
-        XLSX.writeFile(workbook, fileName, { bookType: 'xlsx' });
+        // Para XLSX com < 50k linhas: abordagem padrão com Blob
+        setProgress({ phase: 'generating', percent: 30, message: 'Convertendo dados...' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const worksheet = XLSX.utils.json_to_sheet(mergedData);
+        
+        setProgress({ phase: 'generating', percent: 60, message: 'Gerando XLSX...' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Unificado');
+        
+        const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        
+        setProgress({ phase: 'generating', percent: 90, message: 'Preparando download...' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${fileName}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       }
 
       setProgress({ phase: 'complete', percent: 100, message: 'Download concluído!' });
       toast.success('Arquivo baixado com sucesso!');
     } catch (error) {
-      toast.error('Erro ao gerar arquivo');
+      console.error('Erro ao gerar arquivo:', error);
+      toast.error(`Erro ao gerar arquivo: ${error instanceof Error ? error.message : 'Memória insuficiente'}`);
       setProgress({ phase: 'idle', percent: 0, message: '' });
     }
   };
